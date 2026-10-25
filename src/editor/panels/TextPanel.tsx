@@ -3,6 +3,7 @@ import { formatTime } from '../../lib/format';
 import { defaultCaptionStyle, newCaption } from '../../lib/timeline';
 import type { CaptionStyle } from '../../lib/types';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 
 const presets: { name: string; style: Partial<CaptionStyle>; preview: React.CSSProperties }[] = [
   { name: '經典白字', style: {}, preview: { color: '#fff', WebkitTextStroke: '5px #1f1d2b', paintOrder: 'stroke' } },
@@ -18,6 +19,7 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
   const selection = useEditor((s) => s.selection);
 
   const add = (style: Partial<CaptionStyle>) => {
+    if (!ensureUnlocked('caption')) return;
     const { time, commit, select } = useEditor.getState();
     const c = newCaption(time, time + 2, '輸入字幕文字', { ...defaultCaptionStyle(), ...style });
     commit((d) => ({ ...d, captions: [...d.captions, c] }));

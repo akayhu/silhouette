@@ -1,4 +1,4 @@
-import type { LibraryTrack, Project, ProjectData, ProjectSummary, User, Voice } from './types';
+import type { AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, User, Voice } from './types';
 
 export interface TtsResult {
   url: string;
@@ -49,6 +49,12 @@ export const api = {
       headers: { 'X-Filename': encodeURIComponent(name), 'Content-Type': 'application/octet-stream' },
     }),
 
+  adminStats: (days: number) => request<AdminStats>(`/api/admin/stats?days=${days}`),
+  adminUsers: (q: string, plan: 'all' | 'pro' | 'free') =>
+    request<{ users: AdminMember[] }>(`/api/admin/users?q=${encodeURIComponent(q)}&plan=${plan}`),
+  adminGrant: (id: string, months: number) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'grant', months })),
+  adminRevoke: (id: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'revoke' })),
+  adminDelete: (id: string) => request(`/api/admin/users/${id}`, json('DELETE')),
   music: () => request<{ license: string; items: LibraryTrack[] }>('/api/music'),
   voices: () => request<{ voices: Voice[]; breezy: boolean }>('/api/tts/voices'),
   createVoice: (wav: Blob, name: string, text: string) =>

@@ -7,7 +7,9 @@
     "dev": "concurrently -k -n api,web -c blue,magenta \"node --watch server/index.mjs\" \"vite\"",
     "server": "node server/index.mjs",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "create-admin": "node scripts/create-admin.mjs",
+    "seed-demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",

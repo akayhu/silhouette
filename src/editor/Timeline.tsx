@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { AudioLines, Film, Scissors, Smile, Trash2, Type, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
-import { clipLength, layoutMain, MIN_CLIP, moveMainClip } from '../lib/timeline';
+import { AudioLines, Film, Lock, LockOpen, Scissors, Smile, Trash2, Type, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import { clipLength, layoutMain, MIN_CLIP, moveMainClip, TRACK_LABELS, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
-import type { AudioClip, Caption } from '../lib/types';
+import type { AudioClip, Caption, TrackKey } from '../lib/types';
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { useEditor, type SelItem } from './store';
 import { IconBtn } from './Editor';
@@ -45,6 +45,11 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
   const playing = useEditor((s) => s.playing);
   const selected = useEditor((s) => s.selected);
   const junction = useEditor((s) => s.junction);
+  const locks = useEditor((s) => s.data.locks);
+  const locked = (t: TrackKey) => !!locks?.[t];
+  // 鎖定的軌道：半透明＋斜線底紋，滑鼠顯示禁止符號
+  const lockedRow = (t: TrackKey) =>
+    locked(t) ? 'bg-[repeating-linear-gradient(135deg,rgb(31_29_43/0.05)_0_6px,transparent_6px_12px)] [&>*]:opacity-55 [&>*]:cursor-not-allowed' : '';
   const { setZoom, select, live, setSelected, toggleSelect } = useEditor.getState();
   const scrollRef = useRef<HTMLDivElement>(null);
   const tracksRef = useRef<HTMLDivElement>(null);
@@ -129,6 +134,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
       const box = { left: Math.min(p0.x, p1.x), top: Math.min(p0.y, p1.y), width: Math.abs(p1.x - p0.x), height: Math.abs(p1.y - p0.y) };
       setMarquee(box);
       const hits = boxes
+        .filter((b) => !locked(trackOf(b.item.type)))
         .filter((b) => b.x1 > box.left && b.x0 < box.left + box.width && b.y1 > box.top && b.y0 < box.top + box.height)
         .map((b) => b.item);
       setSelected([...base, ...hits.filter((h) => !base.some((s) => s.id === h.id))]);
@@ -152,6 +158,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
    */
   const press = (e: RPointerEvent, item: SelItem, mode: 'move' | 'left' | 'right') => {
     if (e.button !== 0) return false;
+    if (locked(trackOf(item.type))) return false;
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       e.stopPropagation();
       e.preventDefault();
@@ -326,10 +333,10 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="w-[76px] shrink-0 border-r border-line bg-canvas pt-7 text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
-          <TrackLabel icon={<Type className="size-3.5" />} label="字幕" h="h-10" />
-          <TrackLabel icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
-          <TrackLabel icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" />
-          <TrackLabel icon={<AudioLines className="size-3.5" />} label="音訊" h="" style={{ height: laneCount * 40 + 8 }} />
+          <TrackLabel track="caption" locked={locked('caption')} icon={<Type className="size-3.5" />} label="字幕" h="h-10" />
+          <TrackLabel track="sticker" locked={locked('sticker')} icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
+          <TrackLabel track="main" locked={locked('main')} icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" />
+          <TrackLabel track="audio" locked={locked('audio')} icon={<AudioLines className="size-3.5" />} label="音訊" h="" style={{ height: laneCount * 40 + 8 }} />
         </div>
         <div
           ref={scrollRef}
@@ -345,13 +352,13 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
             <Ruler width={width} zoom={zoom} onPointerDown={scrub} />
             <div ref={tracksRef} className="relative" onPointerDown={onBackground}>
               {/* 字幕軌 */}
-              <div className="relative h-10 border-b border-line/60">
+              <div className={`relative h-10 border-b border-line/60 ${lockedRow('caption')}`}>
                 {data.captions.map((c) => (
                   <CaptionBlock key={c.id} c={c} left={x(c.start)} width={(c.end - c.start) * zoom} selected={selIds.has(c.id)} onDown={(e, mode) => startSpan(e, 'caption', c.id, mode)} />
                 ))}
               </div>
               {/* 貼紙軌 */}
-              <div className="relative h-10 border-b border-line/60">
+              <div className={`relative h-10 border-b border-line/60 ${lockedRow('sticker')}`}>
                 {data.stickers.map((st) => {
                   const def = stickerDef(st.stickerId);
                   return (
@@ -372,7 +379,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
                 })}
               </div>
               {/* 主軌 */}
-              <div className="relative h-[68px] border-b border-line/60 bg-canvas/50">
+              <div className={`relative h-[68px] border-b border-line/60 bg-canvas/50 ${lockedRow('main')}`}>
                 {placed.length === 0 && <div className="absolute inset-y-2 left-4 grid w-72 place-items-center rounded-xl border-2 border-dashed border-line text-xs font-semibold text-ink-mute">把素材加進來開始剪輯</div>}
                 {placed.map((c) => {
                   const m = media.get(c.mediaId);
@@ -413,6 +420,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
                         title={on ? '轉場（點擊編輯）' : '加入轉場'}
                         aria-label={on ? '編輯轉場' : '加入轉場'}
                         onPointerDown={(e) => e.stopPropagation()}
+                        disabled={locked('main')}
                         onClick={() => useEditor.getState().setJunction(c.id)}
                         className={`absolute top-[22px] z-30 grid size-6 -translate-x-1/2 rotate-45 place-items-center rounded-md border-2 shadow-card transition hover:scale-110 ${
                           active ? 'border-brand bg-brand text-white ring-2 ring-brand/40' : on ? 'border-brand bg-brand text-white' : 'border-ink-mute/40 bg-surface text-ink-soft'
@@ -426,7 +434,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
                 })}
               </div>
               {/* 音訊軌 */}
-              <div className="relative" style={{ height: laneCount * 40 + 8 }}>
+              <div className={`relative ${lockedRow('audio')}`} style={{ height: laneCount * 40 + 8 }}>
                 {lanes.map(({ clip: a, lane }) => {
                   const m = media.get(a.mediaId);
                   return (
@@ -468,11 +476,23 @@ function CaptionBlock({ c, left, width, selected, onDown }: { c: Caption; left: 
   );
 }
 
-function TrackLabel({ icon, label, h, style }: { icon: ReactNode; label: string; h: string; style?: React.CSSProperties }) {
+function TrackLabel({ track, locked, icon, label, h, style }: { track: TrackKey; locked: boolean; icon: ReactNode; label: string; h: string; style?: React.CSSProperties }) {
+  const name = TRACK_LABELS[track];
   return (
-    <div className={`flex items-center gap-1.5 border-b border-line/60 pl-3 ${h}`} style={style}>
+    <div className={`group/track flex items-center gap-1.5 border-b border-line/60 pr-1.5 pl-3 ${h} ${locked ? 'text-ink-mute' : ''}`} style={style}>
       {icon}
       {label}
+      <button
+        onClick={() => useEditor.getState().toggleLock(track)}
+        title={locked ? `解鎖${name}` : `鎖定${name}`}
+        aria-label={locked ? `解鎖${name}` : `鎖定${name}`}
+        aria-pressed={locked}
+        className={`ml-auto grid size-6 place-items-center rounded-md transition ${
+          locked ? 'bg-brand-soft text-brand' : 'text-ink-mute opacity-0 group-hover/track:opacity-100 hover:bg-sunken hover:text-ink focus-visible:opacity-100'
+        }`}
+      >
+        {locked ? <Lock className="size-3.5" /> : <LockOpen className="size-3.5" />}
+      </button>
     </div>
   );
 }

@@ -4,11 +4,13 @@ import { STICKER_CATEGORIES, STICKERS, stickerUrl, type StickerCategory, type St
 import type { StickerItem } from '../../lib/types';
 import { useToast } from '../../components/ui';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 
 const DEFAULT_SECONDS = 3;
 
 /** 從播放頭加入貼紙：放在畫面中間偏上，帶彈出動畫 */
 function addSticker(def: StickerDef) {
+  if (!ensureUnlocked('sticker')) return false;
   const { time, commit, select, data } = useEditor.getState();
   // 同一時間已有貼紙時稍微錯開位置，避免完全疊在一起
   const overlapping = data.stickers.filter((s) => time >= s.start && time < s.end).length;
@@ -26,6 +28,7 @@ function addSticker(def: StickerDef) {
   };
   commit((d) => ({ ...d, stickers: [...d.stickers, item] }));
   select({ type: 'sticker', id: item.id });
+  return true;
 }
 
 export function StickerPanel() {
@@ -55,8 +58,7 @@ export function StickerPanel() {
           <button
             key={s.id}
             onClick={() => {
-              addSticker(s);
-              toast(`已加入「${s.name}」`, 'success');
+              if (addSticker(s)) toast(`已加入「${s.name}」`, 'success');
             }}
             className="group flex flex-col items-center rounded-2xl border border-line bg-surface p-2 transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-card"
             title={s.name}

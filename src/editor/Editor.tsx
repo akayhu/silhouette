@@ -4,7 +4,8 @@ import { ArrowLeft, ArrowRightLeft, AudioLines, Check, CloudOff, Download, Erase
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
-import { aspectSize, splitAudioAt, splitCaptionAt, splitMainAt, splitStickerAt, removeItems } from '../lib/timeline';
+import { aspectSize, isLocked, splitAudioAt, splitCaptionAt, splitMainAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
+import { ensureUnlocked } from './locks';
 import type { Aspect } from '../lib/types';
 import { Button, Logo } from '../components/ui';
 import { useEditor } from './store';
@@ -127,6 +128,7 @@ export default function Editor() {
 
   const split = useCallback(() => {
     const { selection, time, commit } = useEditor.getState();
+    if (!ensureUnlocked(selection ? trackOf(selection.type) : 'main')) return;
     if (selection?.type === 'audio') commit((d) => splitAudioAt(d, selection.id, time));
     else if (selection?.type === 'caption') commit((d) => splitCaptionAt(d, selection.id, time));
     else if (selection?.type === 'sticker') commit((d) => splitStickerAt(d, selection.id, time));
@@ -134,20 +136,24 @@ export default function Editor() {
   }, []);
 
   const removeSelected = useCallback(() => {
-    const { selected, commit, select } = useEditor.getState();
+    const { selected, commit, select, data } = useEditor.getState();
     if (!selected.length) return;
+    // 刪主軌片段會波紋移動其他軌；主軌鎖定時整個不動
+    if (selected.some((s) => s.type === 'clip') && !ensureUnlocked('main')) return;
+    if (selected.every((s) => isLocked(data, trackOf(s.type)))) return void ensureUnlocked(trackOf(selected[0].type));
     commit((d) => removeItems(d, selected));
     select(null);
   }, []);
 
   const selectAll = useCallback(() => {
     const { data, setSelected } = useEditor.getState();
-    setSelected([
+    const all = [
       ...data.captions.map((c) => ({ type: 'caption' as const, id: c.id })),
       ...data.stickers.map((st) => ({ type: 'sticker' as const, id: st.id })),
       ...data.clips.map((c) => ({ type: 'clip' as const, id: c.id })),
       ...data.audio.map((a) => ({ type: 'audio' as const, id: a.id })),
-    ]);
+    ];
+    setSelected(all.filter((i) => !isLocked(data, trackOf(i.type))));
   }, []);
 
   useEffect(() => {

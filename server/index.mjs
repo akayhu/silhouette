@@ -61,6 +61,11 @@ db.exec(`
 
 const now = () => new Date().toISOString();
 
+// 舊資料庫補欄位：role（user／admin）、plan_source（paid 自己付費／admin 管理者開通）
+const userColumns = db.prepare(`PRAGMA table_info(users)`).all().map((c) => c.name);
+if (!userColumns.includes('role')) db.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`);
+if (!userColumns.includes('plan_source')) db.exec(`ALTER TABLE users ADD COLUMN plan_source TEXT`);
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
@@ -103,6 +108,9 @@ function refreshPlan(user) {
     const next = new Date(user.plan_renews_at);
     next.setMonth(next.getMonth() + 1);
     db.prepare(`UPDATE users SET plan_renews_at=? WHERE id=?`).run(next.toISOString(), user.id);
+    db.prepare(`INSERT INTO payments (id, user_id, amount, card_last4, created_at) VALUES (?, ?, ?, ?, ?)`).run(
+      randomUUID(), user.id, PRO_PRICE_TWD, 'auto', user.plan_renews_at,
+    );
     return { ...user, plan_renews_at: next.toISOString() };
   }
   return user;
@@ -118,6 +126,8 @@ function publicUser(user) {
     email: user.email,
     name: user.name,
     plan: user.plan,
+    role: user.role ?? 'user',
+    planSource: user.plan_source ?? null,
     planRenewsAt: user.plan_renews_at,
     cancelAtPeriodEnd: Boolean(user.plan_cancel_at_period_end),
     createdAt: user.created_at,
@@ -143,6 +153,8 @@ app.use((req, _res, next) => {
 });
 
 const requireAuth = (req, res, next) => (req.user ? next() : res.status(401).json({ error: '請先登入' }));
+const requireAdmin = (req, res, next) =>
+  req.user?.role === 'admin' ? next() : res.status(req.user ? 403 : 401).json({ error: '需要管理者權限' });
 const requirePro = (req, res, next) =>
   req.user?.plan === 'pro' ? next() : res.status(402).json({ error: '此功能僅限專業版', code: 'UPGRADE_REQUIRED' });
 
@@ -211,7 +223,7 @@ app.post('/api/billing/checkout', requireAuth, (req, res) => {
   if (!/^\d{13,19}$/.test(card)) return res.status(400).json({ error: '卡號格式不正確' });
   const renews = new Date();
   renews.setMonth(renews.getMonth() + 1);
-  db.prepare(`UPDATE users SET plan='pro', plan_renews_at=?, plan_cancel_at_period_end=0 WHERE id=?`).run(
+  db.prepare(`UPDATE users SET plan='pro', plan_source='paid', plan_renews_at=?, plan_cancel_at_period_end=0 WHERE id=?`).run(
     renews.toISOString(), req.user.id,
   );
   db.prepare(`INSERT INTO payments (id, user_id, amount, card_last4, created_at) VALUES (?, ?, ?, ?, ?)`).run(
@@ -236,6 +248,112 @@ app.get('/api/billing/payments', requireAuth, (req, res) => {
       .prepare(`SELECT id, amount, card_last4 AS cardLast4, created_at AS createdAt FROM payments WHERE user_id=? ORDER BY created_at DESC`)
       .all(req.user.id),
   });
+});
+
+// ---------- 管理後台 ----------
+// 「每一天」以台灣時間（UTC+8）計算
+const TW_DAY = `date(created_at, '+8 hours')`;
+const twToday = () => new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+
+app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
+  const days = Math.min(365, Math.max(7, Number(req.query.days) || 30));
+  const today = twToday();
+  const since = new Date(Date.parse(today) - (days - 1) * 86400_000).toISOString().slice(0, 10);
+
+  const members = db
+    .prepare(
+      `SELECT COUNT(*) AS total,
+              SUM(plan='pro') AS paid,
+              SUM(plan='pro' AND plan_source='admin') AS adminGranted,
+              SUM(${TW_DAY} = ?) AS newToday
+       FROM users WHERE role != 'admin'`,
+    )
+    .get(today);
+  const revenue = db
+    .prepare(`SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count, COALESCE(SUM(CASE WHEN ${TW_DAY} = ? THEN amount END),0) AS today FROM payments`)
+    .get(today);
+  const before = db.prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM payments WHERE ${TW_DAY} < ?`).get(since).total;
+
+  const pay = new Map(
+    db.prepare(`SELECT ${TW_DAY} AS day, SUM(amount) AS amount, COUNT(*) AS count FROM payments WHERE ${TW_DAY} >= ? GROUP BY day`).all(since).map((r) => [r.day, r]),
+  );
+  const signups = new Map(
+    db.prepare(`SELECT ${TW_DAY} AS day, COUNT(*) AS n FROM users WHERE role != 'admin' AND ${TW_DAY} >= ? GROUP BY day`).all(since).map((r) => [r.day, r.n]),
+  );
+  // 補齊沒有資料的日期，並算出到當天為止的累計總金額
+  let cumulative = before;
+  const daily = [];
+  for (let i = 0; i < days; i++) {
+    const day = new Date(Date.parse(since) + i * 86400_000).toISOString().slice(0, 10);
+    const amount = pay.get(day)?.amount ?? 0;
+    cumulative += amount;
+    daily.push({ date: day, amount, payments: pay.get(day)?.count ?? 0, signups: signups.get(day) ?? 0, cumulative });
+  }
+
+  res.json({
+    members: { total: members.total ?? 0, paid: members.paid ?? 0, free: (members.total ?? 0) - (members.paid ?? 0), adminGranted: members.adminGranted ?? 0, newToday: members.newToday ?? 0 },
+    revenue: { total: revenue.total, today: revenue.today, payments: revenue.count, inRange: cumulative - before },
+    daily,
+  });
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
+  const q = `%${String(req.query.q || '').trim()}%`;
+  const plan = ['pro', 'free'].includes(req.query.plan) ? req.query.plan : null;
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.email, u.name, u.role, u.plan, u.plan_source AS planSource, u.plan_renews_at AS planRenewsAt,
+              u.plan_cancel_at_period_end AS cancelAtPeriodEnd, u.created_at AS createdAt,
+              (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id) AS projects,
+              (SELECT COALESCE(SUM(amount),0) FROM payments y WHERE y.user_id = u.id) AS totalPaid,
+              (SELECT MAX(created_at) FROM payments y WHERE y.user_id = u.id) AS lastPaymentAt
+       FROM users u
+       WHERE (u.email LIKE ? OR u.name LIKE ?) ${plan ? 'AND u.plan = ?' : ''}
+       ORDER BY u.created_at DESC LIMIT 500`,
+    )
+    .all(...[q, q, ...(plan ? [plan] : [])]);
+  res.json({ users: rows.map((r) => ({ ...r, cancelAtPeriodEnd: Boolean(r.cancelAtPeriodEnd) })) });
+});
+
+// 管理者直接開通或取消付費：開通不會產生付款紀錄，到期自動回到免費版
+app.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const user = db.prepare(`SELECT * FROM users WHERE id=?`).get(req.params.id);
+  if (!user) return res.status(404).json({ error: '找不到這個會員' });
+  if (req.body.action === 'grant') {
+    const months = Number(req.body.months);
+    if (![0, 1, 3, 6, 12].includes(months)) return res.status(400).json({ error: '開通期間不正確' });
+    let renews = null;
+    if (months) {
+      const base = user.plan === 'pro' && user.plan_renews_at && new Date(user.plan_renews_at) > new Date() ? new Date(user.plan_renews_at) : new Date();
+      base.setMonth(base.getMonth() + months);
+      renews = base.toISOString();
+    }
+    db.prepare(`UPDATE users SET plan='pro', plan_source='admin', plan_renews_at=?, plan_cancel_at_period_end=? WHERE id=?`).run(renews, months ? 1 : 0, user.id);
+  } else if (req.body.action === 'revoke') {
+    db.prepare(`UPDATE users SET plan='free', plan_source=NULL, plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
+  } else {
+    return res.status(400).json({ error: '不支援的操作' });
+  }
+  res.json({ ok: true });
+});
+
+// 刪除會員：連同專案、上傳檔案、自訂聲音與登入狀態；付款紀錄保留以維持營收報表正確
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const user = db.prepare(`SELECT * FROM users WHERE id=?`).get(req.params.id);
+  if (!user) return res.status(404).json({ error: '找不到這個會員' });
+  if (user.id === req.user.id) return res.status(400).json({ error: '不能刪除自己的帳號' });
+  if (user.role === 'admin') return res.status(400).json({ error: '不能刪除管理者帳號' });
+  db.exec('BEGIN');
+  try {
+    for (const t of ['sessions', 'projects', 'voices', 'project_creations']) db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(user.id);
+    db.prepare(`DELETE FROM users WHERE id=?`).run(user.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: '刪除失敗：' + err.message });
+  }
+  fs.rmSync(path.join(UPLOAD_DIR, user.id), { recursive: true, force: true });
+  res.json({ ok: true });
 });
 
 // ---------- 專案 ----------

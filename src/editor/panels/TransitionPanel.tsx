@@ -4,6 +4,7 @@ import type { ProjectData, Transition, TransitionType } from '../../lib/types';
 import { Button, useToast } from '../../components/ui';
 import { Slider } from '../Inspector';
 import { useEditor } from '../store';
+import { LockedBanner } from '../locks';
 
 const TYPES: { id: TransitionType; label: string; anim: string; flash?: 'white' | 'black' }[] = [
   { id: 'fade', label: '溶解', anim: 'tr-fade' },
@@ -25,6 +26,7 @@ export function TransitionPanel() {
   const clips = useEditor((s) => s.data.clips);
   const junction = useEditor((s) => s.junction);
   const { commit, live, checkpoint, setJunction } = useEditor.getState();
+  const locked = useEditor((st) => !!st.data.locks?.main);
 
   const placed = layoutMain(clips);
   const idx = placed.findIndex((c) => c.id === junction && c.index > 0);
@@ -51,6 +53,9 @@ export function TransitionPanel() {
       <h2 className="text-sm font-extrabold">轉場</h2>
       <p className="mt-1 text-xs text-ink-mute">讓兩個片段之間的切換更順。轉場時前後兩段會重疊播放。</p>
 
+      <LockedBanner track="main" />
+
+      <fieldset disabled={locked} className={locked ? 'pointer-events-none opacity-50' : ''}>
       <div className="mt-3 rounded-2xl bg-sunken/70 p-3 text-xs">
         {target ? (
           <div className="flex items-center justify-between">
@@ -105,6 +110,7 @@ export function TransitionPanel() {
           移除全部轉場
         </button>
       )}
+      </fieldset>
     </div>
   );
 }

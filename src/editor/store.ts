@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ProjectData } from '../lib/types';
+import type { ProjectData, TrackKey } from '../lib/types';
 import { totalDuration } from '../lib/timeline';
 
 export type SelItem = { type: 'clip' | 'audio' | 'caption' | 'sticker'; id: string };
@@ -36,6 +36,8 @@ interface EditorState {
   redo: () => void;
   select: (s: Selection) => void;
   setSelected: (items: SelItem[]) => void;
+  /** 鎖定／解鎖軌道（不記入復原歷史），鎖定時順便取消選取該軌的項目 */
+  toggleLock: (track: TrackKey) => void;
   toggleSelect: (item: SelItem) => void;
   setTime: (t: number) => void;
   setPlaying: (p: boolean) => void;
@@ -98,6 +100,17 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
   select: (selection) => set({ selection, selected: selection ? [selection] : [] }),
   setSelected: (selected) => set({ selected, selection: selected.length === 1 ? selected[0] : null }),
+  toggleLock: (track) => {
+    const { data, selected } = get();
+    const locked = !data.locks?.[track];
+    const keep = locked ? selected.filter((s) => (s.type === 'clip' ? 'main' : s.type) !== track) : selected;
+    set({
+      data: { ...data, locks: { ...data.locks, [track]: locked } },
+      selected: keep,
+      selection: keep.length === 1 ? keep[0] : null,
+      save: 'dirty',
+    });
+  },
   toggleSelect: (item) => {
     const cur = get().selected;
     const selected = cur.some((s) => s.id === item.id) ? cur.filter((s) => s.id !== item.id) : [...cur, item];

@@ -11,6 +11,7 @@ import type { MediaItem, Voice } from '../../lib/types';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { Slider } from '../Inspector';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 import { VoiceCloneDialog } from './VoiceCloneDialog';
 
 const LOCALE: Record<string, string> = { zh_TW: '系統語音・台灣國語', zh_CN: '系統語音・中國普通話', zh_HK: '系統語音・香港粵語' };
@@ -117,6 +118,7 @@ export function VoicePanel() {
 
   const addVoice = async () => {
     if (!guard() || !text.trim()) return;
+    if (!ensureUnlocked('audio', ...(withCaptions ? (['caption'] as const) : []))) return;
     setBusy('add');
     try {
       const sentences = splitSentences(text);
@@ -143,7 +145,7 @@ export function VoicePanel() {
 
   // 所有字幕一次送出合成成一個檔案，再依每句的時間切成片段，各自對齊字幕開頭
   const captionsToVoice = async () => {
-    if (!guard()) return;
+    if (!guard() || !ensureUnlocked('audio')) return;
     const captions = [...useEditor.getState().data.captions].filter((c) => c.text.trim()).sort((a, b) => a.start - b.start);
     setBusy('captions');
     try {

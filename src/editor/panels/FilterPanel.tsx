@@ -5,6 +5,7 @@ import type { ProjectData } from '../../lib/types';
 import { Button, useToast } from '../../components/ui';
 import { Slider } from '../Inspector';
 import { useEditor } from '../store';
+import { LockedBanner } from '../locks';
 
 const ADJUSTMENTS: { key: keyof ClipFilter; label: string; min: number; max: number; format?: (v: number) => string }[] = [
   { key: 'brightness', label: '亮度', min: -50, max: 50 },
@@ -21,6 +22,7 @@ export function FilterPanel() {
   const time = useEditor((s) => s.time);
   const selection = useEditor((s) => s.selection);
   const { commit, live, checkpoint } = useEditor.getState();
+  const locked = useEditor((s) => !!s.data.locks?.main);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
   // 處理對象：選取中的主軌片段，否則是播放頭所在的片段
@@ -70,6 +72,9 @@ export function FilterPanel() {
       <h2 className="text-sm font-extrabold">濾鏡</h2>
       <p className="mt-1 text-xs text-ink-mute">原創色彩風格，無版權問題。套用在單一片段，也可以一鍵套用到全部。</p>
 
+      <LockedBanner track="main" />
+
+      <fieldset disabled={locked} className={locked ? 'pointer-events-none opacity-50' : ''}>
       <div className="mt-3 flex items-center gap-2.5 rounded-2xl bg-sunken/70 p-2.5">
         {media.thumb && <img src={media.thumb} alt="" className="h-10 w-14 rounded-lg object-cover" />}
         <div className="min-w-0 text-xs">
@@ -124,6 +129,7 @@ export function FilterPanel() {
           套用到全部片段
         </Button>
       </div>
+      </fieldset>
     </div>
   );
 }

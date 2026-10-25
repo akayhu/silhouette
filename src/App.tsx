@@ -8,8 +8,11 @@ import Pricing from './pages/Pricing';
 import Checkout from './pages/Checkout';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
+import { RequireAdmin } from './pages/admin/AdminLayout';
 
 const Editor = lazy(() => import('./editor/Editor'));
+const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'));
+const AdminMembers = lazy(() => import('./pages/admin/AdminMembers'));
 
 export default function App() {
   return (
@@ -17,7 +20,7 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
           <UpgradeProvider>
-            <Suspense fallback={<div className="grid min-h-screen place-items-center text-ink-mute">載入編輯器…</div>}>
+            <Suspense fallback={<div className="grid min-h-screen place-items-center text-ink-mute">載入中…</div>}>
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/pricing" element={<Pricing />} />
@@ -27,6 +30,8 @@ export default function App() {
                 <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
                 <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
                 <Route path="/editor/:id" element={<RequireAuth><Editor /></RequireAuth>} />
+                <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />
+                <Route path="/admin/members" element={<RequireAdmin><AdminMembers /></RequireAdmin>} />
                 <Route path="*" element={<Landing />} />
               </Routes>
             </Suspense>

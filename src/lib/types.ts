@@ -7,6 +7,8 @@ export interface User {
   email: string;
   name: string;
   plan: Plan;
+  role: 'user' | 'admin';
+  planSource: 'paid' | 'admin' | null;
   planRenewsAt: string | null;
   cancelAtPeriodEnd: boolean;
   createdAt: string;
@@ -127,7 +129,12 @@ export interface StickerItem {
   animation: StickerAnimation;
 }
 
+/** 時間軸的四條軌道 */
+export type TrackKey = 'caption' | 'sticker' | 'main' | 'audio';
+
 export interface ProjectData {
+  /** 鎖定的軌道：不能選取、編輯，也不會被其他軌的波紋刪除移動 */
+  locks?: Partial<Record<TrackKey, boolean>>;
   aspect: Aspect;
   media: MediaItem[];
   clips: VideoClip[];
@@ -149,6 +156,27 @@ export interface ProjectSummary {
 
 export interface Project extends Omit<ProjectSummary, 'aspect' | 'duration'> {
   data: ProjectData;
+}
+
+export interface AdminStats {
+  members: { total: number; paid: number; free: number; adminGranted: number; newToday: number };
+  revenue: { total: number; today: number; payments: number; inRange: number };
+  daily: { date: string; amount: number; payments: number; signups: number; cumulative: number }[];
+}
+
+export interface AdminMember {
+  id: string;
+  email: string;
+  name: string;
+  role: 'user' | 'admin';
+  plan: Plan;
+  planSource: 'paid' | 'admin' | null;
+  planRenewsAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  createdAt: string;
+  projects: number;
+  totalPaid: number;
+  lastPaymentAt: string | null;
 }
 
 export interface Voice {

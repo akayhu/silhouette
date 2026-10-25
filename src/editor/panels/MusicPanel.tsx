@@ -7,11 +7,13 @@ import type { LibraryTrack, MediaItem } from '../../lib/types';
 import { useToast } from '../../components/ui';
 import { Chips } from '../Inspector';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 
 type Tab = 'music' | 'sfx';
 
 /** 把音樂庫的曲目加到音訊軌：同一首只建立一次素材，配樂會自動配合影片長度並淡出 */
 function addTrack(track: LibraryTrack) {
+  if (!ensureUnlocked('audio')) return false;
   const { data, time, commit, select } = useEditor.getState();
   const existing = data.media.find((m) => m.url === track.url);
   const media: MediaItem = existing ?? { id: uid(), name: track.title, kind: 'audio', url: track.url, duration: track.duration, origin: 'library' };
@@ -77,7 +79,7 @@ export function MusicPanel() {
   };
 
   const add = (t: LibraryTrack) => {
-    addTrack(t);
+    if (addTrack(t) === false) return;
     setAdded(t.id);
     setTimeout(() => setAdded((x) => (x === t.id ? null : x)), 1500);
   };

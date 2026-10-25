@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ChevronDown, Crown, LayoutGrid, LogOut, Menu, Settings, X } from 'lucide-react';
+import { ChevronDown, Crown, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Logo, buttonClass } from './ui';
 
@@ -120,6 +120,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <NavLink to="/account" className={tab}>
               <Settings className="size-4" /> 帳戶
             </NavLink>
+            {user.role === 'admin' && (
+              <NavLink to="/admin" className={tab}>
+                <ShieldCheck className="size-4" /> 管理後台
+              </NavLink>
+            )}
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {user.plan === 'free' && (

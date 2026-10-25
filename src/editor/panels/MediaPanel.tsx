@@ -6,8 +6,10 @@ import { kindOf, probe, videoPoster } from '../../lib/media';
 import type { MediaItem } from '../../lib/types';
 import { useToast } from '../../components/ui';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 
 export function addToTimeline(m: MediaItem) {
+  if (!ensureUnlocked(m.kind === 'audio' ? 'audio' : 'main')) return;
   const { commit, time } = useEditor.getState();
   if (m.kind === 'audio') {
     commit((d) => ({ ...d, audio: [...d.audio, { id: uid(), mediaId: m.id, start: time, in: 0, out: m.duration, volume: 1 }] }));

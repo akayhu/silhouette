@@ -8,6 +8,7 @@ import type { Caption } from '../../lib/types';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { Chips, Slider } from '../Inspector';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 
 type Range = [number, number];
 
@@ -40,6 +41,7 @@ function AutoCaptions({ isPro }: { isPro: boolean }) {
 
   const run = async () => {
     if (!isPro) return upgrade('AI 自動字幕是專業版功能，升級後可以自動聽寫影片並產生字幕。');
+    if (!ensureUnlocked('caption')) return;
     const { data, commit } = useEditor.getState();
     const media = new Map(data.media.map((m) => [m.id, m]));
     const clips = layoutMain(data.clips).filter((c) => media.get(c.mediaId)?.kind === 'video');
@@ -105,6 +107,7 @@ function SmartCut({ isPro }: { isPro: boolean }) {
 
   const analyze = async () => {
     if (!isPro) return upgrade('智能口播是專業版功能，可以自動剪掉影片中的停頓和口誤。');
+    if (!ensureUnlocked('main')) return;
     setBusy(true);
     setFound(null);
     try {

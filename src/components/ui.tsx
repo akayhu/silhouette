@@ -139,6 +139,10 @@ type Toast = { id: number; text: string; tone: 'info' | 'error' | 'success' };
 const ToastContext = createContext<(text: string, tone?: Toast['tone']) => void>(() => {});
 export const useToast = () => useContext(ToastContext);
 
+/** 不在元件裡（例如工具函式）也能顯示提示訊息 */
+let globalToast: ((text: string, tone?: Toast['tone']) => void) | null = null;
+export const notify = (text: string, tone?: Toast['tone']) => globalToast?.(text, tone);
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const push = useCallback((text: string, tone: Toast['tone'] = 'info') => {
@@ -146,6 +150,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((t) => [...t, { id, text, tone }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
   }, []);
+  useEffect(() => {
+    globalToast = push;
+    return () => {
+      globalToast = null;
+    };
+  }, [push]);
   return (
     <ToastContext.Provider value={push}>
       {children}

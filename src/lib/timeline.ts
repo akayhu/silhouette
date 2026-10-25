@@ -1,7 +1,13 @@
-import type { Aspect, AudioClip, Caption, CaptionStyle, ClipTransform, ProjectData, VideoClip } from './types';
+import type { Aspect, AudioClip, Caption, CaptionStyle, ClipTransform, ProjectData, TrackKey, VideoClip } from './types';
 import { uid } from './format';
 
 export const MIN_CLIP = 0.1;
+
+export const TRACK_LABELS: Record<TrackKey, string> = { caption: '字幕軌', sticker: '貼紙軌', main: '主軌', audio: '音訊軌' };
+
+/** 選取項目的類型對應到哪一條軌道 */
+export const trackOf = (type: 'clip' | 'audio' | 'caption' | 'sticker'): TrackKey => (type === 'clip' ? 'main' : type);
+export const isLocked = (d: Pick<ProjectData, 'locks'>, track: TrackKey) => !!d.locks?.[track];
 
 export const DEFAULT_TRANSFORM: ClipTransform = { x: 0, y: 0, scale: 1, rotation: 0, fit: 'contain' };
 export const transformOf = (c: VideoClip): ClipTransform => ({ ...DEFAULT_TRANSFORM, ...c.transform });
@@ -180,13 +186,14 @@ export function rippleRemove(d: ProjectData, input: Range[]): ProjectData {
       });
   }
 
-  const captions = d.captions
-    .map((c) => ({ ...c, start: remap(c.start, ranges), end: remap(c.end, ranges) }))
-    .filter((c) => c.end - c.start >= 0.05);
-  const audio = d.audio.map((a) => ({ ...a, start: remap(a.start, ranges) }));
-  const stickers = (d.stickers ?? [])
-    .map((s) => ({ ...s, start: remap(s.start, ranges), end: remap(s.end, ranges) }))
-    .filter((s) => s.end - s.start >= 0.05);
+  // 鎖定的軌道不跟著移動
+  const captions = isLocked(d, 'caption')
+    ? d.captions
+    : d.captions.map((c) => ({ ...c, start: remap(c.start, ranges), end: remap(c.end, ranges) })).filter((c) => c.end - c.start >= 0.05);
+  const audio = isLocked(d, 'audio') ? d.audio : d.audio.map((a) => ({ ...a, start: remap(a.start, ranges) }));
+  const stickers = isLocked(d, 'sticker')
+    ? (d.stickers ?? [])
+    : (d.stickers ?? []).map((s) => ({ ...s, start: remap(s.start, ranges), end: remap(s.end, ranges) })).filter((s) => s.end - s.start >= 0.05);
 
   return { ...d, clips, captions, audio, stickers };
 }
@@ -206,7 +213,7 @@ export function moveMainClip(d: ProjectData, from: number, to: number): ProjectD
 
 /** 一次刪除多個項目：音訊與字幕直接移除，主軌片段用波紋刪除讓後面的內容補上 */
 export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption' | 'sticker'; id: string }[]): ProjectData {
-  const ids = new Set(items.map((i) => i.id));
+  const ids = new Set(items.filter((i) => !isLocked(d, trackOf(i.type))).map((i) => i.id));
   const ranges = layoutMain(d.clips)
     .filter((c) => ids.has(c.id))
     .map((c): [number, number] => [c.start, c.end]);

@@ -9,6 +9,7 @@ import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { Chips } from '../Inspector';
 import { updateErase } from '../EraseOverlay';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 
 const MODES: { id: EraseMode; label: string }[] = [
   { id: 'fill', label: '智能填補' },
@@ -36,7 +37,7 @@ export function ErasePanel({ onCompare }: { onCompare: (on: boolean) => void }) 
 
   const guard = () => {
     if (!isPro) upgrade('去除浮水印是專業版功能。');
-    return isPro;
+    return isPro && ensureUnlocked('main');
   };
 
   const detect = async () => {

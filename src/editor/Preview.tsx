@@ -36,6 +36,7 @@ export function Preview({
 
   // 點到貼紙就選取並拖曳它（最上層的優先）；回傳 false 代表沒點到貼紙
   const dragSticker = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (useEditor.getState().data.locks?.sticker) return false;
     const canvas = e.currentTarget;
     const rect = canvas.getBoundingClientRect();
     const st = useEditor.getState();
@@ -75,7 +76,8 @@ export function Preview({
     if (e.button !== 0) return;
     if (dragSticker(e)) return;
     const st = useEditor.getState();
-    const clip = clipAt(layoutMain(st.data.clips), st.time);
+    // 主軌鎖定時不移動畫面，只保留點一下播放／暫停
+    const clip = st.data.locks?.main ? null : clipAt(layoutMain(st.data.clips), st.time);
     const rect = e.currentTarget.getBoundingClientRect();
     const x0 = e.clientX;
     const y0 = e.clientY;

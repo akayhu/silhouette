@@ -4,6 +4,7 @@ import { Clapperboard, Crown, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucid
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatTime, relativeTime } from '../lib/format';
+import { isPaidPro, isTrial, trialDaysLeft, trialEnded } from '../lib/plan';
 import type { Aspect, ProjectSummary } from '../lib/types';
 import { AppLayout } from '../components/Layout';
 import { Button, Field, Modal, inputClass, useToast, useUpgrade } from '../components/ui';
@@ -73,18 +74,26 @@ export default function Dashboard() {
             <span className="text-sm font-bold text-ink-soft">目前方案</span>
             {user.plan === 'pro' ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-coral-soft px-2.5 py-1 text-xs font-bold text-coral">
-                <Crown className="size-3.5" /> 專業版
+                <Crown className="size-3.5" /> {isTrial(user) ? '專業版試用' : '專業版'}
               </span>
             ) : (
               <span className="rounded-full bg-sunken px-2.5 py-1 text-xs font-bold text-ink-soft">免費版</span>
             )}
           </div>
           <div className="mt-3 text-sm text-ink-soft">
-            {user.plan === 'pro'
-              ? `${user.cancelAtPeriodEnd ? '將於' : '下次續訂：'}${formatDate(user.planRenewsAt!)}${user.cancelAtPeriodEnd ? ' 結束' : ''}`
-              : '升級後解鎖 AI 功能與 1080p 匯出'}
+            {isTrial(user) ? (
+              <>
+                試用還剩 <b className="text-coral">{trialDaysLeft(user)} 天</b>（到 {formatDate(user.planRenewsAt!)}），到期後自動回到免費版，不會扣款
+              </>
+            ) : user.plan === 'pro' ? (
+              user.planRenewsAt ? `${user.cancelAtPeriodEnd ? '將於' : '下次續訂：'}${formatDate(user.planRenewsAt)}${user.cancelAtPeriodEnd ? ' 結束' : ''}` : '不限期'
+            ) : trialEnded(user) ? (
+              '7 天專業版試用已結束，升級後即可繼續使用 AI 功能與 1080p 匯出'
+            ) : (
+              '升級後解鎖 AI 功能與 1080p 匯出'
+            )}
           </div>
-          {user.plan === 'free' && (
+          {!isPaidPro(user) && (
             <Link to="/checkout" className="mt-3 inline-block text-sm font-bold text-brand hover:underline">
               升級專業版 NT$399／月 →
             </Link>

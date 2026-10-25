@@ -1,4 +1,4 @@
-// 剪影 Studio 本機後端：會員、訂閱（模擬付款）、專案、媒體上傳、文字朗讀（macOS say）
+// 片刻剪趣 本機後端：會員、訂閱（模擬付款）、專案、媒體上傳、文字朗讀（macOS say）
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
@@ -18,6 +18,7 @@ const PORT = Number(process.env.PORT || 8787);
 const FREE_MONTHLY_PROJECTS = 3;
 const PRO_PRICE_TWD = 399;
 const SESSION_DAYS = 30;
+const TRIAL_DAYS = 7;
 
 const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
 db.exec(`
@@ -177,9 +178,11 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(409).json({ error: '這個 Email 已經註冊過了' });
   }
   const id = randomUUID();
-  db.prepare(`INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)`).run(
-    id, email, name, hashPassword(password), now(),
-  );
+  const trialEnds = new Date(Date.now() + TRIAL_DAYS * 86400_000).toISOString();
+  db.prepare(
+    `INSERT INTO users (id, email, name, password_hash, plan, plan_source, plan_renews_at, plan_cancel_at_period_end, created_at)
+     VALUES (?, ?, ?, ?, 'pro', 'trial', ?, 1, ?)`,
+  ).run(id, email, name, hashPassword(password), trialEnds, now());
   createSession(res, id);
   res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(id)) });
 });
@@ -221,7 +224,9 @@ app.patch('/api/auth/me', requireAuth, (req, res) => {
 app.post('/api/billing/checkout', requireAuth, (req, res) => {
   const card = String(req.body.cardNumber || '').replace(/\s/g, '');
   if (!/^\d{13,19}$/.test(card)) return res.status(400).json({ error: '卡號格式不正確' });
-  const renews = new Date();
+  if (req.user.plan === 'pro' && req.user.plan_source !== 'trial') return res.status(400).json({ error: '已經是專業版了' });
+  const inTrial = req.user.plan_source === 'trial' && req.user.plan_renews_at && new Date(req.user.plan_renews_at) > new Date();
+  const renews = inTrial ? new Date(req.user.plan_renews_at) : new Date();
   renews.setMonth(renews.getMonth() + 1);
   db.prepare(`UPDATE users SET plan='pro', plan_source='paid', plan_renews_at=?, plan_cancel_at_period_end=0 WHERE id=?`).run(
     renews.toISOString(), req.user.id,
@@ -263,7 +268,8 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   const members = db
     .prepare(
       `SELECT COUNT(*) AS total,
-              SUM(plan='pro') AS paid,
+              SUM(plan='pro' AND COALESCE(plan_source,'') != 'trial') AS paid,
+              SUM(plan='pro' AND plan_source='trial') AS trial,
               SUM(plan='pro' AND plan_source='admin') AS adminGranted,
               SUM(${TW_DAY} = ?) AS newToday
        FROM users WHERE role != 'admin'`,
@@ -291,7 +297,14 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   }
 
   res.json({
-    members: { total: members.total ?? 0, paid: members.paid ?? 0, free: (members.total ?? 0) - (members.paid ?? 0), adminGranted: members.adminGranted ?? 0, newToday: members.newToday ?? 0 },
+    members: {
+      total: members.total ?? 0,
+      paid: members.paid ?? 0,
+      trial: members.trial ?? 0,
+      free: (members.total ?? 0) - (members.paid ?? 0) - (members.trial ?? 0),
+      adminGranted: members.adminGranted ?? 0,
+      newToday: members.newToday ?? 0,
+    },
     revenue: { total: revenue.total, today: revenue.today, payments: revenue.count, inRange: cumulative - before },
     daily,
   });
@@ -299,7 +312,12 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
 
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const q = `%${String(req.query.q || '').trim()}%`;
-  const plan = ['pro', 'free'].includes(req.query.plan) ? req.query.plan : null;
+  const filters = {
+    pro: `AND u.plan = 'pro' AND COALESCE(u.plan_source,'') != 'trial'`,
+    trial: `AND u.plan = 'pro' AND u.plan_source = 'trial'`,
+    free: `AND u.plan = 'free'`,
+  };
+  const planFilter = filters[req.query.plan] ?? '';
   const rows = db
     .prepare(
       `SELECT u.id, u.email, u.name, u.role, u.plan, u.plan_source AS planSource, u.plan_renews_at AS planRenewsAt,
@@ -308,10 +326,10 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
               (SELECT COALESCE(SUM(amount),0) FROM payments y WHERE y.user_id = u.id) AS totalPaid,
               (SELECT MAX(created_at) FROM payments y WHERE y.user_id = u.id) AS lastPaymentAt
        FROM users u
-       WHERE (u.email LIKE ? OR u.name LIKE ?) ${plan ? 'AND u.plan = ?' : ''}
+       WHERE (u.email LIKE ? OR u.name LIKE ?) ${planFilter}
        ORDER BY u.created_at DESC LIMIT 500`,
     )
-    .all(...[q, q, ...(plan ? [plan] : [])]);
+    .all(q, q);
   res.json({ users: rows.map((r) => ({ ...r, cancelAtPeriodEnd: Boolean(r.cancelAtPeriodEnd) })) });
 });
 
@@ -728,4 +746,4 @@ app.get('/api/tts/jobs/:id', requireAuth, (req, res) => {
   res.json(rest);
 });
 
-app.listen(PORT, () => console.log(`剪影 Studio API 已啟動：http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`片刻剪趣 API 已啟動：http://localhost:${PORT}`));

@@ -36,7 +36,7 @@ export function Logo({ to = '/', compact = false }: { to?: string; compact?: boo
       </svg>
       {!compact && (
         <span className="text-[17px]">
-          剪影 <span className="text-brand">Studio</span>
+          片刻<span className="text-brand">剪趣</span>
         </span>
       )}
     </Link>

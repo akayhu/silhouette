@@ -2,6 +2,8 @@ import { useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Lock } from 'lucide-react';
 import { api } from '../lib/api';
+import { formatDate } from '../lib/format';
+import { isPaidPro, isTrial } from '../lib/plan';
 import { useAuth } from '../lib/auth';
 import { Button, Field, Logo, inputClass, useToast } from '../components/ui';
 
@@ -16,7 +18,7 @@ export default function Checkout() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const location = useLocation();
-  const alreadyPro = useRef(user?.plan === 'pro').current;
+  const alreadyPro = useRef(isPaidPro(user)).current;
 
   if (alreadyPro) return <Navigate to="/account" replace />;
 
@@ -54,10 +56,15 @@ export default function Checkout() {
           <h1 className="mt-4 text-3xl font-black tracking-tight">升級專業版</h1>
           <div className="mt-6 rounded-3xl border border-line bg-surface p-6 shadow-card">
             <div className="flex items-baseline justify-between">
-              <span className="font-bold">剪影 Studio 專業版</span>
+              <span className="font-bold">片刻剪趣 專業版</span>
               <span className="text-2xl font-extrabold">NT$399</span>
             </div>
             <div className="text-sm text-ink-mute">每月自動續訂，可隨時取消</div>
+            {isTrial(user) && (
+              <p className="mt-3 rounded-xl bg-coral-soft px-3 py-2 text-xs font-semibold text-coral">
+                你的試用到 {formatDate(user!.planRenewsAt!)}，現在付款的話，第一個月會從試用結束後開始計算，剩下的試用天數不會浪費。
+              </p>
+            )}
             <ul className="mt-5 space-y-2.5 border-t border-line pt-5 text-sm">
               {['不限專案數量', '匯出 1080p，無浮水印', 'AI 自動字幕', '智能口播（剪掉靜音與口誤）', '文字朗讀配音'].map((t) => (
                 <li key={t} className="flex items-center gap-2">

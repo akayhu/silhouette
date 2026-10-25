@@ -53,7 +53,7 @@ export class Engine {
     // canvas 用到的字型不會自動下載，先載入再重畫
     Promise.all(
       ['800 40px "Noto Sans TC"', '500 40px "Noto Sans TC"', '800 40px "Noto Serif TC"', '800 40px "Plus Jakarta Sans"'].map((f) =>
-        document.fonts.load(f, '剪影字幕Aa').catch(() => []),
+        document.fonts.load(f, '片刻剪趣字幕Aa').catch(() => []),
       ),
     ).then(() => !this.playing && this.render());
   }
@@ -539,8 +539,8 @@ function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.globalAlpha = 0.75;
   ctx.lineWidth = size * 0.18;
   ctx.strokeStyle = 'rgba(31,29,43,0.55)';
-  ctx.strokeText('剪影 Studio', W - size * 0.8, H - size * 0.8);
+  ctx.strokeText('片刻剪趣', W - size * 0.8, H - size * 0.8);
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('剪影 Studio', W - size * 0.8, H - size * 0.8);
+  ctx.fillText('片刻剪趣', W - size * 0.8, H - size * 0.8);
   ctx.restore();
 }

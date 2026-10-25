@@ -8,7 +8,7 @@ import { Button, Modal, inputClass, useToast } from '../../components/ui';
 import { AdminLayout } from './AdminLayout';
 import { money } from './charts';
 
-type Filter = 'all' | 'pro' | 'free';
+type Filter = 'all' | 'pro' | 'trial' | 'free';
 const DURATIONS = [
   { months: 1, label: '1 個月' },
   { months: 3, label: '3 個月' },
@@ -60,6 +60,7 @@ export default function AdminMembers() {
             [
               ['all', '全部'],
               ['pro', '付費'],
+              ['trial', '試用'],
               ['free', '免費'],
             ] as [Filter, string][]
           ).map(([id, label]) => (
@@ -235,11 +236,17 @@ function PlanBadge({ u }: { u: AdminMember }) {
         <ShieldCheck className="size-3" /> 管理者
       </span>
     );
+  if (u.plan === 'pro' && u.planSource === 'trial')
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-mint-soft px-2 py-0.5 text-xs font-bold text-mint">
+        <Crown className="size-3" /> 專業版・試用中
+      </span>
+    );
   if (u.plan === 'pro')
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-bold text-brand">
         <Crown className="size-3" /> 專業版{u.planSource === 'admin' ? '・管理者開通' : '・付費'}
       </span>
     );
-  return <span className="rounded-full bg-sunken px-2 py-0.5 text-xs font-bold text-ink-soft">免費版</span>;
+  return <span className="rounded-full bg-sunken px-2 py-0.5 text-xs font-bold text-ink-soft">免費版{u.planSource === 'trial' ? '・試用已結束' : ''}</span>;
 }

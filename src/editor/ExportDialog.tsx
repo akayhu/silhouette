@@ -114,7 +114,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           </div>
           {!isPro && (
             <p className="mt-3 rounded-xl bg-sunken px-3 py-2 text-xs text-ink-soft">
-              免費版匯出的影片右下角會有「剪影 Studio」浮水印。
+              免費版匯出的影片右下角會有「片刻剪趣」浮水印。
               <button className="ml-1 font-bold text-brand" onClick={() => upgrade('升級專業版即可去除浮水印。')}>
                 去除浮水印
               </button>
@@ -153,7 +153,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             {quality}p ・ {result.ext.toUpperCase()} ・ {(result.size / 1024 / 1024).toFixed(1)} MB
           </div>
           <video src={result.url} controls className="mx-auto mt-4 max-h-64 rounded-2xl bg-sunken" />
-          <a href={result.url} download={`${name || '剪影作品'}.${result.ext}`} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-white hover:bg-brand-hover">
+          <a href={result.url} download={`${name || '片刻剪趣作品'}.${result.ext}`} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-white hover:bg-brand-hover">
             <Download className="size-4" /> 下載影片
           </a>
         </div>

@@ -8,7 +8,7 @@ export interface User {
   name: string;
   plan: Plan;
   role: 'user' | 'admin';
-  planSource: 'paid' | 'admin' | null;
+  planSource: 'paid' | 'admin' | 'trial' | null;
   planRenewsAt: string | null;
   cancelAtPeriodEnd: boolean;
   createdAt: string;
@@ -159,7 +159,7 @@ export interface Project extends Omit<ProjectSummary, 'aspect' | 'duration'> {
 }
 
 export interface AdminStats {
-  members: { total: number; paid: number; free: number; adminGranted: number; newToday: number };
+  members: { total: number; paid: number; trial: number; free: number; adminGranted: number; newToday: number };
   revenue: { total: number; today: number; payments: number; inRange: number };
   daily: { date: string; amount: number; payments: number; signups: number; cumulative: number }[];
 }
@@ -170,7 +170,7 @@ export interface AdminMember {
   name: string;
   role: 'user' | 'admin';
   plan: Plan;
-  planSource: 'paid' | 'admin' | null;
+  planSource: 'paid' | 'admin' | 'trial' | null;
   planRenewsAt: string | null;
   cancelAtPeriodEnd: boolean;
   createdAt: string;

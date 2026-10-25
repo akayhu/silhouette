@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Check, Minus } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { isPaidPro, TRIAL_DAYS } from '../lib/plan';
 import { buttonClass } from './ui';
 
 const rows: { label: string; free: string | boolean; pro: string | boolean }[] = [
@@ -22,7 +23,7 @@ function Cell({ v }: { v: string | boolean }) {
 
 export function PlanCards() {
   const { user } = useAuth();
-  const isPro = user?.plan === 'pro';
+  const isPro = isPaidPro(user);
   return (
     <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
       <div className="rounded-3xl border border-line bg-surface p-7 shadow-card">
@@ -31,12 +32,12 @@ export function PlanCards() {
           <span className="text-4xl font-extrabold tracking-tight">NT$0</span>
           <span className="text-ink-mute">／月</span>
         </div>
-        <p className="mt-2 text-sm text-ink-soft">先試試看，剪幾支日常短片。</p>
+        <p className="mt-2 text-sm text-ink-soft">註冊就送 {TRIAL_DAYS} 天專業版，之後可以一直免費使用。</p>
         <Link
           to={user ? '/dashboard' : '/register'}
           className={buttonClass('secondary', 'lg', 'mt-6 w-full')}
         >
-          {user ? (isPro ? '回到我的專案' : '目前方案') : '免費註冊'}
+          {user ? (user.plan === 'pro' ? '回到我的專案' : '目前方案') : `免費註冊・送 ${TRIAL_DAYS} 天專業版`}
         </Link>
         <PlanList plan="free" />
       </div>
@@ -47,12 +48,12 @@ export function PlanCards() {
           <span className="text-4xl font-extrabold tracking-tight">NT$399</span>
           <span className="text-ink-mute">／月</span>
         </div>
-        <p className="mt-2 text-sm text-ink-soft">經營自媒體、接案剪片，AI 功能全開。</p>
+        <p className="mt-2 text-sm text-ink-soft">經營自媒體、接案剪片，AI 功能全開。新會員可先免費試用 {TRIAL_DAYS} 天。</p>
         <Link
-          to={isPro ? '/account' : user ? '/checkout' : '/register?next=/checkout'}
+          to={isPro ? '/account' : user ? '/checkout' : '/register'}
           className={buttonClass('primary', 'lg', 'mt-6 w-full')}
         >
-          {isPro ? '管理訂閱' : '升級專業版'}
+          {isPro ? '管理訂閱' : user ? '升級專業版' : `免費試用 ${TRIAL_DAYS} 天`}
         </Link>
         <PlanList plan="pro" />
       </div>

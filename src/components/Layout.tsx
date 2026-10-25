@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { ChevronDown, Crown, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { isPaidPro, isTrial, trialDaysLeft } from '../lib/plan';
 import { Logo, buttonClass } from './ui';
 
 export function SiteHeader() {
@@ -86,7 +87,7 @@ export function SiteFooter() {
           </div>
         ))}
       </div>
-      <div className="border-t border-line py-5 text-center text-xs text-ink-mute">© {new Date().getFullYear()} 剪影 Studio. All rights reserved.</div>
+      <div className="border-t border-line py-5 text-center text-xs text-ink-mute">© {new Date().getFullYear()} 片刻剪趣. All rights reserved.</div>
     </footer>
   );
 }
@@ -127,9 +128,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
             )}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            {user.plan === 'free' && (
+            {!isPaidPro(user) && (
               <Link to="/checkout" className={buttonClass('coral', 'sm')}>
-                <Crown className="size-3.5" /> 升級專業版
+                <Crown className="size-3.5" /> {isTrial(user) ? `試用剩 ${trialDaysLeft(user)} 天・升級` : '升級專業版'}
               </Link>
             )}
             <div className="relative">

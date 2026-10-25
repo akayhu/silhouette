@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export const CHART = {
   paid: '#5b4cf5',
+  trial: '#19b38a',
   free: '#ff7a59',
   grid: '#ece9e2',
   axis: '#918d9e',

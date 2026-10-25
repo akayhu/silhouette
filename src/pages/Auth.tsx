@@ -38,7 +38,7 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
         <Logo />
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-12">
           <h1 className="text-3xl font-black tracking-tight">{isLogin ? '歡迎回來' : '建立免費帳號'}</h1>
-          <p className="mt-2 text-ink-soft">{isLogin ? '登入後繼續剪輯你的專案。' : '30 秒完成註冊，馬上開始剪輯。'}</p>
+          <p className="mt-2 text-ink-soft">{isLogin ? '登入後繼續剪輯你的專案。' : '註冊就送 7 天專業版，不需信用卡。'}</p>
 
           <button
             type="button"

@@ -23,6 +23,7 @@ export default function AdminOverview() {
   const r = stats?.revenue;
   const daily = stats?.daily ?? [];
   const paidRate = m && m.total ? Math.round((m.paid / m.total) * 100) : 0;
+  const conversion = m && m.paid + m.free ? Math.round((m.paid / (m.paid + m.free)) * 100) : 0;
 
   return (
     <AdminLayout
@@ -60,17 +61,18 @@ export default function AdminOverview() {
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Tile label="今日營收" value={r ? money(r.today) : '—'} />
           <Tile label="會員總數" value={m ? m.total.toLocaleString('zh-TW') : '—'} sub={m ? `今天新增 ${m.newToday} 位` : undefined} />
-          <Tile label="付費會員" value={m ? m.paid.toLocaleString('zh-TW') : '—'} sub={m ? `付費率 ${paidRate}%` : undefined} />
-          <Tile label="免費會員" value={m ? m.free.toLocaleString('zh-TW') : '—'} sub={m?.adminGranted ? `另有 ${m.adminGranted} 位由管理者開通` : undefined} />
+          <Tile label="付費會員" value={m ? m.paid.toLocaleString('zh-TW') : '—'} sub={m ? `付費率 ${paidRate}%${m.adminGranted ? `・含 ${m.adminGranted} 位管理者開通` : ''}` : undefined} />
+          <Tile label="試用中／免費" value={m ? `${m.trial.toLocaleString('zh-TW')}／${m.free.toLocaleString('zh-TW')}` : '—'} sub={m ? `試用結束後的付費轉換 ${conversion}%` : undefined} />
         </div>
       </div>
 
       <Card className="mt-4">
-        <SectionHead title="付費與免費會員" />
+        <SectionHead title="付費、試用與免費會員" sub="新會員註冊後有 7 天專業版試用，試用中不算付費會員" />
         {m && (
           <SplitBar
             parts={[
               { label: '付費會員', value: m.paid, color: CHART.paid },
+              { label: '試用中', value: m.trial, color: CHART.trial },
               { label: '免費會員', value: m.free, color: CHART.free },
             ]}
           />

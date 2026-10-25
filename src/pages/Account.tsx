@@ -4,6 +4,7 @@ import { Crown } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate } from '../lib/format';
+import { isTrial, trialDaysLeft, trialEnded } from '../lib/plan';
 import { AppLayout } from '../components/Layout';
 import { Button, Field, Modal, buttonClass, inputClass, useToast } from '../components/ui';
 
@@ -77,7 +78,21 @@ export default function Account() {
         <section className="space-y-6">
           <div className={card}>
             <h2 className="text-lg font-extrabold">訂閱方案</h2>
-            {user.plan === 'pro' ? (
+            {isTrial(user) ? (
+              <>
+                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-coral-soft p-4">
+                  <Crown className="size-6 text-coral" />
+                  <div>
+                    <div className="font-bold">專業版試用中・剩 {trialDaysLeft(user)} 天</div>
+                    <div className="text-sm text-ink-soft">試用到 {formatDate(user.planRenewsAt!)}，到期後自動回到免費版，不會扣款</div>
+                  </div>
+                </div>
+                <Link to="/checkout" className={buttonClass('coral', 'md', 'mt-4')}>
+                  <Crown className="size-4" /> 升級專業版 NT$399／月
+                </Link>
+                <p className="mt-2 text-xs text-ink-mute">試用期間付款，第一個月會從試用結束後開始計算。</p>
+              </>
+            ) : user.plan === 'pro' ? (
               <>
                 <div className="mt-4 flex items-center gap-3 rounded-2xl bg-coral-soft p-4">
                   <Crown className="size-6 text-coral" />
@@ -101,7 +116,7 @@ export default function Account() {
             ) : (
               <>
                 <div className="mt-4 rounded-2xl bg-sunken p-4">
-                  <div className="font-bold">免費版</div>
+                  <div className="font-bold">免費版{trialEnded(user) ? '（7 天試用已結束）' : ''}</div>
                   <div className="text-sm text-ink-soft">
                     本月已建立 {user.usage.projectsThisMonth} / {user.usage.projectLimit} 個專案．匯出 720p 含浮水印
                   </div>

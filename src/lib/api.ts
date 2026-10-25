@@ -50,7 +50,7 @@ export const api = {
     }),
 
   adminStats: (days: number) => request<AdminStats>(`/api/admin/stats?days=${days}`),
-  adminUsers: (q: string, plan: 'all' | 'pro' | 'free') =>
+  adminUsers: (q: string, plan: 'all' | 'pro' | 'trial' | 'free') =>
     request<{ users: AdminMember[] }>(`/api/admin/users?q=${encodeURIComponent(q)}&plan=${plan}`),
   adminGrant: (id: string, months: number) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'grant', months })),
   adminRevoke: (id: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'revoke' })),

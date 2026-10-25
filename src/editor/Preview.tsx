@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Loader2, Maximize2, Pause, Play, SkipBack } from 'lucide-react';
 import { formatTime } from '../lib/format';
-import { clipAt, layoutMain, transformOf } from '../lib/timeline';
+import { clipAt, layoutMain, overlayEnd, overlayTransform, transformOf } from '../lib/timeline';
 import { EraseOverlay } from './EraseOverlay';
-import { stickerPose } from '../lib/engine';
+import { drawnRect, stickerPose } from '../lib/engine';
 import { useEditor } from './store';
 
 export function Preview({
@@ -71,10 +71,52 @@ export function Preview({
     return true;
   };
 
+  const dragOverlay = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const st = useEditor.getState();
+    if (st.data.locks?.overlay) return false;
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const py = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const hit = [...st.data.overlays]
+      .filter((o) => st.time >= o.start && st.time < overlayEnd(o))
+      .sort((a, b) => b.lane - a.lane)
+      .find((o) => {
+        const m = st.data.media.find((x) => x.id === o.mediaId);
+        if (!m?.width || !m.height) return false;
+        const r = drawnRect(overlayTransform(o), m.width, m.height, canvas.width, canvas.height);
+        return Math.abs(px - r.cx) < r.dw / 2 && Math.abs(py - r.cy) < r.dh / 2;
+      });
+    if (!hit) return false;
+    st.select({ type: 'overlay', id: hit.id });
+    const start = overlayTransform(hit);
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
+      if (!moved) {
+        st.checkpoint();
+        moved = true;
+      }
+      const x = start.x + (ev.clientX - x0) / rect.width;
+      const y = start.y + (ev.clientY - y0) / rect.height;
+      useEditor.getState().live((d) => ({ ...d, overlays: d.overlays.map((o) => (o.id === hit.id ? { ...o, transform: { ...overlayTransform(o), x, y } } : o)) }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return true;
+  };
+
   // 在預覽上拖曳：移動播放頭所在片段的畫面位置；沒有移動就當作點擊播放／暫停
   const dragFrame = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
     if (dragSticker(e)) return;
+    if (dragOverlay(e)) return;
     const st = useEditor.getState();
     // 主軌鎖定時不移動畫面，只保留點一下播放／暫停
     const clip = st.data.locks?.main ? null : clipAt(layoutMain(st.data.clips), st.time);

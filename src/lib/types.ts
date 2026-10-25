@@ -116,6 +116,21 @@ export interface Caption {
 export type StickerAnimation = 'none' | 'pop' | 'bounce' | 'wobble' | 'pulse' | 'spin' | 'float';
 
 /** 畫面上的貼紙：x、y 是中心點位置（畫布寬高的比例），scale 1 = 短邊的 30% */
+/** 疊加在主軌上方的影片／圖片（畫中畫）。lane 越大越上層 */
+export interface OverlayClip {
+  id: string;
+  mediaId: string;
+  start: number;
+  in: number;
+  out: number;
+  speed: number;
+  volume: number;
+  lane: number;
+  opacity: number;
+  transform?: ClipTransform;
+  filter?: ClipFilter;
+}
+
 export interface StickerItem {
   id: string;
   stickerId: string;
@@ -130,7 +145,7 @@ export interface StickerItem {
 }
 
 /** 時間軸的四條軌道 */
-export type TrackKey = 'caption' | 'sticker' | 'main' | 'audio';
+export type TrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio';
 
 export interface ProjectData {
   /** 鎖定的軌道：不能選取、編輯，也不會被其他軌的波紋刪除移動 */
@@ -141,6 +156,7 @@ export interface ProjectData {
   audio: AudioClip[];
   captions: Caption[];
   stickers: StickerItem[];
+  overlays: OverlayClip[];
   duration: number;
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Film, ImageIcon, Loader2, Music, Plus, Trash2, UploadCloud } from 'lucide-react';
+import { Film, ImageIcon, Layers, Loader2, Music, Plus, Trash2, UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatTime, uid } from '../../lib/format';
 import { kindOf, probe, videoPoster } from '../../lib/media';
@@ -7,6 +7,7 @@ import type { MediaItem } from '../../lib/types';
 import { useToast } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
+import { DEFAULT_OVERLAY_TRANSFORM, freeOverlayLane } from '../../lib/timeline';
 
 export function addToTimeline(m: MediaItem) {
   if (!ensureUnlocked(m.kind === 'audio' ? 'audio' : 'main')) return;
@@ -16,6 +17,30 @@ export function addToTimeline(m: MediaItem) {
   } else {
     commit((d) => ({ ...d, clips: [...d.clips, { id: uid(), mediaId: m.id, in: 0, out: m.duration, speed: 1, volume: 1 }] }));
   }
+}
+
+/** 疊加到主軌上方：從播放頭開始，找沒被佔用的最低層；佔滿就往上疊一層 */
+export function addToOverlay(m: MediaItem) {
+  if (!ensureUnlocked('overlay')) return;
+  const { commit, time, select, data } = useEditor.getState();
+  const len = m.kind === 'image' ? 3 : m.duration;
+  const lane = freeOverlayLane(data.overlays, time, time + len);
+  // 每往上一層位置稍微錯開，疊起來看得出層次
+  const offset = Math.min(lane, 3) * 0.06;
+  const item = {
+    id: uid(),
+    mediaId: m.id,
+    start: time,
+    in: 0,
+    out: len,
+    speed: 1,
+    volume: 1,
+    lane,
+    opacity: 1,
+    transform: { ...DEFAULT_OVERLAY_TRANSFORM, x: 0.18 - offset, y: -0.22 + offset },
+  };
+  commit((d) => ({ ...d, overlays: [...d.overlays, item] }));
+  select({ type: 'overlay', id: item.id });
 }
 
 export function MediaPanel() {
@@ -109,13 +134,28 @@ export function MediaPanel() {
             <button onClick={() => removeMedia(m)} className="rounded-lg p-1.5 text-ink-mute opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600" aria-label="移除素材">
               <Trash2 className="size-3.5" />
             </button>
-            <button onClick={() => addToTimeline(m)} className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-white hover:bg-brand-hover" aria-label="加到時間軸">
+            {m.kind !== 'audio' && (
+              <button
+                onClick={() => addToOverlay(m)}
+                className="grid size-8 shrink-0 place-items-center rounded-lg border border-line text-ink-soft hover:border-brand/50 hover:text-brand"
+                aria-label="疊加到主軌上方"
+                title="疊加到主軌上方（畫中畫）"
+              >
+                <Layers className="size-4" />
+              </button>
+            )}
+            <button
+              onClick={() => addToTimeline(m)}
+              className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-white hover:bg-brand-hover"
+              aria-label={m.kind === 'audio' ? '加到音訊軌' : '加到主軌'}
+              title={m.kind === 'audio' ? '加到音訊軌' : '接在主軌最後面'}
+            >
               <Plus className="size-4" />
             </button>
           </div>
         ))}
       </div>
-      <p className="mt-4 text-[11px] leading-relaxed text-ink-mute">影片和圖片會接在主軌最後面，音樂會從播放頭位置放進音訊軌。</p>
+      <p className="mt-4 text-[11px] leading-relaxed text-ink-mute">按「＋」影片和圖片會接在主軌最後面，音樂會從播放頭放進音訊軌；按「疊加」會把影片或圖片疊在主軌上方（畫中畫），可以一層一層往上疊。</p>
     </div>
   );
 }

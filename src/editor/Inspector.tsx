@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import { AudioLines, Copy, Film, MousePointerClick, RotateCcw, Smile, Trash2, Type } from 'lucide-react';
+import { ArrowDown, ArrowUp, AudioLines, Copy, Film, Layers, MousePointerClick, RotateCcw, Smile, Trash2, Type } from 'lucide-react';
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
-import { aspectSize, clipLength, DEFAULT_TRANSFORM, layoutMain, removeItems, removeMainClip, transformOf } from '../lib/timeline';
+import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, layoutMain, overlayEnd, overlayLaneCount, placeOverlayLane, removeItems, removeMainClip, transformOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
-import type { CaptionAnimation, CaptionStyle, ClipTransform, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
+import type { CaptionAnimation, CaptionStyle, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
 import { Button } from '../components/ui';
 import { useEditor } from './store';
 
@@ -122,6 +122,7 @@ export function Inspector() {
   }
 
   if (selection.type === 'sticker') return <StickerInspector id={selection.id} />;
+  if (selection.type === 'overlay') return <OverlayInspector id={selection.id} />;
 
   if (selection.type === 'audio') {
     const a = data.audio.find((x) => x.id === selection.id);
@@ -253,18 +254,20 @@ const ALIGN: { x: number; y: number; label: string }[] = [-1, 0, 1].flatMap((row
   [-1, 0, 1].map((col) => ({ x: col, y: row, label: `${['上', '中', '下'][row + 1]}${['左', '中', '右'][col + 1]}` })),
 );
 
-function FrameSection({ clipId }: { clipId: string }) {
-  const clip = useEditor((s) => s.data.clips.find((c) => c.id === clipId));
+function FrameSection({ clipId, kind = 'clip' }: { clipId: string; kind?: 'clip' | 'overlay' }) {
+  const isOverlay = kind === 'overlay';
+  const clip = useEditor((s) => (isOverlay ? s.data.overlays.find((c) => c.id === clipId) : s.data.clips.find((c) => c.id === clipId)));
   const media = useEditor((s) => s.data.media.find((m) => m.id === clip?.mediaId));
   const aspect = useEditor((s) => s.data.aspect);
   const { live, commit, checkpoint } = useEditor.getState();
   if (!clip) return null;
-  const tf = transformOf(clip);
+  const DEFAULT = isOverlay ? DEFAULT_OVERLAY_TRANSFORM : DEFAULT_TRANSFORM;
+  const tf = { ...DEFAULT, ...clip.transform };
   const set = (patch: Partial<ClipTransform>, record = false) => {
-    const fn = (d: ReturnType<typeof useEditor.getState>['data']) => ({
-      ...d,
-      clips: d.clips.map((c) => (c.id === clipId ? { ...c, transform: { ...transformOf(c), ...patch } } : c)),
-    });
+    const fn = (d: ProjectData): ProjectData =>
+      isOverlay
+        ? { ...d, overlays: d.overlays.map((c) => (c.id === clipId ? { ...c, transform: { ...DEFAULT, ...c.transform, ...patch } } : c)) }
+        : { ...d, clips: d.clips.map((c) => (c.id === clipId ? { ...c, transform: { ...transformOf(c), ...patch } } : c)) };
     record ? commit(fn) : live(fn);
   };
   // 依實際畫面大小推算靠邊時的位移，讓「靠右」剛好貼齊右邊
@@ -274,14 +277,14 @@ function FrameSection({ clipId }: { clipId: string }) {
   const base = tf.fit === 'cover' ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh);
   const edgeX = (1 - (sw * base * tf.scale) / W) / 2;
   const edgeY = (1 - (sh * base * tf.scale) / H) / 2;
-  const isDefault = JSON.stringify(tf) === JSON.stringify(DEFAULT_TRANSFORM);
+  const isDefault = JSON.stringify(tf) === JSON.stringify(DEFAULT);
 
   return (
     <Section
       title="畫面"
       aside={
         <button
-          onClick={() => set(DEFAULT_TRANSFORM, true)}
+          onClick={() => set(DEFAULT, true)}
           disabled={isDefault}
           className="flex items-center gap-1 text-[11px] font-bold text-ink-soft hover:text-brand disabled:opacity-40"
         >
@@ -339,6 +342,7 @@ function MultiInspector() {
   const auds = data.audio.filter((a) => ids.has(a.id));
   const clips = data.clips.filter((c) => ids.has(c.id));
   const stks = data.stickers.filter((st) => ids.has(st.id));
+  const ovs = data.overlays.filter((o) => ids.has(o.id));
 
   const apply = (fn: (d: ProjectData) => ProjectData, record: boolean) => (record ? commit(fn) : live(fn));
   const setCaps = (patch: Partial<CaptionStyle>, record = true) =>
@@ -349,7 +353,7 @@ function MultiInspector() {
     apply((d) => ({ ...d, clips: d.clips.map((c) => (ids.has(c.id) ? { ...c, ...patch } : c)) }), record);
 
   // 把選取的字幕與音訊整組移到播放頭（最早的項目對齊播放頭）
-  const movable = [...caps.map((c) => c.start), ...stks.map((st) => st.start), ...auds.map((a) => a.start)];
+  const movable = [...caps.map((c) => c.start), ...stks.map((st) => st.start), ...ovs.map((o) => o.start), ...auds.map((a) => a.start)];
   const earliest = movable.length ? Math.min(...movable) : 0;
   const moveToPlayhead = () => {
     const delta = time - earliest;
@@ -357,6 +361,7 @@ function MultiInspector() {
       ...d,
       captions: d.captions.map((c) => (ids.has(c.id) ? { ...c, start: c.start + delta, end: c.end + delta } : c)),
       stickers: d.stickers.map((st) => (ids.has(st.id) ? { ...st, start: st.start + delta, end: st.end + delta } : st)),
+      overlays: d.overlays.map((o) => (ids.has(o.id) ? { ...o, start: o.start + delta } : o)),
       audio: d.audio.map((a) => (ids.has(a.id) ? { ...a, start: a.start + delta } : a)),
     }));
   };
@@ -369,6 +374,7 @@ function MultiInspector() {
     { n: clips.length, label: '影片', icon: Film, cls: 'bg-track-video text-[#4b3be6]' },
     { n: caps.length, label: '字幕', icon: Type, cls: 'bg-track-caption text-[#b2432a]' },
     { n: stks.length, label: '貼紙', icon: Smile, cls: 'bg-track-sticker text-[#8a6100]' },
+    { n: ovs.length, label: '疊加', icon: Layers, cls: 'bg-track-overlay text-[#1f5fbf]' },
     { n: auds.length, label: '音訊', icon: AudioLines, cls: 'bg-track-audio text-[#0d6b52]' },
   ].filter((c) => c.n);
 
@@ -519,6 +525,56 @@ function StickerInspector({ id }: { id: string }) {
         </Button>
         <Button variant="danger" onClick={() => (commit((d) => ({ ...d, stickers: d.stickers.filter((x) => x.id !== id) })), select(null))}>
           <Trash2 className="size-4" /> 刪除
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function OverlayInspector({ id }: { id: string }) {
+  const o = useEditor((s) => s.data.overlays.find((x) => x.id === id));
+  const media = useEditor((s) => s.data.media.find((m) => m.id === o?.mediaId));
+  const lanes = useEditor((s) => overlayLaneCount(s.data.overlays));
+  const { commit, live, checkpoint, select } = useEditor.getState();
+  if (!o) return null;
+  const set = (patch: Partial<OverlayClip>, record = false) => {
+    const fn = (d: ProjectData) => ({ ...d, overlays: d.overlays.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
+    record ? commit(fn) : live(fn);
+  };
+  // 換層後收掉空的層，層級保持連續
+  const moveLane = (delta: number) =>
+    commit((d) => ({ ...d, overlays: placeOverlayLane(d.overlays, id, o.lane + delta, o.lane) }));
+  return (
+    <div>
+      <Section title={`疊加片段・第 ${o.lane + 1} 層`} aside={<span className="text-[11px] text-ink-mute">{formatTime(o.start, true)} – {formatTime(overlayEnd(o), true)}</span>}>
+        <div className="truncate text-sm font-bold">{media?.name}</div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Button variant="secondary" size="sm" onClick={() => moveLane(1)} disabled={o.lane >= lanes}>
+            <ArrowUp className="size-3.5" /> 上移一層
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => moveLane(-1)} disabled={o.lane === 0}>
+            <ArrowDown className="size-3.5" /> 下移一層
+          </Button>
+        </div>
+        <p className="mt-2 text-[11px] text-ink-mute">上層的畫面會蓋在下層上面；也可以在時間軸上下拖曳換層。</p>
+      </Section>
+      <FrameSection clipId={o.id} kind="overlay" />
+      <Section title="外觀">
+        <Slider label="透明度" value={Math.round(o.opacity * 100)} min={5} max={100} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => set({ opacity: v / 100 })} />
+      </Section>
+      {media?.kind === 'video' && (
+        <>
+          <Section title="變速">
+            <Chips options={SPEEDS.map((v) => ({ id: v, label: `${v}x` }))} value={o.speed} onChange={(speed) => set({ speed }, true)} />
+          </Section>
+          <Section title="音量">
+            <Slider label="原音音量" value={Math.round(o.volume * 100)} min={0} max={200} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => set({ volume: v / 100 })} />
+          </Section>
+        </>
+      )}
+      <div className="p-4">
+        <Button variant="danger" className="w-full" onClick={() => (commit((d) => ({ ...d, overlays: d.overlays.filter((x) => x.id !== id) })), select(null))}>
+          <Trash2 className="size-4" /> 刪除疊加片段
         </Button>
       </div>
     </div>

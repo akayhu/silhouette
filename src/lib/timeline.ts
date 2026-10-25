@@ -1,12 +1,12 @@
-import type { Aspect, AudioClip, Caption, CaptionStyle, ClipTransform, ProjectData, TrackKey, VideoClip } from './types';
+import type { Aspect, AudioClip, Caption, CaptionStyle, ClipTransform, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
 import { uid } from './format';
 
 export const MIN_CLIP = 0.1;
 
-export const TRACK_LABELS: Record<TrackKey, string> = { caption: '字幕軌', sticker: '貼紙軌', main: '主軌', audio: '音訊軌' };
+export const TRACK_LABELS: Record<TrackKey, string> = { caption: '字幕軌', sticker: '貼紙軌', overlay: '疊加軌', main: '主軌', audio: '音訊軌' };
 
 /** 選取項目的類型對應到哪一條軌道 */
-export const trackOf = (type: 'clip' | 'audio' | 'caption' | 'sticker'): TrackKey => (type === 'clip' ? 'main' : type);
+export const trackOf = (type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'): TrackKey => (type === 'clip' ? 'main' : type);
 export const isLocked = (d: Pick<ProjectData, 'locks'>, track: TrackKey) => !!d.locks?.[track];
 
 export const DEFAULT_TRANSFORM: ClipTransform = { x: 0, y: 0, scale: 1, rotation: 0, fit: 'contain' };
@@ -49,12 +49,13 @@ export function activeClips(placed: PlacedClip[], t: number) {
   return placed.filter((c) => t >= c.start && t < c.end).slice(0, 2);
 }
 
-export function totalDuration(d: Pick<ProjectData, 'clips' | 'audio' | 'captions'> & { stickers?: ProjectData['stickers'] }) {
+export function totalDuration(d: Pick<ProjectData, 'clips' | 'audio' | 'captions'> & { stickers?: ProjectData['stickers']; overlays?: ProjectData['overlays'] }) {
   return Math.max(
     mainDuration(d.clips),
     ...d.audio.map((a) => a.start + clipLength(a)),
     ...d.captions.map((c) => c.end),
     ...(d.stickers ?? []).map((s) => s.end),
+    ...(d.overlays ?? []).map((o) => o.start + clipLength(o)),
     0,
   );
 }
@@ -195,7 +196,9 @@ export function rippleRemove(d: ProjectData, input: Range[]): ProjectData {
     ? (d.stickers ?? [])
     : (d.stickers ?? []).map((s) => ({ ...s, start: remap(s.start, ranges), end: remap(s.end, ranges) })).filter((s) => s.end - s.start >= 0.05);
 
-  return { ...d, clips, captions, audio, stickers };
+  const overlays = isLocked(d, 'overlay') ? (d.overlays ?? []) : (d.overlays ?? []).map((o) => ({ ...o, start: remap(o.start, ranges) }));
+
+  return { ...d, clips, captions, audio, stickers, overlays };
 }
 
 export function removeMainClip(d: ProjectData, id: string): ProjectData {
@@ -212,7 +215,7 @@ export function moveMainClip(d: ProjectData, from: number, to: number): ProjectD
 }
 
 /** 一次刪除多個項目：音訊與字幕直接移除，主軌片段用波紋刪除讓後面的內容補上 */
-export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption' | 'sticker'; id: string }[]): ProjectData {
+export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string }[]): ProjectData {
   const ids = new Set(items.filter((i) => !isLocked(d, trackOf(i.type))).map((i) => i.id));
   const ranges = layoutMain(d.clips)
     .filter((c) => ids.has(c.id))
@@ -222,6 +225,7 @@ export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'c
     audio: d.audio.filter((a) => !ids.has(a.id)),
     captions: d.captions.filter((c) => !ids.has(c.id)),
     stickers: (d.stickers ?? []).filter((s) => !ids.has(s.id)),
+    overlays: (d.overlays ?? []).filter((o) => !ids.has(o.id)),
   };
   return rippleRemove(rest, ranges);
 }
@@ -230,4 +234,53 @@ export function splitStickerAt(d: ProjectData, id: string, t: number): ProjectDa
   const s = d.stickers.find((x) => x.id === id);
   if (!s || t - s.start < MIN_CLIP || s.end - t < MIN_CLIP) return d;
   return { ...d, stickers: d.stickers.flatMap((x) => (x.id === id ? [{ ...s, end: t }, { ...s, id: uid(), start: t }] : [x])) };
+}
+
+// ---------- 疊加軌（畫中畫） ----------
+
+export const overlayEnd = (o: OverlayClip) => o.start + clipLength(o);
+
+/** 疊加軌的層數（至少 1 層，方便放東西進來） */
+export const overlayLaneCount = (overlays: OverlayClip[]) => Math.max(1, ...overlays.map((o) => o.lane + 1));
+
+/** 找出 [start, end) 這段時間沒被佔用的最低層，佔滿就往上疊一層 */
+export function freeOverlayLane(overlays: OverlayClip[], start: number, end: number, exceptId?: string) {
+  for (let lane = 0; ; lane++) {
+    const busy = overlays.some((o) => o.id !== exceptId && o.lane === lane && o.start < end - 0.001 && overlayEnd(o) > start + 0.001);
+    if (!busy) return lane;
+  }
+}
+
+export const DEFAULT_OVERLAY_TRANSFORM: ClipTransform = { x: 0, y: 0, scale: 0.5, rotation: 0, fit: 'contain' };
+export const overlayTransform = (o: OverlayClip): ClipTransform => ({ ...DEFAULT_OVERLAY_TRANSFORM, ...o.transform });
+
+export function splitOverlayAt(d: ProjectData, id: string, t: number): ProjectData {
+  const o = d.overlays.find((x) => x.id === id);
+  if (!o || t - o.start < MIN_CLIP || overlayEnd(o) - t < MIN_CLIP) return d;
+  const cut = o.in + (t - o.start) * o.speed;
+  return {
+    ...d,
+    overlays: d.overlays.flatMap((x) => (x.id === id ? [{ ...o, out: cut }, { ...o, id: uid(), start: t, in: cut }] : [x])),
+  };
+}
+
+/** 移除空出來的層，讓層級從 0 連續往上 */
+/**
+ * 把疊加片段移到指定層。那層同時間已經有片段時，不重疊在一起，
+ * 而是插入新的一層：往上移就放到擋住的片段上面，往下移就放到它下面。
+ */
+export function placeOverlayLane(overlays: OverlayClip[], id: string, lane: number, fromLane: number): OverlayClip[] {
+  const o = overlays.find((x) => x.id === id);
+  if (!o) return overlays;
+  const target = Math.max(0, lane);
+  const free = !overlays.some((x) => x.id !== id && x.lane === target && x.start < overlayEnd(o) - 0.001 && overlayEnd(x) > o.start + 0.001);
+  if (free) return compactLanes(overlays.map((x) => (x.id === id ? { ...x, lane: target } : x)));
+  const insert = target > fromLane ? target + 1 : target;
+  return compactLanes(overlays.map((x) => (x.id === id ? { ...x, lane: insert } : x.lane >= insert ? { ...x, lane: x.lane + 1 } : x)));
+}
+
+export function compactLanes<T extends { lane: number }>(items: T[]): T[] {
+  const used = [...new Set(items.map((i) => i.lane))].sort((a, b) => a - b);
+  const map = new Map(used.map((lane, idx) => [lane, idx]));
+  return items.map((i) => (map.get(i.lane) === i.lane ? i : { ...i, lane: map.get(i.lane)! }));
 }

@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRightLeft, AudioLines, Check, CloudOff, Download, Erase
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
-import { aspectSize, isLocked, splitAudioAt, splitCaptionAt, splitMainAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
+import { aspectSize, isLocked, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
 import { ensureUnlocked } from './locks';
 import type { Aspect } from '../lib/types';
 import { Button, Logo } from '../components/ui';
@@ -132,6 +132,7 @@ export default function Editor() {
     if (selection?.type === 'audio') commit((d) => splitAudioAt(d, selection.id, time));
     else if (selection?.type === 'caption') commit((d) => splitCaptionAt(d, selection.id, time));
     else if (selection?.type === 'sticker') commit((d) => splitStickerAt(d, selection.id, time));
+    else if (selection?.type === 'overlay') commit((d) => splitOverlayAt(d, selection.id, time));
     else commit((d) => splitMainAt(d, time));
   }, []);
 
@@ -150,6 +151,7 @@ export default function Editor() {
     const all = [
       ...data.captions.map((c) => ({ type: 'caption' as const, id: c.id })),
       ...data.stickers.map((st) => ({ type: 'sticker' as const, id: st.id })),
+      ...data.overlays.map((o) => ({ type: 'overlay' as const, id: o.id })),
       ...data.clips.map((c) => ({ type: 'clip' as const, id: c.id })),
       ...data.audio.map((a) => ({ type: 'audio' as const, id: a.id })),
     ];

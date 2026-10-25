@@ -1,8 +1,8 @@
-import type { Caption, ClipTransform, MediaItem, ProjectData, StickerItem, TransitionType } from './types';
+import type { Caption, ClipTransform, MediaItem, OverlayClip, ProjectData, StickerItem, TransitionType } from './types';
 import { stickerImage } from './stickers';
 import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
-import { activeClips, clipLength, layoutMain, totalDuration, transformOf, type PlacedClip } from './timeline';
+import { activeClips, clipLength, layoutMain, overlayEnd, overlayTransform, totalDuration, transformOf, type PlacedClip } from './timeline';
 
 interface MediaNode {
   el: HTMLMediaElement;
@@ -32,6 +32,8 @@ export class Engine {
   private videos = new Map<string, MediaNode>();
   private layers: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
   private audios = new Map<string, MediaNode>();
+  /** 疊加軌每個片段各自一個播放器（同一支影片可以在不同時間同時出現） */
+  private overlayNodes = new Map<string, MediaNode>();
   private images = new Map<string, HTMLImageElement>();
   private mediaById = new Map<string, MediaItem>();
   /** 按住「比較原圖」時暫時不套用去浮水印 */
@@ -99,6 +101,17 @@ export class Engine {
         this.audios.delete(id);
       }
     }
+    for (const o of data.overlays ?? []) {
+      const m = byId.get(o.mediaId);
+      if (m?.kind === 'video' && !this.overlayNodes.has(o.id)) this.overlayNodes.set(o.id, this.mediaNode('video', m.url));
+    }
+    for (const [id, node] of this.overlayNodes) {
+      if (!(data.overlays ?? []).some((o) => o.id === id)) {
+        node.el.pause();
+        node.el.removeAttribute('src');
+        this.overlayNodes.delete(id);
+      }
+    }
     if (this.time > this.duration) this.time = this.duration;
     if (!this.playing) this.seek(this.time);
   }
@@ -151,7 +164,7 @@ export class Engine {
   pause() {
     this.playing = false;
     cancelAnimationFrame(this.raf);
-    for (const n of [...this.videos.values(), ...this.audios.values()]) n.el.pause();
+    for (const n of [...this.videos.values(), ...this.audios.values(), ...this.overlayNodes.values()]) n.el.pause();
   }
 
   seek(t: number) {
@@ -167,7 +180,7 @@ export class Engine {
 
   /** 等到目前畫面所需的影片都可以播放（匯出開始前用） */
   async ready() {
-    const waits = [...this.videos.values()].map(
+    const waits = [...this.videos.values(), ...this.overlayNodes.values()].map(
       ({ el }) =>
         new Promise<void>((resolve) => {
           if (el.readyState >= 3) return resolve();
@@ -220,6 +233,16 @@ export class Engine {
       }
     }
     for (const [key, node] of this.videos) if (!used.has(key) && !node.el.paused) node.el.pause();
+    // 疊加軌：在時間內就播放，快開始前先跳到開頭
+    for (const o of this.data.overlays ?? []) {
+      const node = this.overlayNodes.get(o.id);
+      if (!node) continue;
+      if (t >= o.start && t < overlayEnd(o)) this.syncNode(node, o.in + (t - o.start) * o.speed, o.speed, o.volume);
+      else {
+        if (!node.el.paused) node.el.pause();
+        if (o.start > t && o.start - t < 1.2 && !node.el.seeking && Math.abs(node.el.currentTime - o.in) > 0.05) node.el.currentTime = o.in;
+      }
+    }
     for (const a of this.data.audio) {
       const node = this.audios.get(a.id);
       if (!node) continue;
@@ -240,7 +263,9 @@ export class Engine {
     const active = activeClips(this.placed, this.time);
     const sources = active.map((c) => this.frameSource(c));
     // 影片還在跳轉時保留上一格畫面，避免閃白
-    if (sources.some((s) => !s)) return;
+    const overlays = (this.data.overlays ?? []).filter((o) => this.time >= o.start && this.time < overlayEnd(o)).sort((a, b) => a.lane - b.lane);
+    const overlaySources = overlays.map((o) => this.overlaySource(o));
+    if (sources.some((s) => !s) || overlaySources.some((s) => !s)) return;
 
     ctx.save();
     ctx.fillStyle = '#ece9e2';
@@ -260,6 +285,9 @@ export class Engine {
       this.drawClip(lb.getContext('2d')!, active[1], sources[1]!, W, H);
       composite(ctx, la, lb, active[1].transition?.type ?? 'fade', transitionProgress(active, this.time), W, H);
     }
+
+    // 疊加軌：依層級由下往上畫在主軌之上
+    overlays.forEach((o, i) => this.drawOverlay(ctx, o, overlaySources[i]!, W, H));
 
     // 貼紙在影像之上、字幕之下
     for (const st of this.data.stickers ?? []) {
@@ -310,6 +338,36 @@ export class Engine {
     ctx.restore();
   }
 
+  private overlaySource(o: OverlayClip): { el: CanvasImageSource; size: [number, number] } | null {
+    const v = this.overlayNodes.get(o.id)?.el as HTMLVideoElement | undefined;
+    if (v && v.readyState >= 2 && v.videoWidth) return { el: v, size: [v.videoWidth, v.videoHeight] };
+    const img = this.images.get(o.mediaId);
+    if (img?.complete && img.naturalWidth) return { el: img, size: [img.naturalWidth, img.naturalHeight] };
+    return null;
+  }
+
+  /** 疊加片段：不畫模糊背景，依位置／縮放／旋轉／透明度直接疊上去 */
+  private drawOverlay(ctx: CanvasRenderingContext2D, o: OverlayClip, source: { el: CanvasImageSource; size: [number, number] }, W: number, H: number) {
+    const [sw, sh] = source.size;
+    const tf = overlayTransform(o);
+    const { cx, cy, dw, dh } = drawnRect(tf, sw, sh, W, H);
+    let el: CanvasImageSource = source.el;
+    const regions = this.mediaById.get(o.mediaId)?.erase;
+    if (regions?.length && !this.bypassErase) {
+      el = applyErase(source.el, Math.max(2, Math.round(Math.min(sw, dw))), Math.max(2, Math.round(Math.min(sh, dh))), regions);
+    }
+    const fp = resolveFilter(o.filter);
+    ctx.save();
+    ctx.globalAlpha = o.opacity;
+    ctx.translate(cx, cy);
+    ctx.rotate((tf.rotation * Math.PI) / 180);
+    ctx.filter = filterCss(fp) || 'none';
+    ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+    ctx.filter = 'none';
+    drawFilterOverlays(ctx, -dw / 2, -dh / 2, dw, dh, fp, this.time);
+    ctx.restore();
+  }
+
   private frameSource(clip: PlacedClip): { el: CanvasImageSource; size: [number, number] } | null {
     const v = this.videos.get(slotKey(clip))?.el as HTMLVideoElement | undefined;
     if (v && v.readyState >= 2 && v.videoWidth) return { el: v, size: [v.videoWidth, v.videoHeight] };
@@ -320,12 +378,13 @@ export class Engine {
 
   destroy() {
     this.pause();
-    for (const n of [...this.videos.values(), ...this.audios.values()]) {
+    for (const n of [...this.videos.values(), ...this.audios.values(), ...this.overlayNodes.values()]) {
       n.el.removeAttribute('src');
       n.el.load();
     }
     this.videos.clear();
     this.audios.clear();
+    this.overlayNodes.clear();
     this.audioCtx.close().catch(() => {});
   }
 }

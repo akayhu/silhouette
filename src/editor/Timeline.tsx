@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { AudioLines, Film, Lock, LockOpen, Scissors, Smile, Trash2, Type, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
-import { clipLength, layoutMain, MIN_CLIP, moveMainClip, TRACK_LABELS, trackOf } from '../lib/timeline';
+import { AudioLines, Film, Layers, Lock, LockOpen, Scissors, Smile, Trash2, Type, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import { clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, TRACK_LABELS, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { AudioClip, Caption, TrackKey } from '../lib/types';
 import { stickerDef, stickerUrl } from '../lib/stickers';
@@ -70,6 +70,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
     placed.forEach((c) => pts.push(c.start, c.end));
     data.captions.forEach((c) => !skip(c.id) && pts.push(c.start, c.end));
     data.stickers.forEach((st) => !skip(st.id) && pts.push(st.start, st.end));
+    data.overlays.forEach((o) => !skip(o.id) && pts.push(o.start, overlayEnd(o)));
     data.audio.forEach((a) => !skip(a.id) && pts.push(a.start, a.start + clipLength(a)));
     return pts;
   };
@@ -104,13 +105,20 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
 
   const lanes = useMemo(() => audioLanes(data.audio), [data.audio]);
   const laneCount = Math.max(1, ...lanes.map((l) => l.lane + 1));
+  const ovLanes = overlayLaneCount(data.overlays);
+  const OV_ROW = 48;
+  const OV_TOP = 80;
+  const MAIN_TOP = OV_TOP + ovLanes * OV_ROW;
+  // 疊加軌畫面上最上面一列是最高層
+  const ovRowTop = (lane: number) => OV_TOP + (ovLanes - 1 - lane) * OV_ROW;
 
   /** 每個項目在軌道區內的位置（框選判斷用）：字幕 0–40、貼紙 40–80、主軌 80–148、音訊從 148 開始 */
   const itemBoxes = () => [
     ...data.captions.map((c) => ({ item: { type: 'caption', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: 5, y1: 35 })),
     ...data.stickers.map((st) => ({ item: { type: 'sticker', id: st.id } as SelItem, x0: x(st.start), x1: x(st.end), y0: 45, y1: 75 })),
-    ...placed.map((c) => ({ item: { type: 'clip', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: 86, y1: 142 })),
-    ...lanes.map(({ clip: a, lane }) => ({ item: { type: 'audio', id: a.id } as SelItem, x0: x(a.start), x1: x(a.start + clipLength(a)), y0: 152 + lane * 40, y1: 186 + lane * 40 })),
+    ...data.overlays.map((o) => ({ item: { type: 'overlay', id: o.id } as SelItem, x0: x(o.start), x1: x(overlayEnd(o)), y0: ovRowTop(o.lane) + 5, y1: ovRowTop(o.lane) + 43 })),
+    ...placed.map((c) => ({ item: { type: 'clip', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: MAIN_TOP + 6, y1: MAIN_TOP + 62 })),
+    ...lanes.map(({ clip: a, lane }) => ({ item: { type: 'audio', id: a.id } as SelItem, x0: x(a.start), x1: x(a.start + clipLength(a)), y0: MAIN_TOP + 72 + lane * 40, y1: MAIN_TOP + 106 + lane * 40 })),
   ];
 
   // 在空白處拖曳＝框選（按住 Shift／⌘ 可以加選）；單純點一下＝移動播放頭並取消選取
@@ -179,13 +187,15 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
     const ids = new Set(group.map((g) => g.id));
     const caps = new Map(data.captions.filter((c) => ids.has(c.id)).map((c) => [c.id, c]));
     const stks = new Map(data.stickers.filter((st) => ids.has(st.id)).map((st) => [st.id, st]));
+    const ovs = new Map(data.overlays.filter((o) => ids.has(o.id)).map((o) => [o.id, o]));
     const auds = new Map(data.audio.filter((a) => ids.has(a.id)).map((a) => [a.id, a]));
     const minStart = Math.min(
       ...[...caps.values()].map((c) => c.start),
       ...[...stks.values()].map((st) => st.start),
+      ...[...ovs.values()].map((o) => o.start),
       ...[...auds.values()].map((a) => a.start),
     );
-    const anchorStart = (caps.get(anchor.id) ?? stks.get(anchor.id) ?? auds.get(anchor.id))!.start;
+    const anchorStart = (caps.get(anchor.id) ?? stks.get(anchor.id) ?? ovs.get(anchor.id) ?? auds.get(anchor.id))!.start;
     const pts = snapPoints(ids);
     drag(
       e,
@@ -197,6 +207,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
           ...d,
           captions: d.captions.map((c) => (caps.has(c.id) ? { ...c, start: caps.get(c.id)!.start + delta, end: caps.get(c.id)!.end + delta } : c)),
           stickers: d.stickers.map((st) => (stks.has(st.id) ? { ...st, start: stks.get(st.id)!.start + delta, end: stks.get(st.id)!.end + delta } : st)),
+          overlays: d.overlays.map((o) => (ovs.has(o.id) ? { ...o, start: ovs.get(o.id)!.start + delta } : o)),
           audio: d.audio.map((a) => (auds.has(a.id) ? { ...a, start: auds.get(a.id)!.start + delta } : a)),
         }));
       },
@@ -240,6 +251,70 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
         }),
       })),
     );
+  };
+
+  // ---------- 疊加軌 ----------
+  const startOverlay = (e: RPointerEvent, id: string, mode: 'move' | 'left' | 'right') => {
+    if (!press(e, { type: 'overlay', id }, mode)) return;
+    const orig = data.overlays.find((o) => o.id === id)!;
+    const m = media.get(orig.mediaId);
+    const isImage = m?.kind === 'image';
+    const max = isImage ? 600 : (m?.duration ?? orig.out);
+    const len = clipLength(orig);
+    const pts = snapPoints(id);
+    if (mode !== 'move') {
+      drag(e, (dt) =>
+        live((d) => ({
+          ...d,
+          overlays: d.overlays.map((o) => {
+            if (o.id !== id) return o;
+            if (mode === 'left') {
+              const startT = snap(orig.start + dt, pts);
+              const inPt = isImage
+                ? orig.in
+                : Math.max(0, Math.min(orig.out - MIN_CLIP * orig.speed, orig.in + (startT - orig.start) * orig.speed));
+              const start = isImage ? Math.min(orig.start + len - MIN_CLIP, Math.max(0, startT)) : orig.start + (inPt - orig.in) / orig.speed;
+              return { ...o, in: inPt, start, out: isImage ? orig.out - (start - orig.start) : o.out };
+            }
+            const endT = snap(orig.start + len + dt, pts);
+            return { ...o, out: Math.min(max, Math.max(orig.in + MIN_CLIP * orig.speed, orig.in + (endT - orig.start) * orig.speed)) };
+          }),
+        })),
+      );
+      return;
+    }
+    // 移動：同時追蹤水平（時間）與垂直（層級）
+    e.stopPropagation();
+    e.preventDefault();
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
+      if (!moved) {
+        useEditor.getState().checkpoint();
+        moved = true;
+      }
+      let start = Math.max(0, orig.start + (ev.clientX - x0) / zoom);
+      const s1 = snap(start, pts);
+      const s2 = snap(start + len, pts) - len;
+      start = Math.max(0, s1 !== start ? s1 : s2 !== start ? s2 : start);
+      // 往上拖＝升一層，可以拖到最上面新開一層
+      const lane = Math.max(0, Math.min(ovLanes, orig.lane - Math.round((ev.clientY - y0) / OV_ROW)));
+      live((d) => ({ ...d, overlays: d.overlays.map((o) => (o.id === id ? { ...o, start, lane } : o)) }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      // 放開時：撞到同層的片段就插入新的一層，並收掉中間變空的層
+      if (moved)
+        useEditor.getState().live((d) => {
+          const cur = d.overlays.find((o) => o.id === id);
+          return { ...d, overlays: cur ? placeOverlayLane(d.overlays, id, cur.lane, orig.lane) : compactLanes(d.overlays) };
+        });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   };
 
   // ---------- 音訊 ----------
@@ -335,6 +410,9 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
         <div className="w-[76px] shrink-0 border-r border-line bg-canvas pt-7 text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
           <TrackLabel track="caption" locked={locked('caption')} icon={<Type className="size-3.5" />} label="字幕" h="h-10" />
           <TrackLabel track="sticker" locked={locked('sticker')} icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
+          {Array.from({ length: ovLanes }, (_, i) => ovLanes - i).map((n) => (
+            <TrackLabel key={n} track="overlay" locked={locked('overlay')} icon={<Layers className="size-3.5" />} label={`疊加${ovLanes > 1 ? n : ''}`} h="h-12" />
+          ))}
           <TrackLabel track="main" locked={locked('main')} icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" />
           <TrackLabel track="audio" locked={locked('audio')} icon={<AudioLines className="size-3.5" />} label="音訊" h="" style={{ height: laneCount * 40 + 8 }} />
         </div>
@@ -374,6 +452,38 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
                     >
                       {def && <img src={stickerUrl(def)} alt="" className="mr-1 size-5 shrink-0" draggable={false} />}
                       <span className="truncate text-[11px] font-bold text-[#8a6100]">{def?.name ?? '貼紙'}</span>
+                    </Block>
+                  );
+                })}
+              </div>
+              {/* 疊加軌：最上面一列是最高層 */}
+              <div className={`relative border-b border-line/60 ${lockedRow('overlay')}`} style={{ height: ovLanes * OV_ROW }}>
+                {data.overlays.length === 0 && (
+                  <div className="absolute inset-y-1.5 left-4 grid w-80 place-items-center rounded-xl border-2 border-dashed border-line text-xs font-semibold text-ink-mute">
+                    在素材按「疊加」，影片就會疊在主軌上方
+                  </div>
+                )}
+                {Array.from({ length: ovLanes - 1 }, (_, i) => (
+                  <div key={i} className="pointer-events-none absolute inset-x-0 border-b border-dashed border-line/60" style={{ top: (i + 1) * OV_ROW }} />
+                ))}
+                {data.overlays.map((o) => {
+                  const m = media.get(o.mediaId);
+                  return (
+                    <Block
+                      key={o.id}
+                      left={x(o.start)}
+                      width={clipLength(o) * zoom}
+                      top={ovRowTop(o.lane) - OV_TOP + 5}
+                      height={38}
+                      selected={selIds.has(o.id)}
+                      className="border-track-overlay-edge bg-track-overlay"
+                      style={m?.thumb ? { backgroundImage: `url(${m.thumb})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' } : undefined}
+                      onDown={(e, mode) => startOverlay(e, o.id, mode)}
+                    >
+                      <span className="truncate rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-ink">
+                        {o.speed !== 1 && `${o.speed}x · `}
+                        {formatTime(clipLength(o))} {m?.name}
+                      </span>
                     </Block>
                   );
                 })}

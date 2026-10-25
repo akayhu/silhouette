@@ -1,0 +1,136 @@
+import { useMemo, useRef, useState } from 'react';
+import { Film, ImageIcon, Loader2, Music, Plus, Trash2, UploadCloud } from 'lucide-react';
+import { api } from '../../lib/api';
+import { formatTime, uid } from '../../lib/format';
+import { kindOf, probe, videoPoster } from '../../lib/media';
+import type { MediaItem } from '../../lib/types';
+import { useToast } from '../../components/ui';
+import { useEditor } from '../store';
+
+export function addToTimeline(m: MediaItem) {
+  const { commit, time } = useEditor.getState();
+  if (m.kind === 'audio') {
+    commit((d) => ({ ...d, audio: [...d.audio, { id: uid(), mediaId: m.id, start: time, in: 0, out: m.duration, volume: 1 }] }));
+  } else {
+    commit((d) => ({ ...d, clips: [...d.clips, { id: uid(), mediaId: m.id, in: 0, out: m.duration, speed: 1, volume: 1 }] }));
+  }
+}
+
+export function MediaPanel() {
+  const projectId = useEditor((s) => s.projectId)!;
+  const media = useEditor((s) => s.data.media);
+  const clips = useEditor((s) => s.data.clips);
+  const audio = useEditor((s) => s.data.audio);
+  const used = useMemo(() => new Set([...clips.map((c) => c.mediaId), ...audio.map((a) => a.mediaId)]), [clips, audio]);
+  const [uploading, setUploading] = useState<{ name: string }[]>([]);
+  const [over, setOver] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+
+  const upload = async (files: FileList | File[]) => {
+    for (const file of Array.from(files)) {
+      const kind = kindOf(file);
+      if (!kind) {
+        toast(`不支援的檔案：${file.name}`, 'error');
+        continue;
+      }
+      const item = { name: file.name };
+      setUploading((u) => [...u, item]);
+      const local = URL.createObjectURL(file);
+      try {
+        const meta = await probe(local, kind);
+        const thumb = kind === 'video' ? await videoPoster(local) : kind === 'image' ? await imageThumb(local) : undefined;
+        const { url } = await api.upload(projectId, file, file.name);
+        const m: MediaItem = { id: uid(), name: file.name.replace(/\.[^.]+$/, ''), kind, url, origin: 'upload', thumb, ...meta };
+        const first = useEditor.getState().data.clips.length === 0 && kind !== 'audio';
+        useEditor.getState().commit((d) => ({ ...d, media: [...d.media, m] }));
+        if (first) addToTimeline(m);
+      } catch (err) {
+        toast((err as Error).message, 'error');
+      } finally {
+        URL.revokeObjectURL(local);
+        setUploading((u) => u.filter((x) => x !== item));
+      }
+    }
+  };
+
+  const removeMedia = (m: MediaItem) => {
+    useEditor.getState().commit((d) => ({
+      ...d,
+      media: d.media.filter((x) => x.id !== m.id),
+      clips: d.clips.filter((c) => c.mediaId !== m.id),
+      audio: d.audio.filter((a) => a.mediaId !== m.id),
+    }));
+  };
+
+  return (
+    <div className="p-4">
+      <h2 className="text-sm font-extrabold">素材庫</h2>
+      <button
+        onClick={() => input.current?.click()}
+        onDragOver={(e) => (e.preventDefault(), setOver(true))}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          upload(e.dataTransfer.files);
+        }}
+        className={`mt-3 flex w-full flex-col items-center rounded-2xl border-2 border-dashed px-4 py-6 text-center transition ${over ? 'border-brand bg-brand-soft/60' : 'border-line hover:border-brand/50 hover:bg-brand-soft/30'}`}
+      >
+        <UploadCloud className="size-7 text-brand" />
+        <span className="mt-2 text-sm font-bold">上傳影片、圖片、音樂</span>
+        <span className="mt-0.5 text-xs text-ink-mute">點一下或把檔案拖進來</span>
+      </button>
+      <input ref={input} type="file" multiple accept="video/*,image/*,audio/*" className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
+
+      <div className="mt-4 space-y-2">
+        {uploading.map((u) => (
+          <div key={u.name} className="flex items-center gap-3 rounded-xl bg-sunken/70 p-2 text-xs font-semibold text-ink-soft">
+            <Loader2 className="size-4 animate-spin" /> 上傳中：<span className="truncate">{u.name}</span>
+          </div>
+        ))}
+        {media.length === 0 && uploading.length === 0 && <p className="py-6 text-center text-xs text-ink-mute">還沒有素材</p>}
+        {media.map((m) => (
+          <div key={m.id} className="group flex items-center gap-3 rounded-xl border border-line bg-surface p-1.5 transition hover:border-brand/40 hover:shadow-card">
+            <div className="relative grid h-12 w-16 shrink-0 place-items-center overflow-hidden rounded-lg bg-sunken">
+              {m.thumb ? <img src={m.thumb} alt="" className="h-full w-full object-cover" /> : m.kind === 'audio' ? <Music className="size-5 text-mint" /> : <Film className="size-5 text-ink-mute" />}
+              <span className="absolute right-0.5 bottom-0.5 rounded bg-white/90 px-1 text-[9px] font-bold text-ink">{formatTime(m.duration)}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-bold">{m.name}</div>
+              <div className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-mute">
+                {m.kind === 'video' ? <Film className="size-3" /> : m.kind === 'image' ? <ImageIcon className="size-3" /> : <Music className="size-3" />}
+                {m.origin === 'tts' ? '朗讀配音' : m.origin === 'library' ? '音樂庫' : m.kind === 'video' ? '影片' : m.kind === 'image' ? '圖片' : '音訊'}
+                {used.has(m.id) && <span className="ml-1 rounded bg-mint-soft px-1 font-bold text-mint">使用中</span>}
+              </div>
+            </div>
+            <button onClick={() => removeMedia(m)} className="rounded-lg p-1.5 text-ink-mute opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600" aria-label="移除素材">
+              <Trash2 className="size-3.5" />
+            </button>
+            <button onClick={() => addToTimeline(m)} className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-white hover:bg-brand-hover" aria-label="加到時間軸">
+              <Plus className="size-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-[11px] leading-relaxed text-ink-mute">影片和圖片會接在主軌最後面，音樂會從播放頭位置放進音訊軌。</p>
+    </div>
+  );
+}
+
+function imageThumb(src: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      const scale = 240 / Math.max(img.naturalWidth, img.naturalHeight);
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = () => resolve('');
+    img.src = src;
+  });
+}
+

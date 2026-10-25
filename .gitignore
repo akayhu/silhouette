@@ -1,0 +1,24 @@
+# 套件：用 npm install 重新安裝
+node_modules/
+
+# 建置輸出與快取
+dist/
+.vite/
+
+# 使用者資料：資料庫（含密碼雜湊）與上傳的檔案，絕對不能上傳
+server/data/
+
+# AI 語音的 Python 環境與模型（約 4 GB），用 scripts/setup-ai-voice.sh 重新安裝
+tts/.venv/
+tts/models/
+tts/BreezyVoice/
+tts/**/__pycache__/
+
+# 環境變數（之後串金流的金鑰會放這裡）
+.env
+.env.*
+!.env.example
+
+# 系統與編輯器產生的檔案
+.DS_Store
+*.log

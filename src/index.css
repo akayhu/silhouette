@@ -1,0 +1,98 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, sans-serif;
+
+  --color-canvas: #faf8f4;
+  --color-surface: #ffffff;
+  --color-sunken: #f2f0ea;
+  --color-line: #e7e3da;
+  --color-ink: #1f1d2b;
+  --color-ink-soft: #5d5a6b;
+  --color-ink-mute: #918d9e;
+
+  --color-brand: #5b4cf5;
+  --color-brand-hover: #4b3be6;
+  --color-brand-soft: #ecebff;
+  --color-coral: #ff7a59;
+  --color-coral-soft: #fff0eb;
+  --color-mint: #19b38a;
+  --color-mint-soft: #e3f7f0;
+  --color-sun: #ffc94a;
+
+  --color-track-video: #dcd8ff;
+  --color-track-video-edge: #7a6df7;
+  --color-track-caption: #ffe1d6;
+  --color-track-caption-edge: #ff7a59;
+  --color-track-audio: #d3f3e8;
+  --color-track-audio-edge: #19b38a;
+
+  --shadow-card: 0 1px 2px rgb(31 29 43 / 0.04), 0 8px 24px -12px rgb(31 29 43 / 0.12);
+  --shadow-pop: 0 12px 40px -12px rgb(31 29 43 / 0.25);
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-brand-soft);
+}
+
+input[type='range'] {
+  accent-color: var(--color-brand);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up {
+    animation: none;
+  }
+}
+
+/* 轉場預覽小動畫：滑過或選中時播放 */
+.tr-tile .tr-b,
+.tr-tile .tr-flash {
+  animation-duration: 1.6s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-play-state: paused;
+}
+.tr-tile:hover .tr-b,
+.tr-tile:hover .tr-flash,
+.tr-tile[data-active='true'] .tr-b,
+.tr-tile[data-active='true'] .tr-flash {
+  animation-play-state: running;
+}
+@keyframes tr-fade { 0%, 15% { opacity: 0 } 70%, 100% { opacity: 1 } }
+@keyframes tr-swap { 0%, 49% { opacity: 0 } 50%, 100% { opacity: 1 } }
+@keyframes tr-flash { 0%, 15% { opacity: 0 } 50% { opacity: 1 } 85%, 100% { opacity: 0 } }
+@keyframes tr-slide-left { 0%, 15% { transform: translateX(100%) } 70%, 100% { transform: none } }
+@keyframes tr-slide-right { 0%, 15% { transform: translateX(-100%) } 70%, 100% { transform: none } }
+@keyframes tr-slide-up { 0%, 15% { transform: translateY(100%) } 70%, 100% { transform: none } }
+@keyframes tr-zoom { 0%, 15% { transform: scale(0.6); opacity: 0 } 70%, 100% { transform: none; opacity: 1 } }
+@keyframes tr-blur { 0%, 15% { filter: blur(6px); opacity: 0 } 70%, 100% { filter: none; opacity: 1 } }
+@keyframes tr-wipe { 0%, 15% { clip-path: inset(0 100% 0 0) } 70%, 100% { clip-path: inset(0 0 0 0) } }
+@keyframes tr-circle { 0%, 15% { clip-path: circle(0% at 50% 50%) } 70%, 100% { clip-path: circle(75% at 50% 50%) } }

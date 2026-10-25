@@ -1,0 +1,10 @@
+[
+  {
+    "id": "breezy-xiaohan",
+    "name": "曉涵",
+    "desc": "台灣腔女聲・沉穩知性",
+    "gender": "female",
+    "audio": "voices/xiaohan.wav",
+    "text": "在密碼學中，加密是將明文資訊改變為難以讀取的密文內容，使之不可讀的方法。"
+  }
+]

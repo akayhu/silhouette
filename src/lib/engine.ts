@@ -1,4 +1,6 @@
-import type { Caption, ClipTransform, MediaItem, ProjectData, TransitionType } from './types';
+import type { Caption, ClipTransform, MediaItem, ProjectData, StickerItem, TransitionType } from './types';
+import { stickerImage } from './stickers';
+import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
 import { activeClips, clipLength, layoutMain, totalDuration, transformOf, type PlacedClip } from './timeline';
 
@@ -259,6 +261,20 @@ export class Engine {
       composite(ctx, la, lb, active[1].transition?.type ?? 'fade', transitionProgress(active, this.time), W, H);
     }
 
+    // 貼紙在影像之上、字幕之下
+    for (const st of this.data.stickers ?? []) {
+      if (this.time < st.start || this.time >= st.end) continue;
+      const img = stickerImage(st.stickerId, () => !this.playing && this.render());
+      if (!img) continue;
+      const pose = stickerPose(st, this.time, W, H, this.playing);
+      ctx.save();
+      ctx.globalAlpha = st.opacity * pose.alpha;
+      ctx.translate(pose.cx, pose.cy);
+      ctx.rotate((pose.rotation * Math.PI) / 180);
+      ctx.drawImage(img, -pose.size / 2, -pose.size / 2, pose.size, pose.size);
+      ctx.restore();
+    }
+
     for (const c of this.data.captions) {
       if (this.time >= c.start && this.time < c.end) drawCaption(ctx, c, this.time, W, H, this.playing);
     }
@@ -277,15 +293,20 @@ export class Engine {
     if (regions?.length && !this.bypassErase) {
       el = applyErase(source.el, Math.max(2, Math.round(Math.min(sw, dw))), Math.max(2, Math.round(Math.min(sh, dh))), regions);
     }
+    // 濾鏡：CSS 濾鏡處理亮度／對比／飽和等，其餘用疊加層
+    const fp = resolveFilter(clip.filter);
+    const css = filterCss(fp);
     // 背景：同一畫面放大模糊，避免黑邊
     const cover = Math.max(W / sw, H / sh);
     ctx.save();
-    ctx.filter = `blur(${Math.round(W / 24)}px) brightness(0.9)`;
+    ctx.filter = `blur(${Math.round(W / 24)}px) brightness(0.9) ${css}`;
     ctx.drawImage(el, (W - sw * cover) / 2 - 20, (H - sh * cover) / 2 - 20, sw * cover + 40, sh * cover + 40);
-    ctx.filter = 'none';
+    ctx.filter = css || 'none';
     ctx.translate(cx, cy);
     ctx.rotate((tf.rotation * Math.PI) / 180);
     ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+    ctx.filter = 'none';
+    drawFilterOverlays(ctx, -dw / 2, -dh / 2, dw, dh, fp, this.time);
     ctx.restore();
   }
 
@@ -307,6 +328,47 @@ export class Engine {
     this.audios.clear();
     this.audioCtx.close().catch(() => {});
   }
+}
+
+/**
+ * 貼紙在某個時間點的位置、大小、角度。
+ * 「彈出」是進場動畫，暫停編輯時直接顯示完整大小；其他動畫是持續的，暫停時也照時間顯示。
+ */
+export function stickerPose(s: StickerItem, t: number, W: number, H: number, animateEntrance = true) {
+  const local = Math.max(0, t - s.start);
+  let size = Math.min(W, H) * 0.3 * s.scale;
+  let cx = s.x * W;
+  let cy = s.y * H;
+  let rotation = s.rotation;
+  let alpha = 1;
+  const wave = (hz: number) => Math.sin(local * Math.PI * 2 * hz);
+  switch (s.animation) {
+    case 'pop': {
+      if (!animateEntrance) break;
+      const p = Math.min(1, local / 0.35);
+      const back = 1 + 2.70158 * Math.pow(p - 1, 3) + 1.70158 * Math.pow(p - 1, 2);
+      size *= Math.max(0, back);
+      alpha = Math.min(1, p * 2);
+      break;
+    }
+    case 'bounce':
+      cy -= Math.abs(wave(1)) * size * 0.14;
+      break;
+    case 'wobble':
+      rotation += wave(1.5) * 10;
+      break;
+    case 'pulse':
+      size *= 1 + 0.08 * wave(1.2);
+      break;
+    case 'spin':
+      rotation += local * 120;
+      break;
+    case 'float':
+      cy += wave(0.5) * size * 0.06;
+      cx += Math.cos(local * Math.PI) * size * 0.03;
+      break;
+  }
+  return { cx, cy, size, rotation, alpha };
 }
 
 const slotKey = (c: PlacedClip) => `${c.mediaId}#${c.index % 2}`;

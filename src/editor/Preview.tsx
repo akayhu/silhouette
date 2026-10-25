@@ -3,6 +3,7 @@ import { Loader2, Maximize2, Pause, Play, SkipBack } from 'lucide-react';
 import { formatTime } from '../lib/format';
 import { clipAt, layoutMain, transformOf } from '../lib/timeline';
 import { EraseOverlay } from './EraseOverlay';
+import { stickerPose } from '../lib/engine';
 import { useEditor } from './store';
 
 export function Preview({
@@ -33,9 +34,46 @@ export function Preview({
     return () => ro.disconnect();
   }, []);
 
+  // 點到貼紙就選取並拖曳它（最上層的優先）；回傳 false 代表沒點到貼紙
+  const dragSticker = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const st = useEditor.getState();
+    const px = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const py = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const hit = [...st.data.stickers].reverse().find((s) => {
+      if (st.time < s.start || st.time >= s.end) return false;
+      const pose = stickerPose(s, st.time, canvas.width, canvas.height, false);
+      return Math.abs(px - pose.cx) < pose.size / 2 && Math.abs(py - pose.cy) < pose.size / 2;
+    });
+    if (!hit) return false;
+    st.select({ type: 'sticker', id: hit.id });
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
+      if (!moved) {
+        st.checkpoint();
+        moved = true;
+      }
+      const x = Math.min(1, Math.max(0, hit.x + (ev.clientX - x0) / rect.width));
+      const y = Math.min(1, Math.max(0, hit.y + (ev.clientY - y0) / rect.height));
+      useEditor.getState().live((d) => ({ ...d, stickers: d.stickers.map((s) => (s.id === hit.id ? { ...s, x, y } : s)) }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return true;
+  };
+
   // 在預覽上拖曳：移動播放頭所在片段的畫面位置；沒有移動就當作點擊播放／暫停
   const dragFrame = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
+    if (dragSticker(e)) return;
     const st = useEditor.getState();
     const clip = clipAt(layoutMain(st.data.clips), st.time);
     const rect = e.currentTarget.getBoundingClientRect();

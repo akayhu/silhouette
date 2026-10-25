@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { AudioLines, Film, Scissors, Trash2, Type, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import { AudioLines, Film, Scissors, Smile, Trash2, Type, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
 import { clipLength, layoutMain, MIN_CLIP, moveMainClip } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { AudioClip, Caption } from '../lib/types';
+import { stickerDef, stickerUrl } from '../lib/stickers';
 import { useEditor, type SelItem } from './store';
 import { IconBtn } from './Editor';
 
@@ -63,6 +64,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
     const pts = [0, time];
     placed.forEach((c) => pts.push(c.start, c.end));
     data.captions.forEach((c) => !skip(c.id) && pts.push(c.start, c.end));
+    data.stickers.forEach((st) => !skip(st.id) && pts.push(st.start, st.end));
     data.audio.forEach((a) => !skip(a.id) && pts.push(a.start, a.start + clipLength(a)));
     return pts;
   };
@@ -98,11 +100,12 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
   const lanes = useMemo(() => audioLanes(data.audio), [data.audio]);
   const laneCount = Math.max(1, ...lanes.map((l) => l.lane + 1));
 
-  /** 每個項目在軌道區內的位置（框選判斷用）：字幕列 0–40、主軌 40–108、音訊從 108 開始 */
+  /** 每個項目在軌道區內的位置（框選判斷用）：字幕 0–40、貼紙 40–80、主軌 80–148、音訊從 148 開始 */
   const itemBoxes = () => [
     ...data.captions.map((c) => ({ item: { type: 'caption', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: 5, y1: 35 })),
-    ...placed.map((c) => ({ item: { type: 'clip', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: 46, y1: 102 })),
-    ...lanes.map(({ clip: a, lane }) => ({ item: { type: 'audio', id: a.id } as SelItem, x0: x(a.start), x1: x(a.start + clipLength(a)), y0: 112 + lane * 40, y1: 146 + lane * 40 })),
+    ...data.stickers.map((st) => ({ item: { type: 'sticker', id: st.id } as SelItem, x0: x(st.start), x1: x(st.end), y0: 45, y1: 75 })),
+    ...placed.map((c) => ({ item: { type: 'clip', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: 86, y1: 142 })),
+    ...lanes.map(({ clip: a, lane }) => ({ item: { type: 'audio', id: a.id } as SelItem, x0: x(a.start), x1: x(a.start + clipLength(a)), y0: 152 + lane * 40, y1: 186 + lane * 40 })),
   ];
 
   // 在空白處拖曳＝框選（按住 Shift／⌘ 可以加選）；單純點一下＝移動播放頭並取消選取
@@ -164,13 +167,18 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
     return true;
   };
 
-  // 整組移動：選取中的字幕與音訊一起平移（主軌是磁吸排列，不跟著移動）
+  // 整組移動：選取中的字幕、貼紙與音訊一起平移（主軌是磁吸排列，不跟著移動）
   const groupMove = (e: RPointerEvent, anchor: SelItem, group: SelItem[]) => {
     const ids = new Set(group.map((g) => g.id));
     const caps = new Map(data.captions.filter((c) => ids.has(c.id)).map((c) => [c.id, c]));
+    const stks = new Map(data.stickers.filter((st) => ids.has(st.id)).map((st) => [st.id, st]));
     const auds = new Map(data.audio.filter((a) => ids.has(a.id)).map((a) => [a.id, a]));
-    const minStart = Math.min(...[...caps.values()].map((c) => c.start), ...[...auds.values()].map((a) => a.start));
-    const anchorStart = anchor.type === 'caption' ? caps.get(anchor.id)!.start : auds.get(anchor.id)!.start;
+    const minStart = Math.min(
+      ...[...caps.values()].map((c) => c.start),
+      ...[...stks.values()].map((st) => st.start),
+      ...[...auds.values()].map((a) => a.start),
+    );
+    const anchorStart = (caps.get(anchor.id) ?? stks.get(anchor.id) ?? auds.get(anchor.id))!.start;
     const pts = snapPoints(ids);
     drag(
       e,
@@ -181,6 +189,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
         live((d) => ({
           ...d,
           captions: d.captions.map((c) => (caps.has(c.id) ? { ...c, start: caps.get(c.id)!.start + delta, end: caps.get(c.id)!.end + delta } : c)),
+          stickers: d.stickers.map((st) => (stks.has(st.id) ? { ...st, start: stks.get(st.id)!.start + delta, end: stks.get(st.id)!.end + delta } : st)),
           audio: d.audio.map((a) => (auds.has(a.id) ? { ...a, start: auds.get(a.id)!.start + delta } : a)),
         }));
       },
@@ -256,16 +265,17 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
     );
   };
 
-  // ---------- 字幕 ----------
-  const startCaption = (e: RPointerEvent, id: string, mode: 'move' | 'left' | 'right') => {
-    if (!press(e, { type: 'caption', id }, mode)) return;
-    const orig = data.captions.find((c) => c.id === id)!;
+  // ---------- 字幕與貼紙（都是有開始、結束時間的區段） ----------
+  const startSpan = (e: RPointerEvent, kind: 'caption' | 'sticker', id: string, mode: 'move' | 'left' | 'right') => {
+    if (!press(e, { type: kind, id }, mode)) return;
+    const key = kind === 'caption' ? 'captions' : 'stickers';
+    const orig = (data[key] as { id: string; start: number; end: number }[]).find((c) => c.id === id)!;
     const len = orig.end - orig.start;
     const pts = snapPoints(id);
     drag(e, (dt) =>
       live((d) => ({
         ...d,
-        captions: d.captions.map((c) => {
+        [key]: (d[key] as { id: string; start: number; end: number }[]).map((c) => {
           if (c.id !== id) return c;
           if (mode === 'move') {
             let start = Math.max(0, orig.start + dt);
@@ -317,6 +327,7 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
       <div className="flex min-h-0 flex-1">
         <div className="w-[76px] shrink-0 border-r border-line bg-canvas pt-7 text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
           <TrackLabel icon={<Type className="size-3.5" />} label="字幕" h="h-10" />
+          <TrackLabel icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
           <TrackLabel icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" />
           <TrackLabel icon={<AudioLines className="size-3.5" />} label="音訊" h="" style={{ height: laneCount * 40 + 8 }} />
         </div>
@@ -336,8 +347,29 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
               {/* 字幕軌 */}
               <div className="relative h-10 border-b border-line/60">
                 {data.captions.map((c) => (
-                  <CaptionBlock key={c.id} c={c} left={x(c.start)} width={(c.end - c.start) * zoom} selected={selIds.has(c.id)} onDown={(e, mode) => startCaption(e, c.id, mode)} />
+                  <CaptionBlock key={c.id} c={c} left={x(c.start)} width={(c.end - c.start) * zoom} selected={selIds.has(c.id)} onDown={(e, mode) => startSpan(e, 'caption', c.id, mode)} />
                 ))}
+              </div>
+              {/* 貼紙軌 */}
+              <div className="relative h-10 border-b border-line/60">
+                {data.stickers.map((st) => {
+                  const def = stickerDef(st.stickerId);
+                  return (
+                    <Block
+                      key={st.id}
+                      left={x(st.start)}
+                      width={(st.end - st.start) * zoom}
+                      top={5}
+                      height={30}
+                      selected={selIds.has(st.id)}
+                      className="border-track-sticker-edge bg-track-sticker"
+                      onDown={(e, mode) => startSpan(e, 'sticker', st.id, mode)}
+                    >
+                      {def && <img src={stickerUrl(def)} alt="" className="mr-1 size-5 shrink-0" draggable={false} />}
+                      <span className="truncate text-[11px] font-bold text-[#8a6100]">{def?.name ?? '貼紙'}</span>
+                    </Block>
+                  );
+                })}
               </div>
               {/* 主軌 */}
               <div className="relative h-[68px] border-b border-line/60 bg-canvas/50">

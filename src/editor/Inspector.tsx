@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { AudioLines, Film, MousePointerClick, RotateCcw, Trash2, Type } from 'lucide-react';
+import { AudioLines, Copy, Film, MousePointerClick, RotateCcw, Smile, Trash2, Type } from 'lucide-react';
+import { stickerDef, stickerUrl } from '../lib/stickers';
+import { uid } from '../lib/format';
 import { aspectSize, clipLength, DEFAULT_TRANSFORM, layoutMain, removeItems, removeMainClip, transformOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
-import type { CaptionAnimation, CaptionStyle, ClipTransform, ProjectData } from '../lib/types';
+import type { CaptionAnimation, CaptionStyle, ClipTransform, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
 import { Button } from '../components/ui';
 import { useEditor } from './store';
 
@@ -118,6 +120,8 @@ export function Inspector() {
       </div>
     );
   }
+
+  if (selection.type === 'sticker') return <StickerInspector id={selection.id} />;
 
   if (selection.type === 'audio') {
     const a = data.audio.find((x) => x.id === selection.id);
@@ -334,6 +338,7 @@ function MultiInspector() {
   const caps = data.captions.filter((c) => ids.has(c.id));
   const auds = data.audio.filter((a) => ids.has(a.id));
   const clips = data.clips.filter((c) => ids.has(c.id));
+  const stks = data.stickers.filter((st) => ids.has(st.id));
 
   const apply = (fn: (d: ProjectData) => ProjectData, record: boolean) => (record ? commit(fn) : live(fn));
   const setCaps = (patch: Partial<CaptionStyle>, record = true) =>
@@ -344,22 +349,26 @@ function MultiInspector() {
     apply((d) => ({ ...d, clips: d.clips.map((c) => (ids.has(c.id) ? { ...c, ...patch } : c)) }), record);
 
   // 把選取的字幕與音訊整組移到播放頭（最早的項目對齊播放頭）
-  const movable = [...caps.map((c) => c.start), ...auds.map((a) => a.start)];
+  const movable = [...caps.map((c) => c.start), ...stks.map((st) => st.start), ...auds.map((a) => a.start)];
   const earliest = movable.length ? Math.min(...movable) : 0;
   const moveToPlayhead = () => {
     const delta = time - earliest;
     commit((d) => ({
       ...d,
       captions: d.captions.map((c) => (ids.has(c.id) ? { ...c, start: c.start + delta, end: c.end + delta } : c)),
+      stickers: d.stickers.map((st) => (ids.has(st.id) ? { ...st, start: st.start + delta, end: st.end + delta } : st)),
       audio: d.audio.map((a) => (ids.has(a.id) ? { ...a, start: a.start + delta } : a)),
     }));
   };
+  const setStks = (patch: Partial<StickerItem>, record = true) =>
+    apply((d) => ({ ...d, stickers: d.stickers.map((st) => (ids.has(st.id) ? { ...st, ...patch } : st)) }), record);
 
   const s0 = caps[0]?.style;
   const maxFade = auds.length ? Math.min(5, ...auds.map((a) => clipLength(a) / 2)) : 5;
   const counts = [
     { n: clips.length, label: '影片', icon: Film, cls: 'bg-track-video text-[#4b3be6]' },
     { n: caps.length, label: '字幕', icon: Type, cls: 'bg-track-caption text-[#b2432a]' },
+    { n: stks.length, label: '貼紙', icon: Smile, cls: 'bg-track-sticker text-[#8a6100]' },
     { n: auds.length, label: '音訊', icon: AudioLines, cls: 'bg-track-audio text-[#0d6b52]' },
   ].filter((c) => c.n);
 
@@ -409,6 +418,19 @@ function MultiInspector() {
         </>
       )}
 
+      {stks.length > 0 && (
+        <Section title={`貼紙（${stks.length} 個）`}>
+          <div className="space-y-3">
+            <Slider label="大小" value={Math.round(stks[0].scale * 100)} min={20} max={300} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => setStks({ scale: v / 100 }, false)} />
+            <Slider label="透明度" value={Math.round(stks[0].opacity * 100)} min={10} max={100} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => setStks({ opacity: v / 100 }, false)} />
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-ink-soft">動畫</div>
+              <Chips options={STICKER_ANIMS} value={stks[0].animation} onChange={(animation) => setStks({ animation })} />
+            </div>
+          </div>
+        </Section>
+      )}
+
       {auds.length > 0 && (
         <Section title={`音訊（${auds.length} 段）`}>
           <div className="space-y-3">
@@ -434,6 +456,69 @@ function MultiInspector() {
       <div className="p-4">
         <Button variant="danger" className="w-full" onClick={() => (commit((d) => removeItems(d, selected)), select(null))}>
           <Trash2 className="size-4" /> 刪除這 {selected.length} 個項目
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export const STICKER_ANIMS: { id: StickerAnimation; label: string }[] = [
+  { id: 'none', label: '無' },
+  { id: 'pop', label: '彈出' },
+  { id: 'bounce', label: '跳動' },
+  { id: 'wobble', label: '搖擺' },
+  { id: 'pulse', label: '呼吸' },
+  { id: 'spin', label: '旋轉' },
+  { id: 'float', label: '漂浮' },
+];
+
+function StickerInspector({ id }: { id: string }) {
+  const st = useEditor((s) => s.data.stickers.find((x) => x.id === id));
+  const { commit, live, checkpoint, select } = useEditor.getState();
+  if (!st) return null;
+  const def = stickerDef(st.stickerId);
+  const set = (patch: Partial<StickerItem>, record = false) => {
+    const fn = (d: ProjectData) => ({ ...d, stickers: d.stickers.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
+    record ? commit(fn) : live(fn);
+  };
+  const duplicate = () => {
+    const copy = { ...st, id: uid(), x: Math.min(0.9, st.x + 0.08), y: Math.min(0.9, st.y + 0.08) };
+    commit((d) => ({ ...d, stickers: [...d.stickers, copy] }));
+    select({ type: 'sticker', id: copy.id });
+  };
+  return (
+    <div>
+      <Section title="貼紙" aside={<span className="text-[11px] text-ink-mute">{formatTime(st.start, true)} – {formatTime(st.end, true)}</span>}>
+        <div className="flex items-center gap-3">
+          {def && <img src={stickerUrl(def)} alt="" className="size-14 rounded-xl bg-sunken p-1.5" />}
+          <div>
+            <div className="text-sm font-bold">{def?.name ?? '貼紙'}</div>
+            <div className="text-[11px] text-ink-mute">在右側預覽畫面可以直接拖曳位置</div>
+          </div>
+        </div>
+      </Section>
+      <Section title="外觀">
+        <div className="space-y-3">
+          <Slider label="大小" value={Math.round(st.scale * 100)} min={20} max={300} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => set({ scale: v / 100 })} />
+          <Slider label="旋轉" value={st.rotation} min={-180} max={180} format={(v) => `${v}°`} onStart={checkpoint} onChange={(v) => set({ rotation: v })} />
+          <Slider label="透明度" value={Math.round(st.opacity * 100)} min={10} max={100} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => set({ opacity: v / 100 })} />
+        </div>
+      </Section>
+      <Section title="位置" aside={<button className="text-[11px] font-bold text-ink-soft hover:text-brand" onClick={() => set({ x: 0.5, y: 0.5 }, true)}>置中</button>}>
+        <div className="space-y-3">
+          <Slider label="水平" value={Math.round(st.x * 100)} min={0} max={100} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => set({ x: v / 100 })} />
+          <Slider label="垂直" value={Math.round(st.y * 100)} min={0} max={100} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => set({ y: v / 100 })} />
+        </div>
+      </Section>
+      <Section title="動畫">
+        <Chips options={STICKER_ANIMS} value={st.animation} onChange={(animation) => set({ animation }, true)} />
+      </Section>
+      <div className="grid grid-cols-2 gap-2 p-4">
+        <Button variant="secondary" onClick={duplicate}>
+          <Copy className="size-4" /> 複製一個
+        </Button>
+        <Button variant="danger" onClick={() => (commit((d) => ({ ...d, stickers: d.stickers.filter((x) => x.id !== id) })), select(null))}>
+          <Trash2 className="size-4" /> 刪除
         </Button>
       </div>
     </div>

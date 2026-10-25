@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Check, CloudOff, Download, Eraser, Film, Loader2, Music, Redo2, Sparkles, Type, Undo2 } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Check, CloudOff, Download, Eraser, Film, Loader2, Music, Palette, Redo2, Smile, Sparkles, Type, Undo2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
-import { aspectSize, splitAudioAt, splitCaptionAt, splitMainAt, removeItems } from '../lib/timeline';
+import { aspectSize, splitAudioAt, splitCaptionAt, splitMainAt, splitStickerAt, removeItems } from '../lib/timeline';
 import type { Aspect } from '../lib/types';
 import { Button, Logo } from '../components/ui';
 import { useEditor } from './store';
@@ -18,6 +18,8 @@ import { VoicePanel } from './panels/VoicePanel';
 import { AIPanel } from './panels/AIPanel';
 import { ErasePanel } from './panels/ErasePanel';
 import { TransitionPanel } from './panels/TransitionPanel';
+import { StickerPanel } from './panels/StickerPanel';
+import { FilterPanel } from './panels/FilterPanel';
 import { ExportDialog } from './ExportDialog';
 
 const PREVIEW_SHORT_SIDE = 540;
@@ -26,6 +28,8 @@ const tabs = [
   { id: 'media', label: '素材', icon: Film },
   { id: 'music', label: '音樂', icon: Music },
   { id: 'text', label: '字幕', icon: Type },
+  { id: 'sticker', label: '貼紙', icon: Smile },
+  { id: 'filter', label: '濾鏡', icon: Palette },
   { id: 'transition', label: '轉場', icon: ArrowRightLeft },
   { id: 'voice', label: '朗讀', icon: AudioLines },
   { id: 'ai', label: 'AI 工具', icon: Sparkles },
@@ -125,6 +129,7 @@ export default function Editor() {
     const { selection, time, commit } = useEditor.getState();
     if (selection?.type === 'audio') commit((d) => splitAudioAt(d, selection.id, time));
     else if (selection?.type === 'caption') commit((d) => splitCaptionAt(d, selection.id, time));
+    else if (selection?.type === 'sticker') commit((d) => splitStickerAt(d, selection.id, time));
     else commit((d) => splitMainAt(d, time));
   }, []);
 
@@ -139,6 +144,7 @@ export default function Editor() {
     const { data, setSelected } = useEditor.getState();
     setSelected([
       ...data.captions.map((c) => ({ type: 'caption' as const, id: c.id })),
+      ...data.stickers.map((st) => ({ type: 'sticker' as const, id: st.id })),
       ...data.clips.map((c) => ({ type: 'clip' as const, id: c.id })),
       ...data.audio.map((a) => ({ type: 'audio' as const, id: a.id })),
     ]);
@@ -252,7 +258,9 @@ export default function Editor() {
                 {tab === 'music' && <MusicPanel />}
                 {tab === 'text' && <TextPanel seek={seek} />}
                 {tab === 'voice' && <VoicePanel />}
-                {tab === 'transition' && <TransitionPanel />}
+                {tab === 'sticker' && <StickerPanel />}
+            {tab === 'filter' && <FilterPanel />}
+            {tab === 'transition' && <TransitionPanel />}
             {tab === 'ai' && <AIPanel />}
                 {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}
               </div>

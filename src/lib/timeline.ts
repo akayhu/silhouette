@@ -43,11 +43,12 @@ export function activeClips(placed: PlacedClip[], t: number) {
   return placed.filter((c) => t >= c.start && t < c.end).slice(0, 2);
 }
 
-export function totalDuration(d: Pick<ProjectData, 'clips' | 'audio' | 'captions'>) {
+export function totalDuration(d: Pick<ProjectData, 'clips' | 'audio' | 'captions'> & { stickers?: ProjectData['stickers'] }) {
   return Math.max(
     mainDuration(d.clips),
     ...d.audio.map((a) => a.start + clipLength(a)),
     ...d.captions.map((c) => c.end),
+    ...(d.stickers ?? []).map((s) => s.end),
     0,
   );
 }
@@ -120,6 +121,7 @@ const strip = (p: PlacedClip): VideoClip => ({
   volume: p.volume,
   transform: p.transform,
   transition: p.transition,
+  filter: p.filter,
 });
 
 type Range = [number, number];
@@ -182,8 +184,11 @@ export function rippleRemove(d: ProjectData, input: Range[]): ProjectData {
     .map((c) => ({ ...c, start: remap(c.start, ranges), end: remap(c.end, ranges) }))
     .filter((c) => c.end - c.start >= 0.05);
   const audio = d.audio.map((a) => ({ ...a, start: remap(a.start, ranges) }));
+  const stickers = (d.stickers ?? [])
+    .map((s) => ({ ...s, start: remap(s.start, ranges), end: remap(s.end, ranges) }))
+    .filter((s) => s.end - s.start >= 0.05);
 
-  return { ...d, clips, captions, audio };
+  return { ...d, clips, captions, audio, stickers };
 }
 
 export function removeMainClip(d: ProjectData, id: string): ProjectData {
@@ -200,11 +205,22 @@ export function moveMainClip(d: ProjectData, from: number, to: number): ProjectD
 }
 
 /** 一次刪除多個項目：音訊與字幕直接移除，主軌片段用波紋刪除讓後面的內容補上 */
-export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption'; id: string }[]): ProjectData {
+export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption' | 'sticker'; id: string }[]): ProjectData {
   const ids = new Set(items.map((i) => i.id));
   const ranges = layoutMain(d.clips)
     .filter((c) => ids.has(c.id))
     .map((c): [number, number] => [c.start, c.end]);
-  const rest = { ...d, audio: d.audio.filter((a) => !ids.has(a.id)), captions: d.captions.filter((c) => !ids.has(c.id)) };
+  const rest = {
+    ...d,
+    audio: d.audio.filter((a) => !ids.has(a.id)),
+    captions: d.captions.filter((c) => !ids.has(c.id)),
+    stickers: (d.stickers ?? []).filter((s) => !ids.has(s.id)),
+  };
   return rippleRemove(rest, ranges);
+}
+
+export function splitStickerAt(d: ProjectData, id: string, t: number): ProjectData {
+  const s = d.stickers.find((x) => x.id === id);
+  if (!s || t - s.start < MIN_CLIP || s.end - t < MIN_CLIP) return d;
+  return { ...d, stickers: d.stickers.flatMap((x) => (x.id === id ? [{ ...s, end: t }, { ...s, id: uid(), start: t }] : [x])) };
 }

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { ProjectData } from '../lib/types';
 import { totalDuration } from '../lib/timeline';
 
-export type SelItem = { type: 'clip' | 'audio' | 'caption'; id: string };
+export type SelItem = { type: 'clip' | 'audio' | 'caption' | 'sticker'; id: string };
 export type Selection = SelItem | null;
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -48,7 +48,7 @@ const HISTORY = 100;
 
 const withDuration = (d: ProjectData): ProjectData => ({ ...d, duration: totalDuration(d) });
 
-const empty: ProjectData = { aspect: '9:16', media: [], clips: [], audio: [], captions: [], duration: 0 };
+const empty: ProjectData = { aspect: '9:16', media: [], clips: [], audio: [], captions: [], stickers: [], duration: 0 };
 
 export const useEditor = create<EditorState>((set, get) => ({
   projectId: null,
@@ -70,7 +70,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({
       projectId,
       name,
-      data: withDuration({ ...empty, ...data, audio: data.audio ?? [] }),
+      data: withDuration({ ...empty, ...data, audio: data.audio ?? [], stickers: data.stickers ?? [] }),
       past: [],
       future: [],
       selection: null,

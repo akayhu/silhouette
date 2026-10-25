@@ -1,3 +1,5 @@
+import type { ClipFilter } from './filters';
+
 export type Plan = 'free' | 'pro';
 
 export interface User {
@@ -71,6 +73,7 @@ export interface VideoClip {
   volume: number;
   transform?: ClipTransform;
   transition?: Transition;
+  filter?: ClipFilter;
 }
 
 /** 音訊軌可自由擺放 */
@@ -108,12 +111,29 @@ export interface Caption {
   style: CaptionStyle;
 }
 
+export type StickerAnimation = 'none' | 'pop' | 'bounce' | 'wobble' | 'pulse' | 'spin' | 'float';
+
+/** 畫面上的貼紙：x、y 是中心點位置（畫布寬高的比例），scale 1 = 短邊的 30% */
+export interface StickerItem {
+  id: string;
+  stickerId: string;
+  start: number;
+  end: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  opacity: number;
+  animation: StickerAnimation;
+}
+
 export interface ProjectData {
   aspect: Aspect;
   media: MediaItem[];
   clips: VideoClip[];
   audio: AudioClip[];
   captions: Caption[];
+  stickers: StickerItem[];
   duration: number;
 }
 

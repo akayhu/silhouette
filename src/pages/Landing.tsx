@@ -1,16 +1,19 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, AudioLines, Check, Crop, Crown, Download, Film, Mic, Palette, Scissors, Sparkles, Type, Upload, Wand2 } from 'lucide-react';
+import { ArrowRight, AudioLines, Check, Crop, Crown, Download, Eraser, Film, GraduationCap, Layers, Mic, Palette, Scissors, Sparkles, Store, Type, Upload, UtensilsCrossed, Wand2 } from 'lucide-react';
 import { MarketingLayout } from '../components/Layout';
 import { PlanCards } from '../components/Plans';
 import { buttonClass } from '../components/ui';
+import { OG_IMAGE, PUBLIC_ROUTES, SITE_NAME, SITE_URL } from '../lib/seo';
 
 export default function Landing() {
   return (
     <MarketingLayout>
+      <StructuredData />
       <Hero />
       <Features />
       <Steps />
+      <UseCases />
       <section id="pricing" className="px-4 py-24 sm:px-6">
         <SectionTitle eyebrow="價格方案" title="先免費剪，需要再升級" sub="新會員註冊就送 7 天專業版，全部功能都能用。之後專業版每月 NT$399，不綁約，隨時可以取消。" />
         <PlanCards />
@@ -180,6 +183,43 @@ const spotlights: Spotlight[] = [
     pro: true,
     visual: <VoiceVisual />,
   },
+  {
+    eyebrow: '疊加軌・子母畫面',
+    title: '影片一層一層疊上去',
+    body: '不只主軌能放影片。把畫面疊在主軌上面，就能做子母畫面、反應影片、前後對比或商品特寫。',
+    points: [
+      '影片和圖片都能疊加，層數不限，上層蓋住下層',
+      '在時間軸上下拖曳換層，或在右側按「上移／下移一層」',
+      '每一層各自調整位置、大小、旋轉、透明度和濾鏡',
+      '疊加片段可以單獨變速、調音量，匯出時一起輸出',
+    ],
+    visual: <OverlayVisual />,
+  },
+  {
+    eyebrow: '去浮水印',
+    title: '角落 Logo 和舊字幕，框起來就消失',
+    body: '自己的舊影片想重新剪，卻被當時的 Logo 或燒進畫面的字幕擋住？自動偵測位置，選一種處理方式就好。',
+    points: [
+      '自動找出固定不動的 Logo 和底部字幕帶，也能自己框選',
+      '智能填補、模糊、馬賽克三種方式，強度可調',
+      '設定在素材上，同一支影片切成好幾段也會一起處理',
+      '處理只影響畫面，原本的聲音完全保留',
+    ],
+    pro: true,
+    visual: <EraseVisual />,
+  },
+  {
+    eyebrow: '貼紙・濾鏡・轉場',
+    title: '一鍵調出影片的氣氛',
+    body: '素材都是片刻剪趣原創，個人與商業影片都能放心使用，不必再到處找無版權素材。',
+    points: [
+      '14 種濾鏡：清新、日系、膠片、美食、夜景…強度可以調',
+      '35 款手繪貼紙，搭配彈出、跳動、搖擺等 6 種動畫',
+      '10 種轉場，點片段之間的 ◇ 設定，可一鍵套用到全部',
+      '亮度、對比、色溫、暗角、顆粒也能細部微調',
+    ],
+    visual: <EffectsVisual />,
+  },
 ];
 
 type FeatureItem = { name: string; pro?: boolean };
@@ -189,7 +229,8 @@ const featureGroups: { icon: typeof Crop; color: string; title: string; items: F
     color: 'bg-brand-soft text-brand',
     title: '剪輯',
     items: [
-      { name: '多軌時間軸：字幕、貼紙、主軌、音訊' },
+      { name: '多軌時間軸：字幕、貼紙、疊加、主軌、音訊' },
+      { name: '疊加軌：影片多層堆疊、子母畫面' },
       { name: '分割、修剪、拖曳排序、0.5～3 倍變速' },
       { name: '9:16、16:9、1:1 畫面比例' },
       { name: '畫面縮放、位置、旋轉，九宮格快速對齊' },
@@ -227,7 +268,7 @@ const featureGroups: { icon: typeof Crop; color: string; title: string; items: F
     color: 'bg-[#fff6dc] text-[#c98a00]',
     title: '畫面效果',
     items: [
-      { name: '35 款原創貼紙，7 種動畫' },
+      { name: '35 款原創貼紙，6 種動畫' },
       { name: '14 種濾鏡，可調強度' },
       { name: '亮度、對比、飽和度、色溫、暗角、顆粒微調' },
       { name: '溶解、推移、閃白、圓形展開等 10 種轉場' },
@@ -457,11 +498,146 @@ function VoiceVisual() {
   );
 }
 
+function OverlayVisual() {
+  const rows = [
+    { label: '疊加 2', color: 'bg-track-overlay border-track-overlay-edge/50', left: '34%', width: '40%' },
+    { label: '疊加 1', color: 'bg-track-overlay border-track-overlay-edge/50', left: '8%', width: '58%' },
+    { label: '主軌', color: 'bg-track-video border-track-video-edge/40', left: '0%', width: '100%' },
+  ];
+  return (
+    <VisualFrame>
+      <div className="grid items-center gap-5 sm:grid-cols-[150px_1fr]">
+        <div className="relative mx-auto aspect-[9/16] w-36 overflow-hidden rounded-2xl bg-[linear-gradient(165deg,#ffd6c6,#ffeab0_55%,#bfeedd)] shadow-card">
+          <div className="absolute top-[16%] right-2 aspect-[3/4] w-[46%] rounded-xl border-2 border-white bg-[linear-gradient(160deg,#a7b8ff,#c7c1ff)] shadow-card">
+            <span className="absolute inset-x-0 top-[22%] mx-auto block size-6 rounded-full bg-white/70" />
+            <span className="absolute inset-x-[18%] bottom-[14%] block h-[30%] rounded-t-full bg-white/60" />
+          </div>
+          <div className="absolute bottom-[26%] left-2 aspect-square w-[40%] rotate-[-6deg] rounded-xl border-2 border-white bg-[linear-gradient(140deg,#ffb59e,#ff7a59)] shadow-card" />
+          <div className="absolute inset-x-2 bottom-[8%] text-center text-[12px] leading-tight font-black text-white [-webkit-text-stroke:4px_#1f1d2b] [paint-order:stroke]">
+            開箱前後對比
+          </div>
+        </div>
+        <div className="rounded-2xl bg-surface p-3 shadow-card">
+          <div className="space-y-1.5">
+            {rows.map((r) => (
+              <div key={r.label} className="flex items-center gap-2">
+                <span className="w-11 shrink-0 text-[11px] font-bold text-ink-soft">{r.label}</span>
+                <div className="relative h-7 flex-1 rounded-lg bg-sunken/70">
+                  <span className={`absolute inset-y-0.5 rounded-md border-2 ${r.color}`} style={{ left: r.left, width: r.width }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <span className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-sunken py-1.5 text-[11px] font-bold text-ink-soft">
+              <Layers className="size-3.5" /> 上移一層
+            </span>
+            <span className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-sunken py-1.5 text-[11px] font-bold text-ink-soft">
+              <Layers className="size-3.5" /> 下移一層
+            </span>
+          </div>
+        </div>
+      </div>
+    </VisualFrame>
+  );
+}
+
+function EraseVisual() {
+  const Frame = ({ after }: { after?: boolean }) => (
+    <div className="relative aspect-[9/16] w-full overflow-hidden rounded-2xl bg-[linear-gradient(170deg,#b9c9ff,#ffd6c6_60%,#ffeab0)] shadow-card">
+      <div className="absolute inset-x-0 top-[40%] mx-auto size-14 rounded-full bg-white/50 blur-md" />
+      {after ? null : (
+        <>
+          <span className="absolute top-3 left-3 rounded-md bg-ink/75 px-1.5 py-0.5 text-[10px] font-black text-white">LOGO</span>
+          <span className="absolute top-2 left-2 h-7 w-14 rounded-lg border-2 border-dashed border-coral" />
+          <span className="absolute inset-x-3 bottom-[12%] rounded bg-ink/60 py-1 text-center text-[10px] font-bold text-white">舊的燒錄字幕</span>
+          <span className="absolute inset-x-2 bottom-[10%] h-8 rounded-lg border-2 border-dashed border-coral" />
+        </>
+      )}
+    </div>
+  );
+  return (
+    <VisualFrame>
+      <div className="mx-auto grid max-w-[340px] grid-cols-2 gap-4">
+        <div>
+          <div className="mb-2 text-xs font-bold text-ink-soft">處理前</div>
+          <Frame />
+        </div>
+        <div>
+          <div className="mb-2 text-xs font-bold text-ink-soft">處理後</div>
+          <Frame after />
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-bold text-brand">
+          <Eraser className="size-3.5" /> 偵測到 2 個區域
+        </span>
+        {['智能填補', '模糊', '馬賽克'].map((m, i) => (
+          <span key={m} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${i === 0 ? 'bg-brand text-white' : 'bg-surface text-ink-soft'}`}>
+            {m}
+          </span>
+        ))}
+      </div>
+    </VisualFrame>
+  );
+}
+
+function EffectsVisual() {
+  const filters = [
+    { name: '原圖', css: 'none' },
+    { name: '日系', css: 'brightness(1.1) contrast(0.88) saturate(0.85)' },
+    { name: '膠片', css: 'sepia(0.3) contrast(1.1)' },
+    { name: '黑白', css: 'grayscale(1) contrast(1.15)' },
+  ];
+  return (
+    <VisualFrame>
+      <div className="grid grid-cols-4 gap-2">
+        {filters.map((f, i) => (
+          <div key={f.name} className="text-center">
+            <div
+              className={`aspect-[3/4] rounded-xl bg-[linear-gradient(160deg,#a7c6ff,#ffd1bf_60%,#ffe9a8)] ${i === 1 ? 'ring-2 ring-brand ring-offset-2 ring-offset-[#f7f3ff]' : ''}`}
+              style={{ filter: f.css }}
+            />
+            <div className={`mt-1.5 text-[11px] font-bold ${i === 1 ? 'text-brand' : 'text-ink-soft'}`}>{f.name}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-2xl bg-surface p-3 shadow-card">
+        <div className="text-xs font-bold text-ink-soft">貼紙</div>
+        <div className="mt-2 flex flex-wrap gap-2" aria-hidden>
+          <span className="grid size-10 place-items-center rounded-full bg-sun text-lg">☺</span>
+          <span className="grid h-10 place-items-center rounded-xl bg-coral px-3 text-xs font-black text-white">必吃!</span>
+          <span className="grid h-10 place-items-center rounded-xl bg-brand px-3 text-xs font-black text-white">NEW</span>
+          <span className="grid size-10 place-items-center rounded-full bg-mint text-lg text-white">★</span>
+          <span className="grid h-10 place-items-center rounded-xl border-2 border-ink px-3 text-xs font-black">記得訂閱</span>
+        </div>
+      </div>
+      <div className="mt-3 rounded-2xl bg-surface p-3 shadow-card">
+        <div className="text-xs font-bold text-ink-soft">轉場</div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="h-8 flex-1 rounded-lg border-2 border-track-video-edge/40 bg-track-video" />
+          <span className="grid size-6 rotate-45 place-items-center rounded-md bg-brand">
+            <span className="-rotate-45 text-[9px] font-black text-white">溶</span>
+          </span>
+          <span className="h-8 flex-1 rounded-lg border-2 border-track-video-edge/40 bg-track-video" />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {['溶解', '閃白', '左推', '拉近', '模糊', '圓形展開'].map((t, i) => (
+            <span key={t} className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${i === 0 ? 'bg-brand-soft text-brand' : 'bg-sunken text-ink-soft'}`}>
+              {t}
+            </span>
+          ))}
+        </div>
+      </div>
+    </VisualFrame>
+  );
+}
+
 function Steps() {
   const steps = [
-    { icon: Upload, title: '上傳素材', body: '把手機拍的影片、照片、音樂拖進來。' },
-    { icon: Wand2, title: '一鍵 AI 處理', body: '自動上字幕、剪掉停頓、產生配音。' },
-    { icon: Download, title: '匯出分享', body: '輸出高畫質影片，直接上傳 IG、TikTok。' },
+    { icon: Upload, title: '上傳素材', body: '把手機拍的影片、照片、音樂拖進來，選好 9:16、16:9 或 1:1 畫面比例。素材會存在你的帳戶，換電腦也能接著剪。' },
+    { icon: Wand2, title: '一鍵 AI 處理', body: '自動上字幕、剪掉停頓、產生配音；再疊加畫面、加貼紙濾鏡和轉場，每一步都能復原。' },
+    { icon: Download, title: '匯出分享', body: '匯出的畫面和預覽一模一樣，專業版 1080p 無浮水印，直接上傳 IG Reels、TikTok、YouTube Shorts。' },
   ];
   return (
     <section className="bg-surface px-4 py-24 sm:px-6">
@@ -480,9 +656,65 @@ function Steps() {
   );
 }
 
+const useCases = [
+  {
+    icon: Mic,
+    title: '知識型口播',
+    who: '對著鏡頭講解的創作者',
+    flow: ['智能口播剪掉停頓和口誤', 'AI 自動字幕套用大字樣式', '重點句加上貼紙強調'],
+  },
+  {
+    icon: UtensilsCrossed,
+    title: '美食與旅遊 Vlog',
+    who: '記錄生活、分享景點的人',
+    flow: ['多段素材加上轉場串起來', '套用美食、日系濾鏡統一色調', '加入無版權配樂，設定淡入淡出'],
+  },
+  {
+    icon: Store,
+    title: '小店家商品介紹',
+    who: '經營網拍或實體店的老闆',
+    flow: ['疊加軌放商品特寫做子母畫面', '用 AI 聲音朗讀介紹，不必露聲', '標籤貼紙標出價格和優惠'],
+  },
+  {
+    icon: GraduationCap,
+    title: '教學與課程片段',
+    who: '老師、講師、職人分享',
+    flow: ['疊加螢幕畫面和講者鏡頭', '鎖定已剪好的軌道避免誤改', '去除舊影片上的 Logo 重新利用'],
+  },
+];
+
+function UseCases() {
+  return (
+    <section className="px-4 py-24 sm:px-6">
+      <SectionTitle eyebrow="適合誰用" title="不同類型的影片，都有順手的做法" sub="看看別人怎麼用片刻剪趣，把一支素材剪成能發佈的短影音。" />
+      <div className="mx-auto grid max-w-6xl gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {useCases.map((u) => (
+          <div key={u.title} className="flex flex-col rounded-3xl border border-line bg-surface p-6 shadow-card">
+            <span className="grid size-11 place-items-center rounded-xl bg-brand-soft text-brand">
+              <u.icon className="size-5" />
+            </span>
+            <h3 className="mt-4 text-lg font-extrabold">{u.title}</h3>
+            <p className="mt-1 text-sm text-ink-mute">{u.who}</p>
+            <ol className="mt-5 space-y-2.5 border-t border-line pt-5">
+              {u.flow.map((step, i) => (
+                <li key={step} className="flex gap-2.5 text-sm leading-relaxed">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sunken text-[11px] font-bold text-ink-soft">{i + 1}</span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 const faqs = [
   ['需要安裝軟體嗎？', '不用。片刻剪趣直接在瀏覽器執行，建議使用最新版 Chrome 或 Edge。'],
   ['AI 自動字幕準確嗎？支援台灣用語嗎？', '使用 Whisper 語音辨識，並自動轉成繁體中文。準確度會受收音品質影響，辨識完可以逐句修改；第一次使用會下載語音模型。'],
+  ['可以做子母畫面、把好幾支影片疊在一起嗎？', '可以。在素材按「疊加」，影片或圖片就會疊在主軌上方，層數不限。上層會蓋住下層，每一層都能各自調整位置、大小、透明度和濾鏡，匯出時一起輸出。'],
+  ['上傳的素材存在哪裡？', '素材和專案存在你的帳戶裡，只有你自己看得到，換一台電腦登入也能接著剪。刪除帳號時，專案和上傳的檔案會一併刪除。'],
   ['配樂、音效、貼紙、濾鏡可以用在商業影片嗎？', '可以。這些都是片刻剪趣原創製作，沒有版權問題，個人與商業影片都能免費使用，也不需要標註來源。'],
   ['可以用自己的聲音配音嗎？', '可以（專業版）。在「朗讀」錄一段約 10 秒的朗讀，就能建立你的 AI 聲音。請只使用自己的聲音，或已取得聲音主人同意的錄音。'],
   ['去浮水印可以處理任何影片嗎？', '請只處理你自己拍攝、或已取得授權的影片。移除他人作品的浮水印或字幕再發佈，可能侵害著作權。'],
@@ -491,6 +723,38 @@ const faqs = [
   ['可以隨時取消訂閱嗎？', '可以。在帳戶設定取消後，專業版會使用到這期結束，之後自動回到免費版，不會再扣款。'],
   ['匯出的影片是什麼格式？', '依瀏覽器支援輸出 MP4 或 WebM，畫面比例和你在編輯器選的一樣。'],
 ];
+
+/** 結構化資料：只描述頁面上看得到的內容（方案價格、常見問題） */
+function StructuredData() {
+  const abs = (p: string) => (SITE_URL ? SITE_URL + p : undefined);
+  const app = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: SITE_NAME,
+    url: abs('/'),
+    image: abs(OG_IMAGE),
+    description: PUBLIC_ROUTES['/'].description,
+    applicationCategory: 'MultimediaApplication',
+    operatingSystem: 'Web',
+    inLanguage: 'zh-Hant-TW',
+    browserRequirements: '需要最新版 Chrome 或 Edge 瀏覽器',
+    offers: [
+      { '@type': 'Offer', name: '免費版', price: '0', priceCurrency: 'TWD' },
+      { '@type': 'Offer', name: '專業版（月費）', price: '399', priceCurrency: 'TWD' },
+    ],
+  };
+  const faq = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+  };
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(app).replace(/</g, '\\u003c') }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faq).replace(/</g, '\\u003c') }} />
+    </>
+  );
+}
 
 function Faq() {
   return (

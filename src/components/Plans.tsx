@@ -10,9 +10,13 @@ const rows: { label: string; free: string | boolean; pro: string | boolean }[] =
   { label: '浮水印', free: '有', pro: '無' },
   { label: '裁剪、分割、變速、比例', free: true, pro: true },
   { label: '手動字幕與字幕樣式', free: true, pro: true },
+  { label: '疊加軌、貼紙、濾鏡、轉場', free: true, pro: true },
+  { label: '無版權配樂與音效', free: true, pro: true },
   { label: 'AI 自動字幕', free: false, pro: true },
   { label: '智能口播（自動剪靜音）', free: false, pro: true },
   { label: '文字朗讀配音', free: false, pro: true },
+  { label: '用自己的聲音建立 AI 配音', free: false, pro: true },
+  { label: '去浮水印（Logo、字幕帶）', free: false, pro: true },
 ];
 
 function Cell({ v }: { v: string | boolean }) {

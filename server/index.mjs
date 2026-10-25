@@ -746,4 +746,22 @@ app.get('/api/tts/jobs/:id', requireAuth, (req, res) => {
   res.json(rest);
 });
 
+// ---------- 正式環境：提供建置好的網站（npm run build 之後） ----------
+// 預先產生的頁面直接回傳；登入後才用的頁面回傳空外殼；其他網址回 404，避免軟 404 被搜尋引擎收錄
+const DIST = path.join(ROOT, '..', 'dist');
+const APP_ROUTES = [/^\/login\/?$/, /^\/register\/?$/, /^\/dashboard\/?$/, /^\/account\/?$/, /^\/checkout\/?$/, /^\/editor\/[^/]+\/?$/, /^\/admin(\/members)?\/?$/];
+if (fs.existsSync(path.join(DIST, 'app.html'))) {
+  app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '1y', immutable: true }));
+  app.use(express.static(DIST, { index: 'index.html', redirect: false }));
+  app.use((req, res) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(404).json({ error: '找不到這個網址' });
+    if (req.path.startsWith('/api/')) return res.status(404).json({ error: '找不到這個網址' });
+    const clean = req.path.replace(/\/+$/, '');
+    const pre = path.join(DIST, clean, 'index.html');
+    if (clean && !clean.includes('..') && fs.existsSync(pre)) return res.sendFile(pre);
+    const known = APP_ROUTES.some((re) => re.test(req.path));
+    res.status(known ? 200 : 404).sendFile(path.join(DIST, 'app.html'));
+  });
+}
+
 app.listen(PORT, () => console.log(`片刻剪趣 API 已啟動：http://localhost:${PORT}`));

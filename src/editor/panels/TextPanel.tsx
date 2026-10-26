@@ -11,6 +11,8 @@ const presets: { name: string; style: Partial<CaptionStyle>; preview: React.CSSP
   { name: '白底黑字', style: { color: '#1f1d2b', background: 'rgba(255,255,255,0.92)', animation: 'fade' }, preview: { color: '#1f1d2b', background: '#fff', padding: '2px 8px', borderRadius: 6 } },
   { name: '品牌紫', style: { color: '#ffffff', background: 'rgba(91,76,245,0.92)', animation: 'slide' }, preview: { color: '#fff', background: '#5b4cf5', padding: '2px 8px', borderRadius: 6 } },
   { name: '珊瑚標題', style: { color: '#ff7a59', stroke: '#ffffff', size: 110, y: 0.2, animation: 'pop' }, preview: { color: '#ff7a59', WebkitTextStroke: '5px #fff', paintOrder: 'stroke' } },
+  { name: '立體投影', style: { color: '#ffffff', stroke: '#1f1d2b', shadow: { color: '#5b4cf5', opacity: 1, blur: 0, distance: 10, angle: 45 }, animation: 'pop' }, preview: { color: '#fff', WebkitTextStroke: '4px #1f1d2b', paintOrder: 'stroke', textShadow: '3px 3px 0 #5b4cf5' } },
+  { name: '柔光陰影', style: { color: '#ffffff', stroke: '#1f1d2b', shadow: { color: '#000000', opacity: 0.45, blur: 28, distance: 6, angle: 90 } }, preview: { color: '#fff', WebkitTextStroke: '4px #1f1d2b', paintOrder: 'stroke', textShadow: '0 3px 10px rgba(0,0,0,0.45)' } },
   { name: '打字機', style: { color: '#ffffff', stroke: '#1f1d2b', bold: false, animation: 'typewriter' }, preview: { color: '#fff', WebkitTextStroke: '4px #1f1d2b', paintOrder: 'stroke', fontWeight: 500 } },
 ];
 

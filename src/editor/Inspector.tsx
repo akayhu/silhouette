@@ -4,7 +4,7 @@ import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
 import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, layoutMain, overlayEnd, overlayLaneCount, placeOverlayLane, removeItems, removeMainClip, transformOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
-import type { CaptionAnimation, CaptionStyle, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
+import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
 import { Button } from '../components/ui';
 import { useEditor } from './store';
 
@@ -204,8 +204,22 @@ export function Inspector() {
           </div>
         </div>
       </Section>
-      <Section title="位置">
-        <Slider label="垂直位置" value={Math.round(s.y * 100)} min={5} max={95} format={(v) => (v < 35 ? '上方' : v > 65 ? '下方' : '中間')} onStart={checkpoint} onChange={(v) => setStyle({ y: v / 100 }, false)} />
+      <Section title="陰影">
+        <ShadowControls value={s.shadow} onStart={checkpoint} onChange={(shadow, record) => setStyle({ shadow }, record)} />
+      </Section>
+      <Section
+        title="位置"
+        aside={
+          <button onClick={() => setStyle({ x: 0.5 })} disabled={(s.x ?? 0.5) === 0.5} className="text-[11px] font-bold text-brand disabled:text-ink-mute">
+            水平置中
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <Slider label="水平位置" value={Math.round((s.x ?? 0.5) * 100)} min={0} max={100} format={hFormat} onStart={checkpoint} onChange={(v) => setStyle({ x: v / 100 }, false)} />
+          <Slider label="垂直位置" value={Math.round(s.y * 100)} min={5} max={95} format={(v) => (v < 35 ? '上方' : v > 65 ? '下方' : '中間')} onStart={checkpoint} onChange={(v) => setStyle({ y: v / 100 }, false)} />
+          <p className="text-[11px] text-ink-mute">也可以直接在右邊的預覽畫面上拖曳字幕。</p>
+        </div>
       </Section>
       <Section title="進場動畫">
         <Chips options={ANIMS} value={s.animation} onChange={(animation) => setStyle({ animation })} />
@@ -232,6 +246,51 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
         ))}
         <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="size-7 cursor-pointer rounded-lg border border-line bg-surface p-0.5" aria-label={`自訂${label}顏色`} />
       </div>
+    </div>
+  );
+}
+
+/** 字幕水平位置的文字說明 */
+const hFormat = (v: number) => (v === 50 ? '置中' : v < 50 ? `偏左 ${50 - v}` : `偏右 ${v - 50}`);
+
+const SHADOW_PRESETS: { id: string; label: string; value: CaptionShadow | null }[] = [
+  { id: 'none', label: '無', value: null },
+  { id: 'soft', label: '柔和', value: { color: '#000000', opacity: 0.45, blur: 28, distance: 6, angle: 90 } },
+  { id: 'drop', label: '投影', value: { color: '#000000', opacity: 0.85, blur: 0, distance: 10, angle: 45 } },
+  { id: 'glow', label: '發光', value: { color: '#ffe14a', opacity: 0.95, blur: 45, distance: 0, angle: 90 } },
+  { id: 'neon', label: '霓虹', value: { color: '#ff4fd8', opacity: 1, blur: 60, distance: 0, angle: 90 } },
+];
+const SHADOW_COLORS = ['#000000', '#1f1d2b', '#ffffff', '#ffe14a', '#ff4fd8', '#5b4cf5'];
+const sameShadow = (a: CaptionShadow, b: CaptionShadow) => (Object.keys(a) as (keyof CaptionShadow)[]).every((k) => a[k] === b[k]);
+
+/** 字幕陰影：先選預設，再微調顏色、透明度、模糊、距離、角度 */
+function ShadowControls({ value, onChange, onStart }: { value?: CaptionShadow | null; onChange: (v: CaptionShadow | null, record: boolean) => void; onStart: () => void }) {
+  const preset = !value ? 'none' : (SHADOW_PRESETS.find((p) => p.value && sameShadow(p.value, value))?.id ?? 'custom');
+  const set = (patch: Partial<CaptionShadow>, record = false) => value && onChange({ ...value, ...patch }, record);
+  return (
+    <div className="space-y-3">
+      <Chips
+        options={[...SHADOW_PRESETS.map((p) => ({ id: p.id, label: p.label })), ...(preset === 'custom' ? [{ id: 'custom', label: '自訂' }] : [])]}
+        value={preset}
+        onChange={(id) => id !== 'custom' && onChange(SHADOW_PRESETS.find((p) => p.id === id)!.value, true)}
+      />
+      {value && (
+        <>
+          <div>
+            <div className="mb-1.5 text-xs font-semibold text-ink-soft">陰影顏色</div>
+            <div className="flex items-center gap-1.5">
+              {SHADOW_COLORS.map((c) => (
+                <Swatch key={c} color={c} active={value.color.toLowerCase() === c} onClick={() => set({ color: c }, true)} label={c} />
+              ))}
+              <input type="color" value={value.color} onChange={(e) => set({ color: e.target.value })} onFocus={onStart} className="size-7 cursor-pointer rounded-lg border border-line bg-surface p-0.5" aria-label="自訂陰影顏色" />
+            </div>
+          </div>
+          <Slider label="透明度" value={Math.round(value.opacity * 100)} min={0} max={100} format={(v) => `${v}%`} onStart={onStart} onChange={(v) => set({ opacity: v / 100 })} />
+          <Slider label="模糊" value={value.blur} min={0} max={100} onStart={onStart} onChange={(v) => set({ blur: v })} />
+          <Slider label="距離" value={value.distance} min={0} max={40} onStart={onStart} onChange={(v) => set({ distance: v })} />
+          <Slider label="角度" value={value.angle} min={0} max={359} format={(v) => `${v}°`} onStart={onStart} onChange={(v) => set({ angle: v })} />
+        </>
+      )}
     </div>
   );
 }
@@ -414,6 +473,11 @@ function MultiInspector() {
               </label>
               <ColorRow label="文字" value={s0.color} onChange={(color) => setCaps({ color })} />
               <ColorRow label="描邊" value={s0.stroke} onChange={(stroke) => setCaps({ stroke })} />
+              <div>
+                <div className="mb-1.5 text-xs font-semibold text-ink-soft">陰影</div>
+                <ShadowControls value={s0.shadow} onStart={checkpoint} onChange={(shadow, record) => setCaps({ shadow }, record)} />
+              </div>
+              <Slider label="水平位置" value={Math.round((s0.x ?? 0.5) * 100)} min={0} max={100} format={hFormat} onStart={checkpoint} onChange={(v) => setCaps({ x: v / 100 }, false)} />
               <Slider label="垂直位置" value={Math.round(s0.y * 100)} min={5} max={95} format={(v) => (v < 35 ? '上方' : v > 65 ? '下方' : '中間')} onStart={checkpoint} onChange={(v) => setCaps({ y: v / 100 }, false)} />
               <div>
                 <div className="mb-1.5 text-xs font-semibold text-ink-soft">進場動畫</div>

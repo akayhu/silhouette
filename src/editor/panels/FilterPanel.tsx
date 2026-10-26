@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_CLIP_FILTER, FILTER_PRESETS, filterThumbnail, type ClipFilter, type FilterId } from '../../lib/filters';
 import { clipAt, layoutMain } from '../../lib/timeline';
-import type { ProjectData } from '../../lib/types';
+import type { ProjectData, TrackKey } from '../../lib/types';
 import { Button, useToast } from '../../components/ui';
 import { Slider } from '../Inspector';
 import { useEditor } from '../store';
@@ -22,12 +22,14 @@ export function FilterPanel() {
   const time = useEditor((s) => s.time);
   const selection = useEditor((s) => s.selection);
   const { commit, live, checkpoint } = useEditor.getState();
-  const locked = useEditor((s) => !!s.data.locks?.main);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
-  // 處理對象：選取中的主軌片段，否則是播放頭所在的片段
+  // 處理對象：選取中的疊加片段或主軌片段，否則是播放頭所在的主軌片段
   const placed = layoutMain(data.clips);
-  const clip = (selection?.type === 'clip' && placed.find((c) => c.id === selection.id)) || clipAt(placed, time);
+  const overlay = selection?.type === 'overlay' ? data.overlays.find((o) => o.id === selection.id) : undefined;
+  const clip = overlay ?? ((selection?.type === 'clip' && placed.find((c) => c.id === selection.id)) || clipAt(placed, time));
+  const track: TrackKey = overlay ? 'overlay' : 'main';
+  const locked = !!data.locks?.[track];
   const media = clip ? data.media.find((m) => m.id === clip.mediaId) : undefined;
   const filter = { ...DEFAULT_CLIP_FILTER, ...clip?.filter };
 
@@ -50,35 +52,48 @@ export function FilterPanel() {
         <div className="mt-4 rounded-2xl border-2 border-dashed border-line p-6 text-center text-xs leading-relaxed text-ink-soft">
           把播放頭移到要套用的影片上，
           <br />
-          或在時間軸點選主軌片段。
+          或在時間軸點選主軌、疊加片段。
         </div>
       </div>
     );
   }
 
+  // 只改目前這個片段（主軌或疊加）的濾鏡
+  const update = (d: ProjectData, next: (f: ClipFilter | undefined) => ClipFilter | undefined): ProjectData =>
+    overlay
+      ? { ...d, overlays: d.overlays.map((o) => (o.id === clip.id ? { ...o, filter: next(o.filter) } : o)) }
+      : { ...d, clips: d.clips.map((c) => (c.id === clip.id ? { ...c, filter: next(c.filter) } : c)) };
   const set = (patch: Partial<ClipFilter>, record = true) => {
-    const fn = (d: ProjectData) => ({ ...d, clips: d.clips.map((c) => (c.id === clip.id ? { ...c, filter: { ...DEFAULT_CLIP_FILTER, ...c.filter, ...patch } } : c)) });
+    const fn = (d: ProjectData) => update(d, (f) => ({ ...DEFAULT_CLIP_FILTER, ...f, ...patch }));
     record ? commit(fn) : live(fn);
   };
   const pick = (preset: FilterId) => set({ preset, intensity: preset === filter.preset ? filter.intensity : 1 });
+  // 套用到全部畫面片段（主軌＋疊加），鎖定的軌道不動
+  const mainOpen = !data.locks?.main;
+  const overlayOpen = !data.locks?.overlay;
+  const allCount = (mainOpen ? data.clips.length : 0) + (overlayOpen ? data.overlays.length : 0);
   const applyAll = () => {
-    commit((d) => ({ ...d, clips: d.clips.map((c) => ({ ...c, filter: { ...filter } })) }));
-    toast(`已套用到全部 ${data.clips.length} 個片段`, 'success');
+    commit((d) => ({
+      ...d,
+      clips: mainOpen ? d.clips.map((c) => ({ ...c, filter: { ...filter } })) : d.clips,
+      overlays: overlayOpen ? d.overlays.map((o) => ({ ...o, filter: { ...filter } })) : d.overlays,
+    }));
+    toast(`已套用到全部 ${allCount} 個片段`, 'success');
   };
-  const index = placed.findIndex((c) => c.id === clip.id) + 1;
+  const label = overlay ? `疊加第 ${overlay.lane + 1} 層` : `片段 ${placed.findIndex((c) => c.id === clip.id) + 1}`;
 
   return (
     <div className="p-4">
       <h2 className="text-sm font-extrabold">濾鏡</h2>
-      <p className="mt-1 text-xs text-ink-mute">原創色彩風格，無版權問題。套用在單一片段，也可以一鍵套用到全部。</p>
+      <p className="mt-1 text-xs text-ink-mute">原創色彩風格，無版權問題。主軌和疊加片段都能套用，也可以一鍵套用到全部。</p>
 
-      <LockedBanner track="main" />
+      <LockedBanner track={track} />
 
       <fieldset disabled={locked} className={locked ? 'pointer-events-none opacity-50' : ''}>
       <div className="mt-3 flex items-center gap-2.5 rounded-2xl bg-sunken/70 p-2.5">
         {media.thumb && <img src={media.thumb} alt="" className="h-10 w-14 rounded-lg object-cover" />}
         <div className="min-w-0 text-xs">
-          <div className="truncate font-bold">片段 {index}：{media.name}</div>
+          <div className="truncate font-bold">{label}：{media.name}</div>
           <div className="text-ink-mute">目前：{FILTER_PRESETS.find((p) => p.id === filter.preset)?.name}</div>
         </div>
       </div>
@@ -122,10 +137,10 @@ export function FilterPanel() {
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <Button variant="secondary" size="sm" onClick={() => commit((d) => ({ ...d, clips: d.clips.map((c) => (c.id === clip.id ? { ...c, filter: undefined } : c)) }))}>
+        <Button variant="secondary" size="sm" onClick={() => commit((d) => update(d, () => undefined))}>
           重設
         </Button>
-        <Button size="sm" onClick={applyAll} disabled={data.clips.length < 2}>
+        <Button size="sm" onClick={applyAll} disabled={allCount < 2}>
           套用到全部片段
         </Button>
       </div>

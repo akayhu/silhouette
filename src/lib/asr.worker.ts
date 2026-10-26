@@ -8,12 +8,24 @@ const loaded = new Map<string, Promise<AutomaticSpeechRecognitionPipeline>>();
 function load(model: string) {
   if (!loaded.has(model)) {
     const device = 'gpu' in navigator ? 'webgpu' : 'wasm';
+    // 模型分成好幾個檔案下載，合併成一個整體進度，數字只會往上
+    const files = new Map<string, { loaded: number; total: number }>();
+    let shown = 0;
     const make = (dev: 'webgpu' | 'wasm') =>
       pipeline('automatic-speech-recognition', model, {
         device: dev,
         dtype: dev === 'webgpu' ? { encoder_model: 'fp32', decoder_model_merged: 'q4' } : 'q8',
         progress_callback: (p: { status: string; file?: string; progress?: number; loaded?: number; total?: number }) => {
-          if (p.status === 'progress') self.postMessage({ type: 'download', file: p.file, progress: p.progress ?? 0 });
+          if (p.status !== 'progress' || !p.file) return;
+          files.set(p.file, { loaded: p.loaded ?? 0, total: p.total ?? 0 });
+          let loadedBytes = 0;
+          let totalBytes = 0;
+          for (const v of files.values()) {
+            loadedBytes += v.loaded;
+            totalBytes += v.total;
+          }
+          shown = Math.max(shown, totalBytes ? (loadedBytes / totalBytes) * 100 : 0);
+          self.postMessage({ type: 'download', progress: shown });
         },
       }) as unknown as Promise<AutomaticSpeechRecognitionPipeline>;
     loaded.set(model, make(device).catch(() => make('wasm')));

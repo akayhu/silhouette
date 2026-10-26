@@ -532,6 +532,36 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
   return lines;
 }
 
+const captionFont = (s: Caption['style'], size: number) => `${s.bold ? 800 : 500} ${size}px "${s.font}", "Noto Sans TC", sans-serif`;
+const clampTo = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+
+/** 字幕完整文字的排版：中心點會限制在畫面內，字幕不會被拖到畫面外 */
+function layoutCaption(ctx: CanvasRenderingContext2D, c: Caption, W: number, H: number) {
+  const s = c.style;
+  const size = s.size * (Math.min(W, H) / 1080);
+  ctx.font = captionFont(s, size);
+  const lines = wrap(ctx, c.text, W * 0.86);
+  const lh = size * 1.28;
+  const blockH = lines.length * lh;
+  const widest = Math.max(0, ...lines.map((l) => ctx.measureText(l).width));
+  const margin = size * 0.4;
+  const cx = clampTo((s.x ?? 0.5) * W, widest / 2 + margin, W - widest / 2 - margin);
+  const cy = clampTo(s.y * H, blockH / 2 + margin, H - blockH / 2 - margin);
+  return { size, lh, blockH, widest, margin, cx, cy };
+}
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+/** 字幕在畫布上的範圍（像素）與中心點可移動的範圍（0–1），預覽拖曳用 */
+export function captionBox(c: Caption, W: number, H: number) {
+  measureCtx ??= document.createElement('canvas').getContext('2d')!;
+  const l = layoutCaption(measureCtx, c, W, H);
+  const w = l.widest + l.size * 0.9;
+  const h = l.blockH + l.size * 0.44;
+  const hx = (l.widest / 2 + l.margin) / W;
+  const hy = (l.blockH / 2 + l.margin) / H;
+  return { cx: l.cx, cy: l.cy, w, h, minX: Math.min(0.5, hx), maxX: Math.max(0.5, 1 - hx), minY: Math.min(0.5, hy), maxY: Math.max(0.5, 1 - hy) };
+}
+
 /** animate 為 false（暫停編輯中）時直接顯示完整字幕，方便調整樣式 */
 export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number, W: number, H: number, animate = true) {
   const s = c.style;
@@ -555,25 +585,59 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
   }
 
   ctx.save();
-  ctx.font = `${s.bold ? 800 : 500} ${size}px "${s.font}", "Noto Sans TC", sans-serif`;
+  // 位置用完整文字排版，打字機效果打字時字幕不會跳動
+  const layout = layoutCaption(ctx, c, W, H);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const lines = wrap(ctx, text, W * 0.86);
-  const lh = size * 1.28;
+  const lh = layout.lh;
   const blockH = lines.length * lh;
-  const cy = Math.min(H - blockH / 2 - size * 0.4, Math.max(blockH / 2 + size * 0.4, s.y * H)) + dy;
   ctx.globalAlpha = alpha;
-  ctx.translate(W / 2, cy);
+  ctx.translate(layout.cx, layout.cy + dy);
   ctx.scale(zoom, zoom);
 
+  // 陰影：有底色時投在底色框上；沒有底色時先畫一次文字外形只留陰影，再正常畫文字，避免描邊和字各投一次
+  const shadow = s.shadow;
+  const withShadow = (draw: () => void) => {
+    if (!shadow || shadow.opacity <= 0) return;
+    const rad = (shadow.angle * Math.PI) / 180;
+    const dist = (shadow.distance / 100) * size * zoom;
+    ctx.save();
+    ctx.shadowColor = withAlpha(shadow.color, shadow.opacity);
+    ctx.shadowBlur = (shadow.blur / 100) * size * zoom;
+    ctx.shadowOffsetX = Math.cos(rad) * dist;
+    ctx.shadowOffsetY = Math.sin(rad) * dist;
+    draw();
+    ctx.restore();
+  };
+
   if (s.background) {
-    const widest = Math.max(...wrap(ctx, c.text, W * 0.86).map((l) => ctx.measureText(l).width));
+    const widest = layout.widest;
+    const fullH = layout.blockH;
     const padX = size * 0.45;
     const padY = size * 0.22;
-    ctx.fillStyle = s.background;
-    ctx.beginPath();
-    ctx.roundRect(-widest / 2 - padX, -blockH / 2 - padY, widest + padX * 2, blockH + padY * 2, size * 0.3);
-    ctx.fill();
+    const box = () => {
+      ctx.fillStyle = s.background!;
+      ctx.beginPath();
+      ctx.roundRect(-widest / 2 - padX, -fullH / 2 - padY, widest + padX * 2, fullH + padY * 2, size * 0.3);
+      ctx.fill();
+    };
+    if (shadow && shadow.opacity > 0) withShadow(box);
+    else box();
+  } else {
+    withShadow(() =>
+      lines.forEach((line, i) => {
+        const y = -blockH / 2 + lh * (i + 0.5);
+        if (s.stroke) {
+          ctx.lineJoin = 'round';
+          ctx.lineWidth = size * 0.16;
+          ctx.strokeStyle = s.stroke;
+          ctx.strokeText(line, 0, y);
+        }
+        ctx.fillStyle = s.color;
+        ctx.fillText(line, 0, y);
+      }),
+    );
   }
   lines.forEach((line, i) => {
     const y = -blockH / 2 + lh * (i + 0.5);
@@ -587,6 +651,14 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
     ctx.fillText(line, 0, y);
   });
   ctx.restore();
+}
+
+/** #rrggbb 加上透明度 */
+function withAlpha(hex: string, alpha: number) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
 function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number) {

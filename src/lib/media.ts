@@ -121,3 +121,24 @@ export async function detectSilence(buffer: AudioBuffer, from: number, to: numbe
   }
   return silent;
 }
+
+/** 解碼音訊檔，取出固定數量的音量峰值畫波形；解碼失敗（格式不支援）就回傳 undefined */
+export async function audioPeaks(file: Blob, bars = 48): Promise<number[] | undefined> {
+  const ctx = new AudioContext();
+  try {
+    const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+    const ch = buf.getChannelData(0);
+    const size = Math.max(1, Math.floor(ch.length / bars));
+    const peaks = Array.from({ length: bars }, (_, i) => {
+      let max = 0;
+      for (let j = i * size; j < Math.min(ch.length, (i + 1) * size); j += 16) max = Math.max(max, Math.abs(ch[j]));
+      return max;
+    });
+    const top = Math.max(...peaks) || 1;
+    return peaks.map((p) => Math.round((p / top) * 100) / 100);
+  } catch {
+    return undefined;
+  } finally {
+    ctx.close();
+  }
+}

@@ -55,6 +55,13 @@ input[type='range'] {
   display: none;
 }
 
+/* 橫向細捲軸（工具列用） */
+.scroll-x-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-ink-mute) 45%, transparent) transparent;
+  overscroll-behavior-x: contain;
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;

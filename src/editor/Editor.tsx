@@ -10,6 +10,7 @@ import type { Aspect } from '../lib/types';
 import { Button, Logo } from '../components/ui';
 import { useEditor } from './store';
 import { Preview } from './Preview';
+import { ToolTabs } from './ToolTabs';
 import { Timeline } from './Timeline';
 import { Inspector } from './Inspector';
 import { MediaPanel } from './panels/MediaPanel';
@@ -22,6 +23,7 @@ import { TransitionPanel } from './panels/TransitionPanel';
 import { StickerPanel } from './panels/StickerPanel';
 import { FilterPanel } from './panels/FilterPanel';
 import { ExportDialog } from './ExportDialog';
+import { AutoEditDialog } from './AutoEditDialog';
 
 const PREVIEW_SHORT_SIDE = 540;
 
@@ -243,33 +245,23 @@ export default function Editor() {
           <div className="flex min-h-0 flex-1">
             <section className="flex w-[360px] shrink-0 flex-col border-r border-line bg-surface">
               {/* 工具列：放在素材區上方，橫向排列 */}
-              <nav className="flex shrink-0 border-b border-line px-1" role="tablist" aria-label="編輯工具">
-                {tabs.map((t) => (
-                  <button
-                    key={t.id}
-                    role="tab"
-                    aria-selected={tab === t.id}
-                    onClick={() => {
-                      setTab(t.id);
-                      if (t.id !== 'erase') useEditor.getState().setEraseEdit(null);
-                    }}
-                    className={`relative flex flex-1 flex-col items-center gap-1 pt-2.5 pb-2 text-[11px] font-bold transition ${tab === t.id ? 'text-brand' : 'text-ink-soft hover:text-ink'}`}
-                  >
-                    <t.icon className="size-5" />
-                    {t.label}
-                    {tab === t.id && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-brand" />}
-                  </button>
-                ))}
-              </nav>
+              <ToolTabs
+                tabs={tabs}
+                value={tab}
+                onChange={(id) => {
+                  setTab(id);
+                  if (id !== 'erase') useEditor.getState().setEraseEdit(null);
+                }}
+              />
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {tab === 'media' && <MediaPanel />}
                 {tab === 'music' && <MusicPanel />}
                 {tab === 'text' && <TextPanel seek={seek} />}
                 {tab === 'voice' && <VoicePanel />}
                 {tab === 'sticker' && <StickerPanel />}
-            {tab === 'filter' && <FilterPanel />}
-            {tab === 'transition' && <TransitionPanel />}
-            {tab === 'ai' && <AIPanel />}
+                {tab === 'filter' && <FilterPanel />}
+                {tab === 'transition' && <TransitionPanel />}
+                {tab === 'ai' && <AIPanel />}
                 {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}
               </div>
             </section>
@@ -286,6 +278,7 @@ export default function Editor() {
         <Preview canvasRef={canvasRef} togglePlay={togglePlay} seek={seek} loading={!loaded} />
       </div>
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
+      <AutoEditDialog />
     </div>
   );
 }

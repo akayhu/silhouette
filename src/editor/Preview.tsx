@@ -3,7 +3,7 @@ import { Loader2, Maximize2, Pause, Play, SkipBack } from 'lucide-react';
 import { formatTime } from '../lib/format';
 import { clipAt, layoutMain, overlayEnd, overlayTransform, transformOf } from '../lib/timeline';
 import { EraseOverlay } from './EraseOverlay';
-import { drawnRect, stickerPose } from '../lib/engine';
+import { captionBox, drawnRect, stickerPose } from '../lib/engine';
 import { useEditor } from './store';
 
 export function Preview({
@@ -33,6 +33,48 @@ export function Preview({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // 點到字幕就選取並拖曳到想要的位置；靠近水平中央會自動吸附置中。回傳 false 代表沒點到字幕
+  const dragCaption = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const st = useEditor.getState();
+    if (st.data.locks?.caption) return false;
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const py = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const hit = [...st.data.captions].reverse().find((c) => {
+      if (st.time < c.start || st.time >= c.end) return false;
+      const b = captionBox(c, canvas.width, canvas.height);
+      return Math.abs(px - b.cx) < b.w / 2 && Math.abs(py - b.cy) < b.h / 2;
+    });
+    if (!hit) return false;
+    st.select({ type: 'caption', id: hit.id });
+    const box = captionBox(hit, canvas.width, canvas.height);
+    // 從目前畫出來的位置開始拖（原本的值可能超出可移動範圍）
+    const startX = box.cx / canvas.width;
+    const startY = box.cy / canvas.height;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
+      if (!moved) {
+        st.checkpoint();
+        moved = true;
+      }
+      let x = Math.min(box.maxX, Math.max(box.minX, startX + (ev.clientX - x0) / rect.width));
+      const y = Math.min(box.maxY, Math.max(box.minY, startY + (ev.clientY - y0) / rect.height));
+      if (Math.abs(x - 0.5) < 0.02) x = 0.5;
+      useEditor.getState().live((d) => ({ ...d, captions: d.captions.map((c) => (c.id === hit.id ? { ...c, style: { ...c.style, x, y } } : c)) }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return true;
+  };
 
   // 點到貼紙就選取並拖曳它（最上層的優先）；回傳 false 代表沒點到貼紙
   const dragSticker = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -115,6 +157,7 @@ export function Preview({
   // 在預覽上拖曳：移動播放頭所在片段的畫面位置；沒有移動就當作點擊播放／暫停
   const dragFrame = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
+    if (dragCaption(e)) return;
     if (dragSticker(e)) return;
     if (dragOverlay(e)) return;
     const st = useEditor.getState();

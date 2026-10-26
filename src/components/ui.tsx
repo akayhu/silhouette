@@ -69,7 +69,7 @@ export function Modal({ open, onClose, children, width = 'max-w-md' }: { open: b
       <div
         role="dialog"
         aria-modal
-        className={`relative w-full ${width} animate-fade-up rounded-3xl bg-surface p-6 shadow-pop`}
+        className={`relative max-h-[calc(100dvh-2rem)] w-full ${width} animate-fade-up overflow-y-auto rounded-3xl bg-surface p-6 shadow-pop`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button onClick={onClose} className="absolute top-4 right-4 rounded-lg p-1.5 text-ink-mute hover:bg-sunken hover:text-ink" aria-label="關閉">

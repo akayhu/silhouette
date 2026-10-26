@@ -32,6 +32,8 @@ export interface MediaItem {
   thumb?: string;
   /** 去浮水印區域（套用在這個素材的所有片段） */
   erase?: EraseRegion[];
+  /** 音訊波形（0–1），音樂面板顯示用 */
+  peaks?: number[];
 }
 
 export type EraseMode = 'fill' | 'blur' | 'mosaic';
@@ -93,6 +95,15 @@ export interface AudioClip {
 
 export type CaptionAnimation = 'none' | 'fade' | 'pop' | 'typewriter' | 'slide';
 
+/** 文字陰影：blur、distance 是相對字級的百分比，angle 0° = 往右、90° = 往下 */
+export interface CaptionShadow {
+  color: string;
+  opacity: number;
+  blur: number;
+  distance: number;
+  angle: number;
+}
+
 export interface CaptionStyle {
   font: string;
   size: number;
@@ -102,7 +113,11 @@ export interface CaptionStyle {
   bold: boolean;
   /** 0 = 頂端、1 = 底端 */
   y: number;
+  /** 水平中心位置，0 = 最左、1 = 最右；沒有設定 = 置中 */
+  x?: number;
   animation: CaptionAnimation;
+  /** 沒有設定 = 無陰影 */
+  shadow?: CaptionShadow | null;
 }
 
 export interface Caption {

@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
-import { Film, ImageIcon, Layers, Loader2, Music, Plus, Trash2, UploadCloud } from 'lucide-react';
+import { Film, ImageIcon, Layers, Loader2, Music, Plus, Sparkles, Trash2, UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatTime, uid } from '../../lib/format';
 import { kindOf, probe, videoPoster } from '../../lib/media';
 import type { MediaItem } from '../../lib/types';
-import { useToast } from '../../components/ui';
+import { ProBadge, useToast, useUpgrade } from '../../components/ui';
+import { useAuth } from '../../lib/auth';
+import { useAutoEdit } from '../AutoEditDialog';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 import { DEFAULT_OVERLAY_TRANSFORM, freeOverlayLane } from '../../lib/timeline';
@@ -43,6 +45,15 @@ export function addToOverlay(m: MediaItem) {
   select({ type: 'overlay', id: item.id });
 }
 
+const AUTO_KEY = 'pianke.autoEdit';
+const readAuto = () => {
+  try {
+    return localStorage.getItem(AUTO_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+};
+
 export function MediaPanel() {
   const projectId = useEditor((s) => s.projectId)!;
   const media = useEditor((s) => s.data.media);
@@ -53,6 +64,21 @@ export function MediaPanel() {
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const toast = useToast();
+  const upgrade = useUpgrade();
+  const { user } = useAuth();
+  const isPro = user?.plan === 'pro';
+  // 上傳影片後自動剪空拍、上字幕（專業版）；開關記在這台瀏覽器
+  const [autoOn, setAutoOn] = useState(readAuto);
+  const autoEdit = isPro && autoOn;
+  const toggleAuto = (on: boolean) => {
+    if (on && !isPro) return upgrade('上傳後自動剪輯是專業版功能，會自動剪掉空拍並加上字幕。');
+    setAutoOn(on);
+    try {
+      localStorage.setItem(AUTO_KEY, on ? 'on' : 'off');
+    } catch {
+      /* 無法儲存就只在這次有效 */
+    }
+  };
 
   const upload = async (files: FileList | File[]) => {
     for (const file of Array.from(files)) {
@@ -71,7 +97,9 @@ export function MediaPanel() {
         const m: MediaItem = { id: uid(), name: file.name.replace(/\.[^.]+$/, ''), kind, url, origin: 'upload', thumb, ...meta };
         const first = useEditor.getState().data.clips.length === 0 && kind !== 'audio';
         useEditor.getState().commit((d) => ({ ...d, media: [...d.media, m] }));
-        if (first) addToTimeline(m);
+        // 影片交給自動剪輯，分析完讓使用者選版本後才放上時間軸
+        if (kind === 'video' && autoEdit) useAutoEdit.getState().enqueue(m);
+        else if (first) addToTimeline(m);
       } catch (err) {
         toast((err as Error).message, 'error');
       } finally {
@@ -108,7 +136,17 @@ export function MediaPanel() {
         <span className="mt-2 text-sm font-bold">上傳影片、圖片、音樂</span>
         <span className="mt-0.5 text-xs text-ink-mute">點一下或把檔案拖進來</span>
       </button>
-      <input ref={input} type="file" multiple accept="video/*,image/*,audio/*" className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
+      <input ref={input} type="file" multiple accept="video/*,image/*,audio/*" className="hidden" onChange={(e) => (e.target.files && upload(e.target.files), (e.target.value = ''))} />
+      <label className="mt-2.5 flex cursor-pointer items-start gap-2.5 rounded-xl bg-sunken/60 px-3 py-2.5">
+        <input type="checkbox" checked={autoEdit} onChange={(e) => toggleAuto(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-brand" />
+        <span className="min-w-0 text-xs">
+          <span className="flex items-center gap-1.5 font-bold">
+            <Sparkles className="size-3.5 text-coral" /> 上傳影片後自動剪輯
+            {!isPro && <ProBadge />}
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-mute">剪掉沒有人聲的空拍、自動上字幕，完成後讓你選剪輯前或剪輯後的版本。</span>
+        </span>
+      </label>
 
       <div className="mt-4 space-y-2">
         {uploading.map((u) => (

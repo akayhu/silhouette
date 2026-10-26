@@ -1,15 +1,33 @@
 import { Engine } from './engine';
 import { supportedExportMimes, waitForReady } from './exportSupport';
-import { totalDuration } from './timeline';
+import {
+  DEFAULT_SETTINGS,
+  EncoderError,
+  encodeOffline,
+  mixAudio,
+  needsRealtime,
+  offlineConfig,
+  videoBitrate,
+  type ExportBitrate,
+  type ExportFps,
+  type ExportReporter,
+  type ExportSettings,
+  type OfflineConfig,
+} from './offlineExport';
+import { aspectSize, totalDuration } from './timeline';
 import type { ProjectData } from './types';
 
-export interface ExportOptions {
+export type { ExportStep } from './offlineExport';
+
+export interface ExportOptions extends ExportReporter {
   signal: AbortSignal;
   quality: 720 | 1080;
+  /** 畫質（位元率等級），預設標準 */
+  bitrate?: ExportBitrate;
+  /** 每秒格數，預設 30 */
+  fps?: ExportFps;
   watermark: boolean;
   test?: boolean;
-  onStage: (stage: string) => void;
-  onProgress: (progress: number) => void;
 }
 
 export function validateExport(data: ProjectData) {
@@ -34,9 +52,142 @@ export function validateExport(data: ProjectData) {
   return duration;
 }
 
-/** One export owns its engine, streams, recorder, timers and cancellation scope. */
-export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData, options: ExportOptions) {
+export type ExportMode = 'offline' | 'realtime';
+export interface ExportResult {
+  blob: Blob;
+  ext: 'mp4' | 'webm';
+  duration: number;
+  mode: ExportMode;
+}
+
+/** 這個專案在這個瀏覽器會用哪種方式匯出（給匯出視窗顯示說明） */
+function settingsOf(options: Pick<ExportOptions, 'quality' | 'bitrate' | 'fps'>): ExportSettings {
+  return { quality: options.quality, bitrate: options.bitrate ?? DEFAULT_SETTINGS.bitrate, fps: options.fps ?? DEFAULT_SETTINGS.fps };
+}
+
+export async function exportModeFor(data: ProjectData, settings: ExportSettings): Promise<ExportMode | null> {
+  const { width, height } = aspectSize(data.aspect, settings.quality);
+  if (!needsRealtime(data) && (await offlineConfig(width, height, settings))) return 'offline';
+  return supportedExportMimes().length ? 'realtime' : null;
+}
+
+/** 檢查輸出的影片能播放，尺寸和長度都正確 */
+async function verifyOutput(blob: Blob, width: number, height: number, duration: number, signal: AbortSignal) {
+  const video = document.createElement('video');
+  const url = URL.createObjectURL(blob);
+  try {
+    video.preload = 'auto';
+    video.src = url;
+    await waitForReady(video, ['loadeddata', 'loadedmetadata'],
+      () => video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0,
+      () => !!video.error, '輸出影片', signal);
+    if (video.videoWidth !== width || video.videoHeight !== height) throw new Error('輸出影片尺寸不正確，請降低畫質後重試。');
+    // Some WebM recorders do not write a finite duration until the player indexes the file.
+    if (Number.isFinite(video.duration) && Math.abs(video.duration - duration) > Math.max(1, duration * 0.02)) {
+      throw new Error(`輸出影片長度不完整（預期 ${duration.toFixed(1)} 秒，實際 ${video.duration.toFixed(1)} 秒），請重新匯出。`);
+    }
+  } finally {
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * 先用逐格離線匯出（WebCodecs）；瀏覽器不支援、或專案有變速的聲音時改用即時錄製。
+ * 逐格匯出中途失敗（不是使用者取消）也會自動改用即時錄製再試一次。
+ */
+export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData, options: ExportOptions): Promise<ExportResult> {
+  const duration = Math.min(validateExport(source), options.test ? 5 : Infinity);
+  const config = needsRealtime(source) ? null : await offlineConfig(canvas.width, canvas.height, settingsOf(options));
+  if (config) {
+    try {
+      return await exportOffline(canvas, source, duration, config, options);
+    } catch (error) {
+      if (options.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error;
+      if (!supportedExportMimes().length) throw error;
+      console.warn('逐格匯出失敗，改用即時錄製', error);
+      options.onStage('逐格匯出失敗，改用即時錄製…');
+      options.onProgress(0);
+    }
+  }
+  const result = await exportRealtime(canvas, source, options);
+  return { ...result, ext: result.ext as 'mp4' | 'webm', mode: 'realtime' };
+}
+
+async function exportOffline(
+  canvas: HTMLCanvasElement,
+  source: ProjectData,
+  duration: number,
+  config: OfflineConfig,
+  options: ExportOptions,
+): Promise<ExportResult> {
   const { signal, onStage, onProgress } = options;
+  const used = new Set([...source.clips, ...source.audio, ...source.overlays].map((c) => c.mediaId));
+  const data = { ...source, media: source.media.filter((m) => used.has(m.id)) };
+  const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+  window.addEventListener('beforeunload', beforeUnload);
+  const engine = new Engine(canvas, { speakers: false, watermark: options.watermark });
+  try {
+    options.onStep?.('prepare');
+    onStage('檢查素材與字型…');
+    engine.offline = true;
+    engine.setData(data);
+    await Promise.all([engine.ready(signal), document.fonts.ready]);
+    signal.throwIfAborted();
+    // Test capture before encoding: a cross-origin canvas must not produce a broken download.
+    canvas.toDataURL('image/png');
+    options.onStep?.('audio');
+    onStage('混合聲音…');
+    const mixed = await mixAudio(data, duration, signal);
+    onProgress(0.05);
+    // 編碼器自動降級：硬體編碼失敗就換軟體編碼、AAC 失敗就換 Opus，從頭重新編碼，不讓使用者看到錯誤
+    let v = 0;
+    let a = 0;
+    while (true) {
+      try {
+        const blob = await encodeOffline(engine, canvas, mixed, duration, config.video[v], config.audio[a], signal, options);
+        onStage('檢查輸出影片…');
+        try {
+          await verifyOutput(blob, canvas.width, canvas.height, duration, signal);
+        } catch (error) {
+          if (signal.aborted) throw error;
+          // 編出來的檔案打不開或長度不對，也當成這組編碼設定有問題
+          throw new EncoderError('video', error instanceof Error ? error.message : String(error), { cause: error });
+        }
+        onProgress(1);
+        return { blob, ext: 'mp4', duration, mode: 'offline' };
+      } catch (error) {
+        if (!(error instanceof EncoderError) || signal.aborted) throw error;
+        const next = error.part === 'audio' ? config.audio[a + 1] : config.video[v + 1];
+        if (!next) throw error;
+        console.warn(`${error.part === 'audio' ? '聲音' : '畫面'}編碼失敗，改用下一組設定重新編碼`, error);
+        if (error.part === 'audio') a++;
+        else v++;
+        onStage(
+          error.part === 'audio'
+            ? '聲音編碼失敗，改用其他格式重新編碼…'
+            : config.video[v].hardwareAcceleration === 'prefer-software'
+              ? '硬體編碼失敗，改用軟體編碼重新匯出…'
+              : '編碼失敗，改用其他編碼設定重新匯出…',
+        );
+        onProgress(0.05);
+      }
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'SecurityError') throw new Error('素材的跨網域設定不允許匯出，請下載素材後重新上傳。');
+    throw error;
+  } finally {
+    window.removeEventListener('beforeunload', beforeUnload);
+    engine.destroy();
+  }
+}
+
+/** One export owns its engine, streams, recorder, timers and cancellation scope. */
+async function exportRealtime(canvas: HTMLCanvasElement, source: ProjectData, options: ExportOptions) {
+  const { signal, onStage, onProgress } = options;
+  const settings = settingsOf(options);
+  const { fps } = settings;
   const duration = Math.min(validateExport(source), options.test ? 5 : Infinity);
   const mimes = supportedExportMimes();
   if (!mimes.length) throw new Error('此瀏覽器不支援影片匯出，請改用最新版 Chrome、Edge 或 Safari。');
@@ -64,6 +215,7 @@ export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData
   document.addEventListener('visibilitychange', hidden);
   window.addEventListener('beforeunload', beforeUnload);
   try {
+    options.onStep?.('prepare');
     onStage('檢查素材與字型…');
     engine = new Engine(canvas, { speakers: false, watermark: options.watermark });
     engine.onError = fail;
@@ -94,7 +246,7 @@ export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData
     let videoTrack = canvasStream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
     if (typeof videoTrack.requestFrame !== 'function') {
       canvasStream.getTracks().forEach((track) => track.stop());
-      canvasStream = canvas.captureStream(30);
+      canvasStream = canvas.captureStream(fps);
       videoTrack = canvasStream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
     }
     stream = new MediaStream([...canvasStream.getVideoTracks(), ...engine.recordDest.stream.getAudioTracks()]);
@@ -106,6 +258,7 @@ export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData
         if (ending) return;
         ending = true;
         engine!.pause();
+        options.onStep?.('finish');
         onStage('整理影片檔案…');
         stopTimer = setTimeout(() => reject(new Error('影片檔案整理逾時，請以 720p 重試。')), 10_000);
         if (recorder?.state !== 'inactive') recorder?.stop();
@@ -113,7 +266,7 @@ export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData
       // isTypeSupported is advisory; construction/start can still fail at runtime.
       for (const mime of mimes) {
         try {
-          const candidate = new MediaRecorder(stream!, { mimeType: mime, videoBitsPerSecond: options.quality === 1080 ? 10_000_000 : 5_000_000 });
+          const candidate = new MediaRecorder(stream!, { mimeType: mime, videoBitsPerSecond: videoBitrate(settings) });
           chunks = [];
           candidate.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
           candidate.onerror = () => fail(new Error('瀏覽器錄製失敗，可能記憶體不足。請以 720p 或較短影片重試。'));
@@ -137,7 +290,10 @@ export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData
         }
       }
       if (!recorder) return reject(new Error('無法啟動影片編碼器，請以 720p 重試或更換瀏覽器。'));
-      onStage(`匯出中（${recorder.mimeType.includes('mp4') ? 'MP4' : 'WebM'}）…`);
+      onStage(`即時錄製中（${recorder.mimeType.includes('mp4') ? 'MP4' : 'WebM'}）…`);
+      options.onStep?.('record');
+      const totalFrames = Math.max(1, Math.ceil(duration * fps - 1e-6));
+      options.onFrames?.(0, totalFrames);
       let lastTime = 0;
       let lastAdvance = performance.now();
       let previousFrame = lastAdvance;
@@ -147,12 +303,13 @@ export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData
         if (now - previousFrame > 1500 && !ending) return fail(new Error('裝置忙碌導致畫面中斷，請關閉其他程式或改用 720p 重試。'));
         previousFrame = now;
         // Explicit capture also records unchanged images and the final frame.
-        if (time - lastCaptured >= 1 / 30 || time >= duration) {
+        if (time - lastCaptured >= 1 / fps - 1e-4 || time >= duration) {
           videoTrack.requestFrame?.();
           lastCaptured = time;
         }
         if (time > lastTime) { lastTime = time; lastAdvance = now; }
         onProgress(Math.min(time / duration, 0.99));
+        options.onFrames?.(Math.min(totalFrames, Math.round(time * fps)), totalFrames);
         if (time >= duration) stop();
       };
       engine!.onEnded = stop;
@@ -169,24 +326,7 @@ export async function exportVideo(canvas: HTMLCanvasElement, source: ProjectData
       void engine!.play().catch((error: unknown) => fail(error instanceof Error ? error : new Error(String(error))));
     });
     onStage('檢查輸出影片…');
-    const video = document.createElement('video');
-    const url = URL.createObjectURL(blob);
-    try {
-      video.preload = 'auto';
-      video.src = url;
-      await waitForReady(video, ['loadeddata', 'loadedmetadata'],
-        () => video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0,
-        () => !!video.error, '輸出影片', scope.signal);
-      if (video.videoWidth !== canvas.width || video.videoHeight !== canvas.height) throw new Error('輸出影片尺寸不正確，請降低畫質後重試。');
-      // Some WebM recorders do not write a finite duration until the player indexes the file.
-      if (Number.isFinite(video.duration) && Math.abs(video.duration - duration) > Math.max(1, duration * 0.02)) {
-        throw new Error(`輸出影片長度不完整（預期 ${duration.toFixed(1)} 秒，實際 ${video.duration.toFixed(1)} 秒），請保持分頁在前景後重新匯出。`);
-      }
-    } finally {
-      video.removeAttribute('src');
-      video.load();
-      URL.revokeObjectURL(url);
-    }
+    await verifyOutput(blob, canvas.width, canvas.height, duration, scope.signal);
     if (failure) throw failure;
     signal.throwIfAborted();
     onProgress(1);

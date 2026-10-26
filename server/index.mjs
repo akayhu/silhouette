@@ -51,6 +51,15 @@ db.exec(`
     user_id TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS exports (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    file TEXT NOT NULL,
+    meta TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -363,7 +372,7 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   if (user.role === 'admin') return res.status(400).json({ error: '不能刪除管理者帳號' });
   db.exec('BEGIN');
   try {
-    for (const t of ['sessions', 'projects', 'voices', 'project_creations']) db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(user.id);
+    for (const t of ['sessions', 'projects', 'voices', 'project_creations', 'exports']) db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(user.id);
     db.prepare(`DELETE FROM users WHERE id=?`).run(user.id);
     db.exec('COMMIT');
   } catch (err) {
@@ -439,6 +448,7 @@ app.delete('/api/projects/:id', requireAuth, (req, res) => {
   const row = ownProject(req, res);
   if (!row) return;
   db.prepare(`DELETE FROM projects WHERE id=?`).run(row.id);
+  db.prepare(`DELETE FROM exports WHERE project_id=?`).run(row.id);
   fs.rmSync(path.join(UPLOAD_DIR, req.user.id, row.id), { recursive: true, force: true });
   res.json({ ok: true });
 });
@@ -456,6 +466,105 @@ app.post('/api/projects/:id/media', requireAuth, (req, res) => {
   req.pipe(out);
   out.on('finish', () => res.json({ url: `/uploads/${req.user.id}/${row.id}/${fileName}` }));
   out.on('error', () => res.status(500).json({ error: '上傳失敗' }));
+});
+
+// ---------- 匯出的成品（存到帳戶，每個專案只留最近幾支） ----------
+const EXPORTS_PER_PROJECT = 3;
+const MAX_EXPORT_BYTES = 2 * 1024 ** 3;
+
+const exportRow = (r) => ({
+  ...JSON.parse(r.meta),
+  id: r.id,
+  size: r.size,
+  createdAt: r.created_at,
+  url: `/uploads/${r.user_id}/${r.project_id}/exports/${r.file}`,
+});
+
+/** 只接受匯出視窗會送的欄位，避免任意內容寫進資料庫 */
+function exportMeta(raw) {
+  let m;
+  try {
+    m = JSON.parse(decodeURIComponent(String(raw || '')));
+  } catch {
+    return null;
+  }
+  const num = (v, min, max) => (Number.isFinite(v) && v >= min && v <= max ? v : null);
+  const meta = {
+    ext: ['mp4', 'webm'].includes(m?.ext) ? m.ext : null,
+    width: num(m?.width, 16, 8192),
+    height: num(m?.height, 16, 8192),
+    quality: [720, 1080].includes(m?.quality) ? m.quality : null,
+    fps: [24, 30, 60].includes(m?.fps) ? m.fps : null,
+    bitrate: ['high', 'standard', 'small'].includes(m?.bitrate) ? m.bitrate : null,
+    duration: num(m?.duration, 0, 24 * 3600),
+    mode: ['offline', 'realtime'].includes(m?.mode) ? m.mode : null,
+  };
+  return Object.values(meta).every((v) => v !== null) ? meta : null;
+}
+
+app.get('/api/projects/:id/exports', requireAuth, (req, res) => {
+  const row = ownProject(req, res);
+  if (!row) return;
+  const rows = db.prepare(`SELECT * FROM exports WHERE project_id=? AND user_id=? ORDER BY created_at DESC`).all(row.id, req.user.id);
+  res.json({ exports: rows.map(exportRow) });
+});
+
+app.post('/api/projects/:id/exports', requireAuth, (req, res) => {
+  const row = ownProject(req, res);
+  if (!row) return;
+  const meta = exportMeta(req.headers['x-export-meta']);
+  if (!meta) return res.status(400).json({ error: '匯出資訊不完整' });
+  if (Number(req.headers['content-length']) > MAX_EXPORT_BYTES) return res.status(413).json({ error: '影片太大，無法存到帳戶' });
+  const id = randomUUID();
+  const dir = path.join(UPLOAD_DIR, req.user.id, row.id, 'exports');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = `${id}.${meta.ext}`;
+  const temp = path.join(dir, `${id}.part`);
+  const out = fs.createWriteStream(temp);
+  let size = 0;
+  let failed = false;
+  const abort = (status, error) => {
+    if (failed) return;
+    failed = true;
+    out.destroy();
+    fs.rmSync(temp, { force: true });
+    if (!res.headersSent) res.status(status).json({ error });
+  };
+  req.on('data', (chunk) => {
+    size += chunk.length;
+    if (size > MAX_EXPORT_BYTES) {
+      abort(413, '影片太大，無法存到帳戶');
+      req.destroy();
+    }
+  });
+  req.on('aborted', () => abort(400, '上傳中斷'));
+  req.pipe(out);
+  out.on('error', () => abort(500, '儲存失敗'));
+  out.on('finish', () => {
+    if (failed) return;
+    if (!size) return abort(400, '沒有收到影片');
+    fs.renameSync(temp, path.join(dir, file));
+    db.prepare(`INSERT INTO exports (id, user_id, project_id, file, meta, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+      id, req.user.id, row.id, file, JSON.stringify(meta), size, now(),
+    );
+    // 超過數量就刪掉最舊的
+    const old = db.prepare(`SELECT * FROM exports WHERE project_id=? AND user_id=? ORDER BY created_at DESC LIMIT -1 OFFSET ?`).all(row.id, req.user.id, EXPORTS_PER_PROJECT);
+    for (const o of old) {
+      db.prepare(`DELETE FROM exports WHERE id=?`).run(o.id);
+      fs.rmSync(path.join(dir, o.file), { force: true });
+    }
+    res.json({ export: exportRow(db.prepare(`SELECT * FROM exports WHERE id=?`).get(id)) });
+  });
+});
+
+app.delete('/api/projects/:id/exports/:exportId', requireAuth, (req, res) => {
+  const row = ownProject(req, res);
+  if (!row) return;
+  const ex = db.prepare(`SELECT * FROM exports WHERE id=? AND project_id=? AND user_id=?`).get(req.params.exportId, row.id, req.user.id);
+  if (!ex) return res.status(404).json({ error: '找不到這支影片' });
+  db.prepare(`DELETE FROM exports WHERE id=?`).run(ex.id);
+  fs.rmSync(path.join(UPLOAD_DIR, req.user.id, row.id, 'exports', ex.file), { force: true });
+  res.json({ ok: true });
 });
 
 // 只讓本人讀取自己的檔案；express.static 會處理 Range，影片才能拖曳播放

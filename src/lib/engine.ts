@@ -1,6 +1,7 @@
 import type { Caption, ClipMotion, ClipTransform, MediaItem, OverlayClip, ProjectData, StickerItem, TransitionType } from './types';
 import { stickerImage, prepareStickers } from './stickers';
 import { waitForReady } from './exportSupport';
+import type { DecodedFrame, FrameDecoder } from './frameDecoder';
 import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
 import { applyBeauty, isBeautyOn } from './beauty';
@@ -45,6 +46,12 @@ export class Engine {
   private clockStartTime = 0;
   time = 0;
   playing = false;
+  /** 逐格匯出：不即時播放，但字幕、貼紙的動畫照時間呈現 */
+  offline = false;
+  /** 逐格匯出時用來循序解碼影片；沒有或解碼失敗就改用 <video> 跳轉 */
+  decoder: FrameDecoder | null = null;
+  /** 這一格解碼好的畫面（key：c:片段 id／o:疊加片段 id） */
+  private decoded = new Map<string, DecodedFrame>();
   duration = 0;
   onTime?: (t: number) => void;
   onEnded?: () => void;
@@ -132,8 +139,9 @@ export class Engine {
     el.addEventListener('error', () => this.fail(new Error('素材播放失敗，請重新上傳後再匯出。')));
     if (el instanceof HTMLVideoElement) {
       el.playsInline = true;
-      el.addEventListener('seeked', () => !this.destroyed && !this.playing && this.render());
-      el.addEventListener('loadeddata', () => !this.destroyed && !this.playing && this.render());
+      // 逐格匯出時由 renderAt 自己畫，不要每次跳轉都多畫一次
+      el.addEventListener('seeked', () => !this.destroyed && !this.playing && !this.offline && this.render());
+      el.addEventListener('loadeddata', () => !this.destroyed && !this.playing && !this.offline && this.render());
     }
     const gain = this.audioCtx.createGain();
     this.audioCtx.createMediaElementSource(el).connect(gain);
@@ -292,8 +300,8 @@ export class Engine {
     }
   }
 
-  render() {
-    if (!this.data) return;
+  render(): boolean {
+    if (!this.data) return false;
     const { ctx, canvas } = this;
     const W = canvas.width;
     const H = canvas.height;
@@ -302,7 +310,7 @@ export class Engine {
     // 影片還在跳轉時保留上一格畫面，避免閃白
     const overlays = (this.data.overlays ?? []).filter((o) => this.time >= o.start && this.time < overlayEnd(o)).sort((a, b) => a.lane - b.lane);
     const overlaySources = overlays.map((o) => this.overlaySource(o));
-    if (sources.some((s) => !s) || overlaySources.some((s) => !s)) return;
+    if (sources.some((s) => !s) || overlaySources.some((s) => !s)) return false;
 
     ctx.save();
     ctx.fillStyle = '#ece9e2';
@@ -331,7 +339,7 @@ export class Engine {
       if (this.time < st.start || this.time >= st.end) continue;
       const img = stickerImage(st.stickerId, () => !this.destroyed && !this.playing && this.render());
       if (!img) continue;
-      const pose = stickerPose(st, this.time, W, H, this.playing);
+      const pose = stickerPose(st, this.time, W, H, this.playing || this.offline);
       ctx.save();
       ctx.globalAlpha = st.opacity * pose.alpha;
       ctx.translate(pose.cx, pose.cy);
@@ -341,10 +349,50 @@ export class Engine {
     }
 
     for (const c of this.data.captions) {
-      if (this.time >= c.start && this.time < c.end) drawCaption(ctx, c, this.time, W, H, this.playing);
+      if (this.time >= c.start && this.time < c.end) drawCaption(ctx, c, this.time, W, H, this.playing || this.offline);
     }
     if (this.opts.watermark) drawWatermark(ctx, W, H);
     ctx.restore();
+    return true;
+  }
+
+  /**
+   * 逐格匯出用：把畫面準確畫成時間 t 的那一格。
+   * 每個用到的影片先精準跳到該格、等畫面解碼好才畫，不受電腦忙碌或分頁在背景影響。
+   */
+  /** 時間 t 畫面上會出現的影片，以及各自要取素材的第幾秒（key：c:片段 id／o:疊加片段 id） */
+  videoTargets(t: number) {
+    const targets: { key: string; url: string; el: HTMLMediaElement; time: number }[] = [];
+    for (const c of activeClips(this.placed, t)) {
+      const node = this.videos.get(slotKey(c));
+      const url = this.mediaById.get(c.mediaId)?.url;
+      if (node && url) targets.push({ key: 'c:' + c.id, url, el: node.el, time: c.in + (t - c.start) * c.speed });
+    }
+    for (const o of this.data.overlays ?? []) {
+      const node = this.overlayNodes.get(o.id);
+      const url = this.mediaById.get(o.mediaId)?.url;
+      if (node && url && t >= o.start && t < overlayEnd(o)) targets.push({ key: 'o:' + o.id, url, el: node.el, time: o.in + (t - o.start) * o.speed });
+    }
+    return targets;
+  }
+
+  async renderAt(t: number, signal?: AbortSignal) {
+    this.offline = true;
+    this.time = Math.max(0, Math.min(t, this.duration));
+    const targets = this.videoTargets(this.time);
+    this.decoded.clear();
+    await Promise.all(
+      targets.map(async ({ key, url, el, time }) => {
+        const frame = this.decoder ? await this.decoder.frameAt(key, url, time) : null;
+        const at = Math.max(0, Math.min(time, Number.isFinite(el.duration) ? el.duration - 0.001 : time));
+        if (frame) return void this.decoded.set(key, frame);
+        if (!el.paused) el.pause();
+        if (!el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - at) < 0.0005) return;
+        el.currentTime = at;
+        return waitForReady(el, ['seeked'], () => !el.seeking && el.readyState >= 2, () => !!el.error, '影片素材', signal, 20_000);
+      }),
+    );
+    if (!this.render()) throw new Error(`第 ${this.time.toFixed(2)} 秒的畫面無法取得，請確認素材可播放後重試。`);
   }
 
   /** 畫一個片段的畫面：模糊背景＋依畫面設定擺放的影像（含去浮水印） */
@@ -380,6 +428,8 @@ export class Engine {
   }
 
   private overlaySource(o: OverlayClip): { el: CanvasImageSource; size: [number, number] } | null {
+    const decoded = this.offline && this.decoded.get('o:' + o.id);
+    if (decoded) return decoded;
     const v = this.overlayNodes.get(o.id)?.el as HTMLVideoElement | undefined;
     if (v && v.readyState >= 2 && v.videoWidth) return { el: v, size: [v.videoWidth, v.videoHeight] };
     const img = this.images.get(o.mediaId);
@@ -411,6 +461,8 @@ export class Engine {
   }
 
   private frameSource(clip: PlacedClip): { el: CanvasImageSource; size: [number, number] } | null {
+    const decoded = this.offline && this.decoded.get('c:' + clip.id);
+    if (decoded) return decoded;
     const v = this.videos.get(slotKey(clip))?.el as HTMLVideoElement | undefined;
     if (v && v.readyState >= 2 && v.videoWidth) return { el: v, size: [v.videoWidth, v.videoHeight] };
     const img = this.images.get(clip.mediaId);

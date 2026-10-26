@@ -1,3 +1,4 @@
+import type { ExportInfo, SavedExport } from './exportStore';
 import type { AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, User, Voice } from './types';
 
 export interface TtsResult {
@@ -47,6 +48,29 @@ export const api = {
       method: 'POST',
       body: file,
       headers: { 'X-Filename': encodeURIComponent(name), 'Content-Type': 'application/octet-stream' },
+    }),
+
+  exports: (id: string) => request<{ exports: SavedExport[] }>(`/api/projects/${id}/exports`),
+  deleteExport: (id: string, exportId: string) => request(`/api/projects/${id}/exports/${exportId}`, json('DELETE')),
+  /** 匯出成品存到帳戶；用 XHR 才拿得到上傳進度 */
+  saveExport: (id: string, blob: Blob, info: ExportInfo, onProgress?: (p: number) => void, signal?: AbortSignal) =>
+    new Promise<{ export: SavedExport }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/projects/${id}/exports`);
+      xhr.withCredentials = true;
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.setRequestHeader('X-Export-Meta', encodeURIComponent(JSON.stringify(info)));
+      xhr.responseType = 'json';
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+      xhr.onload = () => {
+        const body = xhr.response ?? {};
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+        else reject(new ApiError(body.error || '存到帳戶失敗，請稍後再試', xhr.status, body.code));
+      };
+      xhr.onerror = () => reject(new ApiError('網路中斷，存到帳戶失敗', 0));
+      xhr.onabort = () => reject(new DOMException('已取消', 'AbortError'));
+      signal?.addEventListener('abort', () => xhr.abort(), { once: true });
+      xhr.send(blob);
     }),
 
   adminStats: (days: number) => request<AdminStats>(`/api/admin/stats?days=${days}`),

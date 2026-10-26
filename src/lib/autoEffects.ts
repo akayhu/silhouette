@@ -1,8 +1,8 @@
 import { decodeAudio, sliceMono } from './media';
-import { clipLength, isLocked, layoutMain, newCaption, remap, rippleRemove, strip } from './timeline';
+import { captionFromWords, clipLength, isLocked, layoutMain, remap, rippleRemove, strip } from './timeline';
 import { analyzeRange, complement, type Range } from './autoEdit';
 import { uid } from './format';
-import type { Caption, ClipMotion, MediaItem, ProjectData, StickerItem, TransitionType, VideoClip } from './types';
+import type { Caption, CaptionWord, ClipMotion, MediaItem, ProjectData, StickerItem, TransitionType, VideoClip } from './types';
 
 /**
  * AI 自動剪輯：依影片內容加上運鏡（放大／縮小／特寫／震動）、轉場、字幕動畫和貼紙。
@@ -88,7 +88,7 @@ async function cutAndCaption(d: ProjectData, opts: AutoEffectOptions, counts: Au
   const placed = layoutMain(d.clips);
   const videos = placed.filter((c) => media.get(c.mediaId)?.kind === 'video');
   const cuts: Range[] = [];
-  const lines: { start: number; end: number; text: string }[] = [];
+  const lines: { start: number; end: number; text: string; words?: CaptionWord[] }[] = [];
   for (const [n, c] of videos.entries()) {
     const label = videos.length > 1 ? `（${n + 1}/${videos.length}）` : '';
     const r = await analyzeRange(media.get(c.mediaId)!, c.in, c.out, (stage, progress) =>
@@ -105,7 +105,10 @@ async function cutAndCaption(d: ProjectData, opts: AutoEffectOptions, counts: Au
         if (tb - ta >= 0.05) cuts.push([ta, tb]);
       }
     }
-    for (const s of r.segments) lines.push({ start: toT(s.start), end: Math.min(c.end, toT(s.end)), text: s.text });
+    for (const s of r.segments) {
+      const words = s.words?.map((w) => ({ ...w, start: toT(w.start), end: Math.min(c.end, toT(w.end)) }));
+      lines.push({ start: toT(s.start), end: Math.min(c.end, toT(s.end)), text: s.text, words });
+    }
   }
 
   let out = d;
@@ -119,7 +122,8 @@ async function cutAndCaption(d: ProjectData, opts: AutoEffectOptions, counts: Au
     const captions = lines.flatMap((l) => {
       const start = remap(l.start, cuts);
       const end = remap(l.end, cuts);
-      return end - start >= 0.2 ? [newCaption(start, end, l.text, style)] : [];
+      const words = l.words?.map((w) => ({ ...w, start: remap(w.start, cuts), end: remap(w.end, cuts) }));
+      return end - start >= 0.2 ? [captionFromWords(start, end, l.text, style, words)] : [];
     });
     out = { ...out, captions };
     counts.subtitles = captions.length;

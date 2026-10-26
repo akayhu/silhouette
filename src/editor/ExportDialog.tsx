@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check, CheckCircle2, CloudUpload, Download, Film, HardDrive, Loader2, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Check, CheckCircle2, CloudUpload, Download, Film, HardDrive, Loader2, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { localExports, type ExportInfo, type LocalExport, type SavedExport } from '../lib/exportStore';
 import { useAuth } from '../lib/auth';
@@ -11,6 +11,8 @@ import { aspectSize } from '../lib/timeline';
 import type { ProjectData } from '../lib/types';
 import { Button, Modal, ProBadge, useToast, useUpgrade } from '../components/ui';
 import { useEditor } from './store';
+import { checkCaptions, summarizeIssues } from '../lib/captionCheck';
+import { fixCaptionIssues } from './panels/CaptionCheck';
 
 type Quality = 720 | 1080;
 
@@ -221,6 +223,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [recording, setRecording] = useState(false);
   const mimes = supportedExportMimes();
   const data = useEditor((s) => s.data);
+  // 匯出前的字幕檢查：匯出後才發現字幕讀不完或疊在一起就要重來
+  const captionIssues = useMemo(() => checkCaptions(data.captions), [data.captions]);
   // undefined＝還在檢查；null＝這個瀏覽器兩種方式都不支援
   const [mode, setMode] = useState<ExportMode | null | undefined>(undefined);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -418,6 +422,24 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             <p role="alert" className="mt-2 text-sm text-red-600">此瀏覽器不支援匯出，請更換最新版 Chrome、Edge 或 Safari。</p>
           ) : (
             <p className="mt-3 text-xs text-ink-mute">檢查匯出方式…</p>
+          )}
+          {captionIssues.length > 0 && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-line px-3 py-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-brand" />
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="font-bold">字幕有 {new Set(captionIssues.map((i) => i.id)).size} 句需要注意</div>
+                <div className="mt-0.5 text-ink-mute">{summarizeIssues(captionIssues)}。可以直接匯出，或先一鍵修正。</div>
+              </div>
+              <button
+                className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-brand hover:bg-brand-soft"
+                onClick={() => {
+                  const r = fixCaptionIssues();
+                  if (r) toast(r.left ? `已修正 ${r.fixed} 處，還有 ${r.left} 個要到「字幕」分頁調整` : `已修正 ${r.fixed} 處`, r.left ? 'info' : 'success');
+                }}
+              >
+                一鍵修正
+              </button>
+            </div>
           )}
           <Button variant="secondary" className="mt-4 w-full" disabled={!mode || duration <= 0} onClick={() => start(true)}>先測試前 5 秒</Button>
           <Button size="lg" className="mt-3 w-full" disabled={!mode || duration <= 0} onClick={() => start()}>

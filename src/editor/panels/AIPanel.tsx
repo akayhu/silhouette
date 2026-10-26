@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Captions, Clapperboard, Loader2, Scissors, Sparkles } from 'lucide-react';
+import { Captions, Clapperboard, FileText, Loader2, Scissors, Sparkles } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
-import { ASR_MODELS, isFiller, transcribe } from '../../lib/asr';
+import { ASR_MODELS, getConverter, isFiller, transcribe } from '../../lib/asr';
+import { captionWords, formatCaptionTime, parseEditTime, replaceCaptionsInRanges } from '../../lib/captions';
+import { alignScript } from '../../lib/scriptAlign';
 import { decodeAudio, detectSilence, sliceMono } from '../../lib/media';
-import { layoutMain, newCaption, rippleRemove } from '../../lib/timeline';
+import { captionFromWords, layoutMain, newCaption, rippleRemove } from '../../lib/timeline';
 import type { Caption, ProjectData } from '../../lib/types';
+import { transcribeTimeline, type TimeRange } from '../../lib/subtitles';
 import { planAutoEffects, type AutoEffectOptions, type AutoEffectPlan, type Intensity } from '../../lib/autoEffects';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { Chips, Slider } from '../Inspector';
@@ -30,6 +33,7 @@ export function AIPanel() {
       )}
       <AutoEffects isPro={isPro} />
       <AutoCaptions isPro={isPro} />
+      <ScriptSync isPro={isPro} />
       <SmartCut isPro={isPro} />
     </div>
   );
@@ -167,38 +171,83 @@ function AutoEffects({ isPro }: { isPro: boolean }) {
   );
 }
 
+type Scope = 'all' | 'selected' | 'range';
+const SCOPES: { id: Scope; label: string }[] = [
+  { id: 'all', label: '整條主軌' },
+  { id: 'selected', label: '選取的項目' },
+  { id: 'range', label: '指定時間' },
+];
+const timeField = 'w-full min-w-0 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs tabular-nums outline-none focus:border-brand';
+const shortTime = (t: number) => formatCaptionTime(t).slice(3);
+
+/** 時間軸上選取的片段與字幕所涵蓋的時間範圍（合併重疊） */
+function selectedRanges(): TimeRange[] {
+  const { data, selected } = useEditor.getState();
+  const placed = layoutMain(data.clips);
+  const ranges: TimeRange[] = [];
+  for (const item of selected) {
+    if (item.type === 'clip') {
+      const c = placed.find((p) => p.id === item.id);
+      if (c) ranges.push([c.start, c.end]);
+    } else if (item.type === 'caption') {
+      const c = data.captions.find((x) => x.id === item.id);
+      if (c) ranges.push([c.start, c.end]);
+    }
+  }
+  return merged(ranges);
+}
+
 function AutoCaptions({ isPro }: { isPro: boolean }) {
   const upgrade = useUpgrade();
   const toast = useToast();
   const [model, setModel] = useState<string>(ASR_MODELS[0].id);
   const [status, setStatus] = useState<string | null>(null);
+  const [scope, setScope] = useState<Scope>('all');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const pickedCount = useEditor((s) => s.selected.filter((i) => i.type === 'clip' || i.type === 'caption').length);
+  const duration = useEditor((s) => s.data.duration);
+
+  const rangeOf = (): TimeRange[] | null => {
+    if (scope === 'selected') {
+      const r = selectedRanges();
+      if (!r.length) {
+        toast('先在時間軸點選要重新辨識的影片片段或字幕', 'error');
+        return null;
+      }
+      return r;
+    }
+    let a = NaN;
+    let b = NaN;
+    try {
+      a = parseEditTime(from || '0');
+      b = parseEditTime(to || String(duration));
+    } catch {
+      /* 格式錯誤，下面統一提示 */
+    }
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b - a < 0.3) {
+      toast('請輸入有效的時間，例如 00:12.500 或 12.5（秒），結束要比開始晚', 'error');
+      return null;
+    }
+    return [[Math.max(0, a), Math.min(duration, b)]];
+  };
 
   const run = async () => {
     if (!isPro) return upgrade('AI 自動字幕是專業版功能，升級後可以自動聽寫影片並產生字幕。');
     if (!ensureUnlocked('caption')) return;
     const { data, commit } = useEditor.getState();
-    const media = new Map(data.media.map((m) => [m.id, m]));
-    const clips = layoutMain(data.clips).filter((c) => media.get(c.mediaId)?.kind === 'video');
-    if (!clips.length) return toast('主軌上還沒有影片', 'error');
-    const style = data.captions[0]?.style;
-    const out: Caption[] = [];
+    if (!data.clips.length) return toast('主軌上還沒有影片', 'error');
+    let ranges: TimeRange[] | undefined;
+    if (scope !== 'all') {
+      const r = rangeOf();
+      if (!r) return;
+      ranges = r;
+    }
     try {
-      for (const [i, clip] of clips.entries()) {
-        const label = clips.length > 1 ? `（${i + 1}/${clips.length}）` : '';
-        setStatus(`讀取音軌${label}`);
-        const buffer = await decodeAudio(media.get(clip.mediaId)!.url);
-        const samples = await sliceMono(buffer, clip.in, clip.out, 16000);
-        const segs = await transcribe(samples, model, (p) =>
-          setStatus(p.phase === 'download' ? `下載語音模型 ${Math.round(p.progress ?? 0)}%（只有第一次）` : `辨識中${label}…`),
-        );
-        for (const s of segs) {
-          const start = clip.start + s.start / clip.speed;
-          const end = Math.min(clip.end, clip.start + s.end / clip.speed);
-          if (end - start > 0.05) out.push(newCaption(start, end, s.text, style));
-        }
-      }
-      commit((d) => ({ ...d, captions: out }));
-      toast(out.length ? `已產生 ${out.length} 句字幕` : '沒有辨識到語音', out.length ? 'success' : 'info');
+      const out = await transcribeTimeline(data, model, setStatus, ranges);
+      commit((d) => ({ ...d, captions: replaceCaptionsInRanges(d.captions, out, ranges) }));
+      const where = ranges ? `（${ranges.map(([a, b]) => `${shortTime(a)}–${shortTime(b)}`).join('、')}）` : '';
+      toast(out.length ? `已產生 ${out.length} 句字幕${where}` : '沒有辨識到語音', out.length ? 'success' : 'info');
     } catch (e) {
       toast('自動字幕失敗：' + (e as Error).message, 'error');
     } finally {
@@ -214,16 +263,126 @@ function AutoCaptions({ isPro }: { isPro: boolean }) {
         </span>
         <h2 className="text-sm font-extrabold">AI 自動字幕</h2>
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-ink-soft">聽寫主軌影片的語音，自動產生繁體中文字幕。會取代目前的字幕，完成後可以逐句修改。</p>
+      <p className="mt-2 text-xs leading-relaxed text-ink-soft">聽寫主軌影片的語音，自動產生繁體中文字幕，完成後可以逐句修改。只想重做某一段時，選「選取的項目」或「指定時間」，其他已經修好的字幕不會被動到。</p>
+      <div className="mt-3">
+        <div className="mb-1.5 text-xs font-semibold text-ink-soft">辨識範圍</div>
+        <Chips options={SCOPES} value={scope} onChange={setScope} />
+        {scope === 'selected' && (
+          <p className="mt-2 text-[11px] text-ink-mute">
+            {pickedCount ? `已選取 ${pickedCount} 個片段或字幕，只重新辨識這些時間。` : '在時間軸點選影片片段或字幕（按住 Shift 可多選）。'}
+          </p>
+        )}
+        {scope === 'range' && (
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+            <TimeInput label="開始時間" value={from} placeholder="00:00.0" onChange={setFrom} />
+            <span className="text-xs text-ink-mute">到</span>
+            <TimeInput label="結束時間" value={to} placeholder={shortTime(duration)} onChange={setTo} />
+          </div>
+        )}
+      </div>
       <div className="mt-3">
         <div className="mb-1.5 text-xs font-semibold text-ink-soft">辨識模型</div>
         <Chips options={ASR_MODELS.map((m) => ({ id: m.id, label: m.label }))} value={model} onChange={setModel} />
       </div>
       <Button className="mt-4 w-full" onClick={run} disabled={!!status}>
         {status ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-        {status ?? '開始產生字幕'}
+        {status ?? (scope === 'all' ? '開始產生字幕' : '重新辨識這個範圍')}
       </Button>
-      <p className="mt-2 text-[11px] text-ink-mute">語音辨識在你的瀏覽器裡執行，影片不會傳到外部服務。</p>
+      <p className="mt-2 text-[11px] text-ink-mute">{scope === 'all' ? '會取代目前的一般字幕，花字保留。' : '只取代這個範圍內的字幕。'}語音辨識在你的瀏覽器裡執行，影片不會傳到外部服務。</p>
+    </section>
+  );
+}
+
+
+/** 時間輸入框：可打「1:23.5」或秒數，旁邊的按鈕帶入播放頭位置 */
+function TimeInput({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <input aria-label={label} className={timeField} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <button
+        className="shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-bold text-brand hover:bg-brand-soft"
+        title="帶入播放頭位置"
+        onClick={() => onChange(shortTime(useEditor.getState().time))}
+      >
+        播放頭
+      </button>
+    </div>
+  );
+}
+
+/** 貼上講稿自動對時：字幕文字用講稿，時間用語音辨識的逐字時間 */
+function ScriptSync({ isPro }: { isPro: boolean }) {
+  const upgrade = useUpgrade();
+  const toast = useToast();
+  const [script, setScript] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+  const [redo, setRedo] = useState(false);
+  // 目前的字幕有逐字時間，就直接拿來對時，不用再辨識一次
+  const timed = useEditor((s) => {
+    const lines = s.data.captions.filter((c) => c.role !== 'flower');
+    return lines.length > 0 && lines.filter((c) => captionWords(c)).length >= lines.length * 0.6;
+  });
+  const chars = [...script.replace(/[\s\p{P}\p{S}]/gu, '')].length;
+
+  const run = async () => {
+    if (!isPro) return upgrade('貼上講稿自動對時是專業版功能。');
+    if (!ensureUnlocked('caption')) return;
+    const { data, commit } = useEditor.getState();
+    if (!data.clips.length) return toast('主軌上還沒有影片', 'error');
+    if (!chars) return toast('請先貼上講稿', 'error');
+    try {
+      const recognized = timed && !redo ? data.captions : await transcribeTimeline(data, ASR_MODELS[0].id, setStatus);
+      setStatus('對齊講稿');
+      const convert = await getConverter();
+      const style = data.captions.find((c) => c.role !== 'flower')?.style;
+      const result = alignScript(script, recognized, style, convert);
+      if (!result.captions.length) return toast('沒有可用的講稿文字', 'error');
+      const rate = result.total ? result.matched / result.total : 0;
+      commit((d) => ({ ...d, captions: [...d.captions.filter((c) => c.role === 'flower'), ...result.captions].sort((a, b) => a.start - b.start) }));
+      if (rate < 0.5) toast(`講稿和影片說的內容差很多（只對上 ${Math.round(rate * 100)}%），時間可能不準，請確認是同一份講稿；可按 ⌘Z 復原`, 'info');
+      else toast(`已依講稿產生 ${result.captions.length} 句字幕，對上 ${Math.round(rate * 100)}% 的字`, 'success');
+    } catch (e) {
+      toast('對時失敗：' + (e as Error).message, 'error');
+    } finally {
+      setStatus(null);
+    }
+  };
+
+  return (
+    <section className="p-4">
+      <div className="flex items-center gap-2">
+        <span className="grid size-8 place-items-center rounded-xl bg-coral-soft text-coral">
+          <FileText className="size-4" />
+        </span>
+        <h2 className="text-sm font-extrabold">貼上講稿自動對時</h2>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+        有講稿就不用逐字校對：貼上正確的講稿，系統用語音辨識找出每個字說出的時間，字幕文字完全照講稿，不會有錯字。換行和句號會自動分句。
+      </p>
+      <textarea
+        aria-label="講稿"
+        value={script}
+        onChange={(e) => setScript(e.target.value)}
+        rows={6}
+        placeholder="把講稿貼在這裡…"
+        className="mt-3 w-full resize-y rounded-xl border border-line bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-brand"
+      />
+      <div className="mt-1 flex items-center justify-between text-[11px] text-ink-mute">
+        <span className="tabular-nums">{chars} 字</span>
+        {timed && (
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" className="accent-brand" checked={redo} onChange={(e) => setRedo(e.target.checked)} />
+            重新辨識語音
+          </label>
+        )}
+      </div>
+      <Button className="mt-3 w-full" onClick={run} disabled={!!status || !chars}>
+        {status ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
+        {status ?? '依講稿對時'}
+      </Button>
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-mute">
+        {timed && !redo ? '目前的字幕已有逐字時間，會直接拿來對時，幾秒就好。' : '會先辨識影片語音（和 AI 自動字幕相同），再對齊講稿。'}會取代目前的字幕，花字不受影響；可以復原。
+      </p>
     </section>
   );
 }

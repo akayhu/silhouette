@@ -1,10 +1,43 @@
-import type { Caption, CaptionStyle, ProjectData } from './types';
+import type { Caption, CaptionStyle, CaptionWord, ProjectData } from './types';
 import { uid } from './format';
 
 export interface CaptionRule { from: string; to: string }
 export interface CaptionCue { start: number; end: number; text: string }
 const ms = (value: number) => Math.round(value * 1000) / 1000;
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * 字幕目前可用的逐字時間；文字被改過、或字幕被拖離原本的聲音時回傳 null（只能整句剪）。
+ * 只改錯字、字數不變（例如「敷衍」改成「副業」）時仍然有效，顯示改過的文字、沿用原本的時間。
+ */
+export function captionWords(c: Caption): CaptionWord[] | null {
+  const words = c.words;
+  if (!words?.length) return null;
+  if (words[0].start < c.start - 0.35 || words[words.length - 1].end > c.end + 0.35) return null;
+  const chars = [...c.text];
+  if (chars.length !== words.reduce((n, w) => n + [...w.text].length, 0)) return null;
+  let i = 0;
+  return words.map((w) => {
+    const n = [...w.text].length;
+    const text = chars.slice(i, i + n).join('');
+    i += n;
+    return { ...w, text };
+  });
+}
+
+/**
+ * 只重新辨識某幾段時：把中心點落在這些範圍裡的一般字幕換成新字幕，其他字幕與花字都保留。
+ * 沒給 ranges 代表整條重做：一般字幕全部換掉，花字保留。
+ */
+export function replaceCaptionsInRanges(captions: Caption[], next: Caption[], ranges?: [number, number][]) {
+  const inside = (c: Caption) => {
+    if (c.role === 'flower') return false;
+    if (!ranges) return true;
+    const mid = (c.start + c.end) / 2;
+    return ranges.some(([a, b]) => mid >= a && mid < b);
+  };
+  return orderedCaptions([...captions.filter((c) => !inside(c)), ...next]);
+}
+
 export const orderedCaptions = (captions: Caption[]) => [...captions].sort((a, b) => a.start - b.start || a.end - b.end);
 export const matchesCaption = (caption: Caption, query: string, matchCase: boolean) => matchCase ? caption.text.includes(query) : new RegExp(escape(query), 'iu').test(caption.text);
 
@@ -38,7 +71,8 @@ export function mergeCaptions(captions: Caption[], ids: Set<string>) {
   const positions = selected.map((c) => sameRole.findIndex((x) => x.id === c.id));
   if (positions.some((p, i) => i > 0 && p !== positions[i - 1] + 1)) throw new Error('只能合併相鄰字幕，請一併勾選中間的句子。');
   const first = selected[0];
-  const merged = { ...first, end: Math.max(...selected.map((c) => c.end)), text: selected.map((c) => c.text.trim()).join('\n') };
+  // 合併後多了換行，逐字時間對不上，改成整句時間
+  const merged = { ...first, end: Math.max(...selected.map((c) => c.end)), text: selected.map((c) => c.text.trim()).join('\n'), words: undefined };
   return { captions: captions.flatMap((c) => c.id === first.id ? [merged] : ids.has(c.id) ? [] : [c]), id: first.id };
 }
 
@@ -49,13 +83,61 @@ export function splitCaptionText(caption: Caption, caret: number, time?: number)
   if (index <= 0 || caret >= caption.text.length) throw new Error('請將文字游標放在句子中間再拆句。');
   const left = caption.text.slice(0, caret).trim(), right = caption.text.slice(caret).trim();
   if (!left || !right) throw new Error('拆句後的兩句都需要有文字。');
-  const at = ms(time ?? caption.start + (caption.end - caption.start) * index / parts.length);
+  // 有逐字時間：切在那個字實際說出的時間點，兩邊各自帶走自己的字
+  const words = captionWords(caption);
+  const split = words && left + right === caption.text ? splitWords(words, [...left].length) : null;
+  const at = ms(split?.at ?? time ?? caption.start + (caption.end - caption.start) * index / parts.length);
   if (at - caption.start < 0.1 - 1e-8 || caption.end - at < 0.1 - 1e-8) throw new Error('拆句後每句至少需保留 0.1 秒，請先延長字幕或調整拆句位置。');
-  return [{ ...caption, end: at, text: left }, { ...caption, id: uid(), start: at, text: right, style: structuredClone(caption.style) }];
+  if (split) return [{ ...caption, end: at, text: left, words: split.left }, { ...caption, id: uid(), start: at, text: right, style: structuredClone(caption.style), words: split.right }];
+  return [{ ...caption, end: at, text: left, words: undefined }, { ...caption, id: uid(), start: at, text: right, style: structuredClone(caption.style), words: undefined }];
+}
+
+/** 在第 n 個字之後切開逐字時間；切在一個多字詞中間時，依字數比例分配時間 */
+function splitWords(words: CaptionWord[], n: number) {
+  const left: CaptionWord[] = [];
+  const right: CaptionWord[] = [];
+  let count = 0;
+  let at = words[0].start;
+  for (const w of words) {
+    const chars = [...w.text];
+    if (count + chars.length <= n) {
+      left.push(w);
+      at = w.end;
+    } else if (count >= n) right.push(w);
+    else {
+      const k = n - count;
+      const mid = w.start + ((w.end - w.start) * k) / chars.length;
+      left.push({ text: chars.slice(0, k).join(''), start: w.start, end: mid });
+      right.push({ text: chars.slice(k).join(''), start: mid, end: w.end });
+      at = mid;
+    }
+    count += chars.length;
+  }
+  // 兩個字之間有停頓就切在停頓中間
+  if (right.length && left.length) at = (left[left.length - 1].end + right[0].start) / 2;
+  return { left, right, at };
 }
 export function splitCaptionByTime(caption: Caption, time: number) {
   const parts = segments(caption.text);
   if (parts.length < 2 || time <= caption.start || time >= caption.end) throw new Error('此處無法拆句。');
+  // 有逐字時間：切在離播放頭最近的字與字之間
+  const words = captionWords(caption);
+  if (words && words.length > 1) {
+    let best = 1;
+    let chars = [...words[0].text].length;
+    let pos = chars;
+    for (let i = 1; i < words.length; i++) {
+      const gap = (words[i - 1].end + words[i].start) / 2;
+      const bestGap = (words[best - 1].end + words[best].start) / 2;
+      if (Math.abs(gap - time) < Math.abs(bestGap - time)) {
+        best = i;
+        pos = chars;
+      }
+      chars += [...words[i].text].length;
+    }
+    const caret = [...caption.text].slice(0, pos).join('').length;
+    return splitCaptionText(caption, caret);
+  }
   const index = Math.max(1, Math.min(parts.length - 1, Math.round((time - caption.start) / (caption.end - caption.start) * parts.length)));
   return splitCaptionText(caption, parts[index].index, time);
 }

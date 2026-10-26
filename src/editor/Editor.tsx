@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Loader2, Music, Palette, Redo2, ScanFace, Smile, Sparkles, Type, Undo2, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Loader2, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
@@ -15,6 +15,7 @@ import { Inspector } from './Inspector';
 import { MediaPanel } from './panels/MediaPanel';
 import { MusicPanel } from './panels/MusicPanel';
 import { TextPanel } from './panels/TextPanel';
+import { TranscriptPanel } from './panels/TranscriptPanel';
 import { VoicePanel } from './panels/VoicePanel';
 import { AIPanel } from './panels/AIPanel';
 import { ErasePanel } from './panels/ErasePanel';
@@ -35,6 +36,7 @@ const tabs = [
   { id: 'smart', label: '智能剪輯', icon: WandSparkles },
   { id: 'music', label: '音樂', icon: Music },
   { id: 'text', label: '字幕', icon: Type },
+  { id: 'transcript', label: '文字剪輯', icon: TextCursorInput },
   { id: 'sticker', label: '貼紙', icon: Smile },
   { id: 'filter', label: '濾鏡', icon: Palette },
   { id: 'beauty', label: '美肌', icon: ScanFace },
@@ -237,6 +239,7 @@ export default function Editor() {
                 {tab === 'smart' && <SmartEditPanel />}
                 {tab === 'music' && <MusicPanel />}
                 {tab === 'text' && <TextPanel seek={seek} />}
+                {tab === 'transcript' && <TranscriptPanel seek={seek} />}
                 {tab === 'voice' && <VoicePanel />}
                 {tab === 'sticker' && <StickerPanel />}
                 {tab === 'filter' && <FilterPanel />}

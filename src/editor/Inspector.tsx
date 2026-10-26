@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { DEFAULT_HIGHLIGHT } from '../lib/engine';
+import { captionWords } from '../lib/captions';
 import { ArrowDown, ArrowUp, AudioLines, Copy, Film, Layers, MousePointerClick, RotateCcw, Smile, Trash2, Type } from 'lucide-react';
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
@@ -29,6 +31,7 @@ const ANIMS: { id: CaptionAnimation; label: string }[] = [
   { id: 'pop', label: '彈出' },
   { id: 'slide', label: '上滑' },
   { id: 'typewriter', label: '打字機' },
+  { id: 'karaoke', label: '卡拉 OK' },
 ];
 
 export function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
@@ -240,6 +243,12 @@ export function Inspector() {
       </Section>
       <Section title="進場動畫">
         <Chips options={ANIMS} value={s.animation} onChange={(animation) => setStyle({ animation })} />
+        {s.animation === 'karaoke' && (
+          <div className="mt-3 space-y-2">
+            <ColorRow label="唸到的字" value={s.highlight ?? DEFAULT_HIGHLIGHT} onStart={checkpoint} onChange={(highlight, rec) => setStyle({ highlight }, rec)} />
+            <p className="text-[11px] leading-relaxed text-ink-mute">{captionWords(c) ? '依實際說話的時間逐字亮起。' : '這句沒有逐字時間，會依字幕長度平均亮起；重新產生 AI 字幕就能對準說話的時間。'}</p>
+          </div>
+        )}
       </Section>
       <div className="space-y-2 p-4">
         <Button variant="secondary" className="w-full" onClick={() => commit((d) => ({ ...d, captions: d.captions.map((x) => ({ ...x, style: { ...s } })) }))}>
@@ -500,6 +509,9 @@ function MultiInspector() {
                 <div className="mb-1.5 text-xs font-semibold text-ink-soft">進場動畫</div>
                 <Chips options={ANIMS} value={s0.animation} onChange={(animation) => setCaps({ animation })} />
               </div>
+              {s0.animation === 'karaoke' && (
+                <ColorRow label="唸到的字" value={s0.highlight ?? DEFAULT_HIGHLIGHT} onStart={checkpoint} onChange={(highlight, rec) => setCaps({ highlight }, rec)} />
+              )}
             </div>
           </Section>
         </>

@@ -107,7 +107,7 @@ export interface AudioClip {
   role?: 'template';
 }
 
-export type CaptionAnimation = 'none' | 'fade' | 'pop' | 'typewriter' | 'slide';
+export type CaptionAnimation = 'none' | 'fade' | 'pop' | 'typewriter' | 'slide' | 'karaoke';
 
 /** 文字陰影：blur、distance 是相對字級的百分比，angle 0° = 往右、90° = 往下 */
 export interface CaptionShadow {
@@ -130,8 +130,17 @@ export interface CaptionStyle {
   /** 水平中心位置，0 = 最左、1 = 最右；沒有設定 = 置中 */
   x?: number;
   animation: CaptionAnimation;
+  /** 卡拉 OK 動畫：唸到的字換成這個顏色；沒有設定 = 黃色 */
+  highlight?: string;
   /** 沒有設定 = 無陰影 */
   shadow?: CaptionShadow | null;
+}
+
+/** 字幕裡每個字（或詞）在時間軸上的位置，語音辨識產生；用來「改文字就剪影片」 */
+export interface CaptionWord {
+  text: string;
+  start: number;
+  end: number;
 }
 
 export interface Caption {
@@ -140,6 +149,8 @@ export interface Caption {
   end: number;
   text: string;
   style: CaptionStyle;
+  /** 逐字時間（時間軸秒數）。文字或位置被改到對不上時視為失效，改用整句時間 */
+  words?: CaptionWord[];
   /** 智能剪輯加上的花字（重新套用模板時會先移除） */
   role?: 'flower';
 }

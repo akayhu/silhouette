@@ -7,6 +7,7 @@ import { Button, Modal } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked, LockedBanner } from '../locks';
 import { CaptionRow } from './CaptionRow';
+import { CaptionCheck } from './CaptionCheck';
 
 const presets: { name: string; style: Partial<CaptionStyle>; preview: React.CSSProperties }[] = [
   { name: '經典白字', style: {}, preview: { color: '#fff', WebkitTextStroke: '5px #1f1d2b', paintOrder: 'stroke' } },
@@ -16,6 +17,7 @@ const presets: { name: string; style: Partial<CaptionStyle>; preview: React.CSSP
   { name: '珊瑚標題', style: { color: '#ff7a59', stroke: '#ffffff', size: 110, y: 0.2, animation: 'pop' }, preview: { color: '#ff7a59', WebkitTextStroke: '5px #fff', paintOrder: 'stroke' } },
   { name: '立體投影', style: { color: '#ffffff', stroke: '#1f1d2b', shadow: { color: '#5b4cf5', opacity: 1, blur: 0, distance: 10, angle: 45 }, animation: 'pop' }, preview: { color: '#fff', WebkitTextStroke: '4px #1f1d2b', paintOrder: 'stroke', textShadow: '3px 3px 0 #5b4cf5' } },
   { name: '柔光陰影', style: { color: '#ffffff', stroke: '#1f1d2b', shadow: { color: '#000000', opacity: 0.45, blur: 28, distance: 6, angle: 90 } }, preview: { color: '#fff', WebkitTextStroke: '4px #1f1d2b', paintOrder: 'stroke', textShadow: '0 3px 10px rgba(0,0,0,0.45)' } },
+  { name: '卡拉 OK', style: { color: '#ffffff', stroke: '#1f1d2b', highlight: '#ffe14a', animation: 'karaoke' }, preview: { color: '#fff', WebkitTextStroke: '4px #1f1d2b', paintOrder: 'stroke', backgroundImage: 'linear-gradient(90deg,#ffe14a 55%,#fff 55%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' } },
   { name: '打字機', style: { color: '#ffffff', stroke: '#1f1d2b', bold: false, animation: 'typewriter' }, preview: { color: '#fff', WebkitTextStroke: '4px #1f1d2b', paintOrder: 'stroke', fontWeight: 500 } },
 ];
 
@@ -143,6 +145,7 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
   return <div className="p-4">
     <div className="flex items-center justify-between"><h2 className="text-sm font-extrabold">字幕校對</h2><button className="text-xs font-bold text-brand disabled:opacity-40" disabled={locked} onClick={() => add()}><Plus className="mr-1 inline size-3" />新增一句</button></div>
     <LockedBanner track="caption" />
+    <CaptionCheck seek={seek} />
     <div className="mt-3 space-y-2">
       <input aria-label="搜尋字幕" placeholder="搜尋文字（純文字搜尋）" className={field} value={find} onChange={(e) => { setFind(e.target.value); setPage(0); }} />
       <div className="flex gap-2"><input aria-label="取代文字" placeholder="取代為…（可留空）" className={field} value={replacement} onChange={(e) => setReplacement(e.target.value)} /><Button size="sm" disabled={locked || !find || !targets.length} onClick={replace}>全部取代</Button></div>

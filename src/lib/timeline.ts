@@ -1,6 +1,8 @@
-import type { Aspect, AudioClip, Caption, CaptionStyle, ClipTransform, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
+import type { Aspect, AudioClip, Caption, CaptionStyle, CaptionWord, ClipTransform, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
 import { uid } from './format';
-import { splitCaptionByTime } from './captions';
+import { captionWords, splitCaptionByTime } from './captions';
+
+export { captionWords };
 
 export const MIN_CLIP = 0.1;
 
@@ -84,6 +86,35 @@ export const defaultCaptionStyle = (): CaptionStyle => ({
 
 export function newCaption(start: number, end: number, text: string, style?: CaptionStyle): Caption {
   return { id: uid(), start, end, text, style: style ? { ...style } : defaultCaptionStyle() };
+}
+
+/** 由語音辨識結果建立字幕：有逐字時間就一起存（時間軸秒數），文字以逐字內容為準 */
+export function captionFromWords(start: number, end: number, text: string, style: CaptionStyle | undefined, words?: CaptionWord[]): Caption {
+  // 片段結尾之後才開始的字（辨識時多聽到下一段的開頭）不屬於這句；其餘的字結束時間不超過字幕結尾
+  const kept = words
+    ?.filter((w) => w.start < end - 0.01)
+    .map((w) => ({ ...w, end: Math.max(w.start + 0.01, Math.min(w.end, end)) }));
+  const c = newCaption(start, end, kept?.length ? kept.map((w) => w.text).join('') : text, style);
+  return kept?.length ? { ...c, words: kept } : c;
+}
+
+/**
+ * 改文字就剪影片：把選取的字（時間軸範圍）從影片剪掉，後面的畫面、字幕、聲音往前補。
+ * 被剪到一部分的字幕會只留下沒被刪的字。
+ */
+export function cutTranscript(d: ProjectData, ranges: Range[]): ProjectData {
+  const before = mainDuration(d.clips);
+  const out = rippleRemove(d, ranges);
+  if (isLocked(out, 'audio')) return out;
+  // 原本跟影片一起結束的配樂，剪完也跟著縮短，結尾不會多出一段沒有畫面的聲音
+  const after = mainDuration(out.clips);
+  const audio = out.audio.map((a) => {
+    const end = a.start + clipLength(a);
+    const original = d.audio.find((x) => x.id === a.id);
+    const wasToEnd = original && Math.abs(original.start + clipLength(original) - before) < 0.05;
+    return wasToEnd && end > after + 0.01 ? { ...a, out: a.in + (after - a.start) } : a;
+  }).filter((a) => a.out - a.in > 0.05);
+  return { ...out, audio };
 }
 
 // ---------- 編輯操作（皆回傳新的資料，不改動原物件） ----------
@@ -195,7 +226,18 @@ export function rippleRemove(d: ProjectData, input: Range[]): ProjectData {
   // 鎖定的軌道不跟著移動
   const captions = isLocked(d, 'caption')
     ? d.captions
-    : d.captions.map((c) => ({ ...c, start: remap(c.start, ranges), end: remap(c.end, ranges) })).filter((c) => c.end - c.start >= 0.05);
+    : d.captions
+        .map((c) => {
+          const moved = { ...c, start: remap(c.start, ranges), end: remap(c.end, ranges) };
+          const words = captionWords(c);
+          if (!words) return c.words ? { ...moved, words: undefined } : moved;
+          // 逐字時間跟著移動；整個字落在剪掉的範圍裡就拿掉，字幕文字只留剩下的字
+          const kept = words.map((w) => ({ ...w, start: remap(w.start, ranges), end: remap(w.end, ranges) })).filter((w) => w.end - w.start >= 0.01);
+          if (kept.length === words.length) return { ...moved, words: kept };
+          if (!kept.length) return { ...moved, end: moved.start };
+          return { ...moved, words: kept, text: kept.map((w) => w.text).join('') };
+        })
+        .filter((c) => c.end - c.start >= 0.05);
   const audio = isLocked(d, 'audio') ? d.audio : d.audio.map((a) => ({ ...a, start: remap(a.start, ranges) }));
   const stickers = isLocked(d, 'sticker')
     ? (d.stickers ?? [])

@@ -5,6 +5,7 @@ import type { DecodedFrame, FrameDecoder } from './frameDecoder';
 import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
 import { applyBeauty, isBeautyOn } from './beauty';
+import { captionWords } from './captions';
 import { activeClips, clipLength, layoutMain, overlayEnd, overlayTransform, totalDuration, transformOf, type PlacedClip } from './timeline';
 
 interface MediaNode {
@@ -684,7 +685,34 @@ export function captionBox(c: Caption, W: number, H: number) {
   return { cx: l.cx, cy: l.cy, w, h, minX: Math.min(0.5, hx), maxX: Math.max(0.5, 1 - hx), minY: Math.min(0.5, hy), maxY: Math.max(0.5, 1 - hy) };
 }
 
-/** animate 為 false（暫停編輯中）時直接顯示完整字幕，方便調整樣式 */
+export const DEFAULT_HIGHLIGHT = '#ffe14a';
+
+/**
+ * 卡拉 OK：時間 t 時唸到第幾個字（含小數，0.5 = 第一個字唸到一半）。
+ * 有逐字時間就照實際說話的時間；沒有就把字幕時間平均分給每個字。
+ */
+export function spokenChars(c: Caption, t: number) {
+  const chars = [...c.text.replace(/\n/g, '')];
+  if (!chars.length) return 0;
+  const words = captionWords(c);
+  if (words) {
+    let done = 0;
+    for (const w of words) {
+      const n = [...w.text.replace(/\n/g, '')].length;
+      if (t >= w.end) done += n;
+      else {
+        if (t > w.start) done += n * ((t - w.start) / Math.max(w.end - w.start, 0.01));
+        break;
+      }
+    }
+    return Math.min(chars.length, done);
+  }
+  // 留最後 15% 的時間讓整句停在全亮
+  const span = Math.max((c.end - c.start) * 0.85, 0.01);
+  return Math.min(chars.length, Math.max(0, ((t - c.start) / span) * chars.length));
+}
+
+/** animate 為 false（暫停編輯中）時直接顯示完整字幕，方便調整樣式；卡拉 OK 例外，照播放頭位置顯示進度 */
 export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number, W: number, H: number, animate = true) {
   const s = c.style;
   const scale = Math.min(W, H) / 1080;
@@ -705,6 +733,9 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
     const total = Math.min((c.end - c.start) * 0.7, [...c.text].length * 0.07);
     text = [...c.text].slice(0, Math.ceil([...c.text].length * Math.min(1, local / Math.max(total, 0.01)))).join('');
   }
+
+  // 卡拉 OK：每一行已唸到的字數（逐行累計）
+  let spoken = s.animation === 'karaoke' ? spokenChars(c, t) : 0;
 
   ctx.save();
   // 位置用完整文字排版，打字機效果打字時字幕不會跳動
@@ -771,6 +802,23 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
     }
     ctx.fillStyle = s.color;
     ctx.fillText(line, 0, y);
+    if (s.animation === 'karaoke' && spoken > 0) {
+      // 已唸到的部分用亮色從左往右覆蓋，唸到一半的字也只亮一半，看起來是連續掃過去
+      const chars = [...line];
+      const whole = Math.min(chars.length, Math.floor(spoken));
+      const partial = whole < chars.length ? spoken - whole : 0;
+      const left = -ctx.measureText(line).width / 2;
+      const done = ctx.measureText(chars.slice(0, whole).join('')).width;
+      const next = partial > 0 ? ctx.measureText(chars[whole]).width * partial : 0;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(left - size, y - lh / 2, done + next + size * (whole > 0 || next > 0 ? 1 : 0), lh);
+      ctx.clip();
+      ctx.fillStyle = s.highlight ?? DEFAULT_HIGHLIGHT;
+      ctx.fillText(line, 0, y);
+      ctx.restore();
+      spoken = Math.max(0, spoken - chars.length);
+    }
   });
   ctx.restore();
 }

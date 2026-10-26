@@ -1,6 +1,6 @@
 import { ASR_MODELS, isFiller, transcribe, type Segment } from './asr';
 import { decodeAudio, detectSilence, sliceMono } from './media';
-import { mainDuration, newCaption } from './timeline';
+import { captionFromWords, mainDuration } from './timeline';
 import { uid } from './format';
 import type { Caption, CaptionStyle, MediaItem, ProjectData, VideoClip } from './types';
 
@@ -63,8 +63,13 @@ export async function analyzeRange(
 
   onStage('speech');
   const samples = await sliceMono(buffer, from, end, 16000);
-  const raw = await transcribe(samples, model, (p) => (p.phase === 'download' ? onStage('download', p.progress) : onStage('speech')));
-  const all = raw.map((s) => ({ ...s, start: from + s.start, end: Math.min(end, from + s.end) }));
+  const raw = await transcribe(samples, model, (p) => (p.phase === 'download' ? onStage('download', p.progress) : onStage('speech')), { words: true });
+  const all = raw.map((s) => ({
+    ...s,
+    start: from + s.start,
+    end: Math.min(end, from + s.end),
+    words: s.words?.map((w) => ({ ...w, start: from + w.start, end: Math.min(end, from + w.end) })),
+  }));
   // 只剩標點的片段（去掉句尾標點後是空字串）不當成字幕
   const segments = all.filter((s) => s.text.trim() && !isFiller(s.text));
   const fillers: Range[] = all.filter((s) => isFiller(s.text)).map((s) => [s.start, s.end]);
@@ -110,7 +115,8 @@ export function applyAutoEdit(d: ProjectData, media: MediaItem, result: AutoEdit
     ? result.segments.flatMap((s) => {
         const start = base + map(s.start);
         const end = base + map(s.end);
-        return end - start >= 0.2 ? [newCaption(start, end, s.text, opts.style)] : [];
+        const words = s.words?.map((w) => ({ ...w, start: base + map(w.start), end: base + map(w.end) }));
+        return end - start >= 0.2 ? [captionFromWords(start, end, s.text, opts.style, words)] : [];
       })
     : [];
   return { ...d, clips: [...d.clips, ...clips], captions: [...d.captions, ...captions].sort((a, b) => a.start - b.start) };

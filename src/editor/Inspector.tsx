@@ -6,6 +6,7 @@ import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, l
 import { formatTime } from '../lib/format';
 import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipMotion, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
 import { Button } from '../components/ui';
+import { ColorPicker } from '../components/ColorPicker';
 import { useEditor } from './store';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
@@ -204,17 +205,18 @@ export function Inspector() {
       </Section>
       <Section title="顏色">
         <div className="space-y-3">
-          <ColorRow label="文字" value={s.color} onChange={(color) => setStyle({ color })} />
-          <ColorRow label="描邊" value={s.stroke} onChange={(stroke) => setStyle({ stroke })} />
+          <ColorRow label="文字" value={s.color} onStart={checkpoint} onChange={(color, rec) => setStyle({ color }, rec)} />
+          <ColorRow label="描邊" value={s.stroke} onStart={checkpoint} onChange={(stroke, rec) => setStyle({ stroke }, rec)} />
           <div>
             <div className="mb-1.5 text-xs font-semibold text-ink-soft">底色</div>
             <div className="flex gap-1.5">
               <Swatch active={!s.background} onClick={() => setStyle({ background: null })} label="無">
                 <span className="text-[10px] font-bold text-ink-mute">無</span>
               </Swatch>
-              {['rgba(255,255,255,0.92)', 'rgba(255,225,74,0.95)', 'rgba(91,76,245,0.92)', 'rgba(31,29,43,0.7)'].map((bg) => (
+              {['rgba(255,255,255,0.92)', 'rgba(255,225,74,0.95)', 'rgba(212,44,34,0.94)', 'rgba(31,29,43,0.7)'].map((bg) => (
                 <Swatch key={bg} active={s.background === bg} onClick={() => setStyle({ background: bg })} label={bg} color={bg} />
               ))}
+              <ColorPicker value={s.background ?? '#ffffff'} onStart={checkpoint} onChange={(background, rec) => setStyle({ background }, rec)} label="底色" />
             </div>
           </div>
         </div>
@@ -251,15 +253,15 @@ export function Inspector() {
   );
 }
 
-function ColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function ColorRow({ label, value, onChange, onStart }: { label: string; value: string; onChange: (v: string, record: boolean) => void; onStart: () => void }) {
   return (
     <div>
       <div className="mb-1.5 text-xs font-semibold text-ink-soft">{label}</div>
       <div className="flex items-center gap-1.5">
         {CAPTION_COLORS.map((c) => (
-          <Swatch key={c} color={c} active={value.toLowerCase() === c} onClick={() => onChange(c)} label={c} />
+          <Swatch key={c} color={c} active={value.toLowerCase() === c} onClick={() => onChange(c, true)} label={c} />
         ))}
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="size-7 cursor-pointer rounded-lg border border-line bg-surface p-0.5" aria-label={`自訂${label}顏色`} />
+        <ColorPicker value={value} onChange={onChange} onStart={onStart} label={`${label}顏色`} />
       </div>
     </div>
   );
@@ -297,7 +299,7 @@ function ShadowControls({ value, onChange, onStart }: { value?: CaptionShadow | 
               {SHADOW_COLORS.map((c) => (
                 <Swatch key={c} color={c} active={value.color.toLowerCase() === c} onClick={() => set({ color: c }, true)} label={c} />
               ))}
-              <input type="color" value={value.color} onChange={(e) => set({ color: e.target.value })} onFocus={onStart} className="size-7 cursor-pointer rounded-lg border border-line bg-surface p-0.5" aria-label="自訂陰影顏色" />
+              <ColorPicker value={value.color} alpha={false} onStart={onStart} onChange={(color, rec) => set({ color }, rec)} label="陰影顏色" />
             </div>
           </div>
           <Slider label="透明度" value={Math.round(value.opacity * 100)} min={0} max={100} format={(v) => `${v}%`} onStart={onStart} onChange={(v) => set({ opacity: v / 100 })} />
@@ -486,8 +488,8 @@ function MultiInspector() {
               <label className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
                 <input type="checkbox" checked={s0.bold} onChange={(e) => setCaps({ bold: e.target.checked })} className="accent-brand" /> 粗體
               </label>
-              <ColorRow label="文字" value={s0.color} onChange={(color) => setCaps({ color })} />
-              <ColorRow label="描邊" value={s0.stroke} onChange={(stroke) => setCaps({ stroke })} />
+              <ColorRow label="文字" value={s0.color} onStart={checkpoint} onChange={(color, rec) => setCaps({ color }, rec)} />
+              <ColorRow label="描邊" value={s0.stroke} onStart={checkpoint} onChange={(stroke, rec) => setCaps({ stroke }, rec)} />
               <div>
                 <div className="mb-1.5 text-xs font-semibold text-ink-soft">陰影</div>
                 <ShadowControls value={s0.shadow} onStart={checkpoint} onChange={(shadow, record) => setCaps({ shadow }, record)} />

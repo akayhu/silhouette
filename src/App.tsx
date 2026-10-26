@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { createBrowserRouter, RouterProvider, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, RequireAuth } from './lib/auth';
 import { ToastProvider, UpgradeProvider } from './components/ui';
 import Landing from './pages/Landing';
@@ -23,9 +23,9 @@ function RouteSeo() {
   return null;
 }
 
-export default function App() {
+function AppContent() {
   return (
-    <BrowserRouter>
+    <>
       <RouteSeo />
       <AuthProvider>
         <ToastProvider>
@@ -48,6 +48,12 @@ export default function App() {
           </UpgradeProvider>
         </ToastProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </>
   );
+}
+
+// A data router lets the editor guard links, programmatic navigation and browser Back.
+export default function App() {
+  const [router] = useState(() => createBrowserRouter([{ path: '*', element: <AppContent /> }]));
+  return <RouterProvider router={router} />;
 }

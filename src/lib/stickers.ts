@@ -1,3 +1,4 @@
+import { waitForReady } from './exportSupport';
 /**
  * 原創貼紙庫：全部以 SVG 手繪，無版權疑慮，可用於商業影片。
  * 不使用系統 emoji（Apple 等 emoji 圖像有著作權）。
@@ -227,15 +228,30 @@ export const stickerUrl = (s: StickerDef) => `data:image/svg+xml;charset=utf-8,$
 
 /** 貼紙圖片快取（canvas 繪製用），載入完成後呼叫 onLoad 重畫 */
 const images = new Map<string, HTMLImageElement>();
-export function stickerImage(id: string, onLoad?: () => void) {
+function stickerAsset(id: string) {
   let img = images.get(id);
   if (!img) {
     const def = byId.get(id);
     if (!def) return null;
     img = new Image();
     img.src = stickerUrl(def);
-    if (onLoad) img.onload = onLoad;
     images.set(id, img);
   }
+  return img;
+}
+
+export function stickerImage(id: string, onLoad?: () => void) {
+  const img = stickerAsset(id);
+  if (!img) return null;
+  if (!img.complete && onLoad && !img.onload) img.onload = onLoad;
   return img.complete && img.naturalWidth ? img : null;
+}
+
+export async function prepareStickers(ids: string[], signal?: AbortSignal) {
+  await Promise.all([...new Set(ids)].map((id) => {
+    const img = stickerAsset(id);
+    if (!img) throw new Error('專案中有無法使用的貼紙，請移除後再試。');
+    return waitForReady(img, ['load'], () => img.complete && img.naturalWidth > 0,
+      () => img.complete && !img.naturalWidth, '貼紙', signal);
+  }));
 }

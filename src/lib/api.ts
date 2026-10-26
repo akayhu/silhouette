@@ -37,10 +37,10 @@ export const api = {
   payments: () => request<{ payments: { id: string; amount: number; cardLast4: string; createdAt: string }[] }>('/api/billing/payments'),
 
   projects: () => request<{ projects: ProjectSummary[] }>('/api/projects'),
-  project: (id: string) => request<{ project: Project }>(`/api/projects/${id}`),
+  project: (id: string, signal?: AbortSignal) => request<{ project: Project }>(`/api/projects/${id}`, { signal }),
   createProject: (d: { name: string; aspect: string }) => request<{ project: Project }>('/api/projects', json('POST', d)),
-  updateProject: (id: string, d: { name?: string; data?: ProjectData; thumbnail?: string }) =>
-    request<{ project: ProjectSummary }>(`/api/projects/${id}`, json('PATCH', d)),
+  updateProject: (id: string, d: { name?: string; data?: ProjectData; thumbnail?: string; expectedUpdatedAt?: string }, signal?: AbortSignal) =>
+    request<{ project: ProjectSummary }>(`/api/projects/${id}`, { ...json('PATCH', d), signal }),
   deleteProject: (id: string) => request(`/api/projects/${id}`, json('DELETE')),
   upload: (id: string, file: File | Blob, name: string) =>
     request<{ url: string }>(`/api/projects/${id}/media`, {

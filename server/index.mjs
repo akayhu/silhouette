@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(ROOT, 'data');
+const DATA_DIR = process.env.SILHOUETTE_DATA_DIR || path.join(ROOT, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -419,10 +419,19 @@ app.get('/api/projects/:id', requireAuth, (req, res) => {
 app.patch('/api/projects/:id', requireAuth, (req, res) => {
   const row = ownProject(req, res);
   if (!row) return;
+  if (req.body.expectedUpdatedAt !== undefined && typeof req.body.expectedUpdatedAt !== 'string') {
+    return res.status(400).json({ error: '專案版本無效' });
+  }
+  if (req.body.expectedUpdatedAt !== undefined && req.body.expectedUpdatedAt !== row.updated_at) {
+    return res.status(409).json({ error: '專案已被其他分頁或裝置更新', code: 'PROJECT_CONFLICT' });
+  }
   const name = req.body.name !== undefined ? String(req.body.name).trim() || row.name : row.name;
   const data = req.body.data !== undefined ? JSON.stringify(req.body.data) : row.data;
   const thumbnail = req.body.thumbnail !== undefined ? req.body.thumbnail : row.thumbnail;
-  db.prepare(`UPDATE projects SET name=?, data=?, thumbnail=?, updated_at=? WHERE id=?`).run(name, data, thumbnail, now(), row.id);
+  // Monotonic tokens also distinguish two writes received within the same millisecond.
+  const updatedAt = new Date(Math.max(Date.now(), Date.parse(row.updated_at) + 1)).toISOString();
+  const result = db.prepare(`UPDATE projects SET name=?, data=?, thumbnail=?, updated_at=? WHERE id=? AND updated_at=?`).run(name, data, thumbnail, updatedAt, row.id, row.updated_at);
+  if (!result.changes) return res.status(409).json({ error: '專案已被更新', code: 'PROJECT_CONFLICT' });
   res.json({ project: projectRow(db.prepare(`SELECT * FROM projects WHERE id=?`).get(row.id)) });
 });
 
@@ -764,4 +773,4 @@ if (fs.existsSync(path.join(DIST, 'app.html'))) {
   });
 }
 
-app.listen(PORT, () => console.log(`片刻剪趣 API 已啟動：http://localhost:${PORT}`));
+const listener = app.listen(PORT, () => console.log(`片刻剪趣 API 已啟動：http://localhost:${listener.address().port}`));

@@ -180,6 +180,8 @@ export interface StickerItem {
 export type TrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio';
 
 export interface ProjectData {
+  /** 專案內的人名、品牌與常見辨識錯字校正表 */
+  captionDictionary?: { from: string; to: string }[];
   /** 鎖定的軌道：不能選取、編輯，也不會被其他軌的波紋刪除移動 */
   locks?: Partial<Record<TrackKey, boolean>>;
   aspect: Aspect;

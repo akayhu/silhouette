@@ -1,5 +1,6 @@
 import type { Caption, ClipMotion, ClipTransform, MediaItem, OverlayClip, ProjectData, StickerItem, TransitionType } from './types';
-import { stickerImage } from './stickers';
+import { stickerImage, prepareStickers } from './stickers';
+import { waitForReady } from './exportSupport';
 import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
 import { applyBeauty, isBeautyOn } from './beauty';
@@ -47,6 +48,10 @@ export class Engine {
   duration = 0;
   onTime?: (t: number) => void;
   onEnded?: () => void;
+  /** Export receives playback failures instead of silently recording missing frames/audio. */
+  onError?: (error: Error) => void;
+  private destroyed = false;
+  private stalled = new WeakMap<HTMLMediaElement, number>();
 
   constructor(readonly canvas: HTMLCanvasElement, private opts: EngineOptions) {
     const ctx = canvas.getContext('2d');
@@ -58,7 +63,7 @@ export class Engine {
       ['800 40px "Noto Sans TC"', '500 40px "Noto Sans TC"', '800 40px "Noto Serif TC"', '800 40px "Plus Jakarta Sans"'].map((f) =>
         document.fonts.load(f, '片刻剪趣字幕Aa').catch(() => []),
       ),
-    ).then(() => !this.playing && this.render());
+    ).then(() => !this.destroyed && !this.playing && this.render());
   }
 
   setBypassErase(on: boolean) {
@@ -89,7 +94,7 @@ export class Engine {
         // 允許跨網域圖片（例如圖庫網址）交給 WebGL 美肌與匯出使用
         img.crossOrigin = 'anonymous';
         img.src = m.url;
-        img.onload = () => !this.playing && this.render();
+        img.onload = () => !this.destroyed && !this.playing && this.render();
         this.images.set(m.id, img);
       }
     }
@@ -121,13 +126,14 @@ export class Engine {
 
   private mediaNode(kind: 'video' | 'audio', url: string): MediaNode {
     const el = document.createElement(kind);
-    el.src = url;
-    el.preload = 'auto';
     el.crossOrigin = 'anonymous';
+    el.preload = 'auto';
+    el.src = url;
+    el.addEventListener('error', () => this.fail(new Error('素材播放失敗，請重新上傳後再匯出。')));
     if (el instanceof HTMLVideoElement) {
       el.playsInline = true;
-      el.addEventListener('seeked', () => !this.playing && this.render());
-      el.addEventListener('loadeddata', () => !this.playing && this.render());
+      el.addEventListener('seeked', () => !this.destroyed && !this.playing && this.render());
+      el.addEventListener('loadeddata', () => !this.destroyed && !this.playing && this.render());
     }
     const gain = this.audioCtx.createGain();
     this.audioCtx.createMediaElementSource(el).connect(gain);
@@ -140,6 +146,7 @@ export class Engine {
     if (this.playing) return;
     if (this.time >= this.duration - 0.02) this.time = 0;
     await this.audioCtx.resume();
+    if (this.destroyed) return;
     this.playing = true;
     this.clockStartWall = performance.now();
     this.clockStartTime = this.time;
@@ -149,15 +156,22 @@ export class Engine {
       if (t >= this.duration) {
         this.time = this.duration;
         this.pause();
-        this.render();
+        // Keep the last frame; no clip is active at the exact end time.
         this.onTime?.(this.time);
         this.onEnded?.();
         return;
       }
       this.time = t;
-      this.sync();
-      this.render();
-      this.onTime?.(t);
+      try {
+        this.sync();
+        this.render();
+        this.onTime?.(t);
+      } catch (error) {
+        this.pause();
+        if (this.onError) this.onError(error instanceof Error ? error : new Error(String(error)));
+        else console.error(error);
+        return;
+      }
       this.raf = requestAnimationFrame(tick);
     };
     this.sync();
@@ -181,17 +195,32 @@ export class Engine {
     this.onTime?.(this.time);
   }
 
-  /** 等到目前畫面所需的影片都可以播放（匯出開始前用） */
-  async ready() {
-    const waits = [...this.videos.values(), ...this.overlayNodes.values()].map(
-      ({ el }) =>
-        new Promise<void>((resolve) => {
-          if (el.readyState >= 3) return resolve();
-          el.addEventListener('canplay', () => resolve(), { once: true });
-          setTimeout(resolve, 8000);
-        }),
-    );
-    await Promise.all(waits);
+  /** Validate all used video, audio, images and stickers, including the initial seek. */
+  async ready(signal?: AbortSignal) {
+    const nodes = [...this.videos.values(), ...this.overlayNodes.values(), ...this.audios.values()];
+    const mediaWait = ({ el }: MediaNode) => {
+      const item = this.data.media.find((m) => new URL(m.url, document.baseURI).href === el.src);
+      return waitForReady(el, ['canplay', 'seeked', 'loadeddata'],
+        () => el.readyState >= 3 && !el.seeking, () => !!el.error,
+        `素材「${item?.name ?? '影音'}」`, signal);
+    };
+    const images = [...this.images.values()];
+    await Promise.all([
+      prepareStickers(this.data.stickers.map((s) => s.stickerId), signal),
+      ...nodes.map(mediaWait),
+      ...images.map((img) => waitForReady(img, ['load'],
+        () => img.complete && img.naturalWidth > 0, () => img.complete && !img.naturalWidth,
+        '圖片或貼紙', signal)),
+    ]);
+    this.seek(this.time);
+    await Promise.all(nodes.map(mediaWait));
+    this.render();
+  }
+
+  private fail(error: Error) {
+    if (this.destroyed || !this.onError) return;
+    this.pause();
+    this.onError(error);
   }
 
   private syncNode(node: MediaNode, target: number, rate: number, volume: number) {
@@ -200,9 +229,14 @@ export class Engine {
     if (el.playbackRate !== rate) el.playbackRate = rate;
     const drift = Math.abs(el.currentTime - target);
     if (this.playing) {
+      if (this.onError && (el.readyState < 2 || el.seeking || (el.ended && target < el.duration - 0.1))) {
+        const since = this.stalled.get(el) ?? performance.now();
+        this.stalled.set(el, since);
+        if (performance.now() - since > 1500) throw new Error('素材播放或跳轉停滯，請確認素材可播放，或改用 720p 重試。');
+      } else this.stalled.delete(el);
       if (el.paused) {
-        el.currentTime = target;
-        el.play().catch(() => {});
+        if (drift > DRIFT_PAUSED) el.currentTime = target;
+        el.play().catch(() => this.fail(new Error('瀏覽器無法播放素材，請確認素材格式，並保持分頁在前景後重試。')));
       } else if (drift > DRIFT_PLAYING) {
         el.currentTime = target;
       }
@@ -295,7 +329,7 @@ export class Engine {
     // 貼紙在影像之上、字幕之下
     for (const st of this.data.stickers ?? []) {
       if (this.time < st.start || this.time >= st.end) continue;
-      const img = stickerImage(st.stickerId, () => !this.playing && this.render());
+      const img = stickerImage(st.stickerId, () => !this.destroyed && !this.playing && this.render());
       if (!img) continue;
       const pose = stickerPose(st, this.time, W, H, this.playing);
       ctx.save();
@@ -385,6 +419,8 @@ export class Engine {
   }
 
   destroy() {
+    this.destroyed = true;
+    this.onError = undefined;
     this.pause();
     for (const n of [...this.videos.values(), ...this.audios.values(), ...this.overlayNodes.values()]) {
       n.el.removeAttribute('src');

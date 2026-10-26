@@ -10,6 +10,7 @@ export function SiteHeader() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const links = [
+    { href: '/#templates', label: '智能剪輯' },
     { href: '/#features', label: '功能明細' },
     { href: '/pricing', label: '價格' },
     { href: '/#faq', label: '常見問題' },

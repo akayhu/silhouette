@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Download, Film, Loader2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
-import { Engine } from '../lib/engine';
+import { exportVideo } from '../lib/exportVideo';
+import { supportedExportMimes } from '../lib/exportSupport';
 import { formatTime } from '../lib/format';
 import { aspectSize } from '../lib/timeline';
 import { Button, Modal, ProBadge, useUpgrade } from '../components/ui';
 import { useEditor } from './store';
 
 type Quality = 720 | 1080;
-
-function pickMime() {
-  const candidates = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
-  return candidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? 'video/webm';
-}
 
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
@@ -24,64 +20,56 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [quality, setQuality] = useState<Quality>(isPro ? 1080 : 720);
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ url: string; ext: string; size: number } | null>(null);
+  const [result, setResult] = useState<{ url: string; ext: string; size: number; test: boolean } | null>(null);
   const [error, setError] = useState('');
-  const cancelRef = useRef<() => void>(() => {});
+  const runRef = useRef<AbortController | null>(null);
+  const resultRef = useRef<string | null>(null);
+  const [stage, setStage] = useState('');
+  const mimes = supportedExportMimes();
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => () => {
-    cancelRef.current();
-    if (result) URL.revokeObjectURL(result.url);
-  }, [result]);
+    runRef.current?.abort();
+    if (resultRef.current) URL.revokeObjectURL(resultRef.current);
+  }, []);
 
-  const start = async () => {
+  const start = async (test = false) => {
+    if (runRef.current) return;
+    const controller = new AbortController();
+    runRef.current = controller;
     setState('running');
     setProgress(0);
     setError('');
-    const { width, height } = aspectSize(aspect, quality);
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    canvas.className = 'h-full w-full object-contain';
-    previewRef.current?.replaceChildren(canvas);
-    const engine = new Engine(canvas, { speakers: false, watermark: !isPro });
-    let cancelled = false;
+    setStage('檢查匯出環境…');
     try {
-      await document.fonts.ready;
-      engine.setData(useEditor.getState().data);
-      engine.seek(0);
-      await engine.ready();
-      const mime = pickMime();
-      const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...engine.recordDest.stream.getAudioTracks()]);
-      const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: quality === 1080 ? 10_000_000 : 5_000_000 });
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      const finished = new Promise<void>((resolve) => (recorder.onstop = () => resolve()));
-      cancelRef.current = () => {
-        cancelled = true;
-        engine.pause();
-        if (recorder.state !== 'inactive') recorder.stop();
-      };
-      engine.onTime = (t) => setProgress(t / engine.duration);
-      engine.onEnded = () => setTimeout(() => recorder.state !== 'inactive' && recorder.stop(), 150);
-      recorder.start(500);
-      await engine.play();
-      await finished;
-      if (cancelled) return;
-      const blob = new Blob(chunks, { type: mime.split(';')[0] });
-      setResult({ url: URL.createObjectURL(blob), ext: mime.includes('mp4') ? 'mp4' : 'webm', size: blob.size });
+      const snapshot = structuredClone(useEditor.getState().data);
+      const { width, height } = aspectSize(snapshot.aspect, quality);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.className = 'h-full w-full object-contain';
+      previewRef.current?.replaceChildren(canvas);
+      const output = await exportVideo(canvas, snapshot, {
+        signal: controller.signal, quality, watermark: !isPro, test,
+        onStage: setStage, onProgress: setProgress,
+      });
+      if (controller.signal.aborted) return;
+      if (resultRef.current) URL.revokeObjectURL(resultRef.current);
+      const url = URL.createObjectURL(output.blob);
+      resultRef.current = url;
+      setResult({ url, ext: output.ext, size: output.blob.size, test });
       setState('done');
-    } catch (e) {
-      setError((e as Error).message);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setError(error instanceof Error ? error.message : '無法匯出，請重新嘗試。');
       setState('error');
     } finally {
-      engine.destroy();
-      cancelRef.current = () => {};
+      if (runRef.current === controller) runRef.current = null;
     }
   };
 
   const close = () => {
-    cancelRef.current();
+    runRef.current?.abort();
     onClose();
   };
 
@@ -120,8 +108,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               </button>
             </p>
           )}
-          <p className="mt-3 text-xs text-ink-mute">匯出會依影片長度即時錄製，約需 {formatTime(duration)}。過程中請保持這個分頁開著。</p>
-          <Button size="lg" className="mt-5 w-full" onClick={start}>
+          <p className="mt-3 text-xs text-ink-mute">匯出會依影片長度即時錄製，約需 {formatTime(duration)}。過程中請保持這個分頁在前景，切到背景會中止匯出。</p>
+          <p className="mt-2 text-xs text-ink-mute">{mimes.some((m) => m.includes('mp4')) ? '優先輸出 MP4；無法啟動時自動嘗試 WebM。' : '此瀏覽器將輸出 WebM。需要 MP4 可更換支援 MP4 錄製的瀏覽器。'}</p>
+          {!mimes.length && <p role="alert" className="mt-2 text-sm text-red-600">此瀏覽器不支援匯出，請更換最新版 Chrome、Edge 或 Safari。</p>}
+          <Button variant="secondary" className="mt-4 w-full" disabled={!mimes.length || duration <= 0} onClick={() => start(true)}>先測試前 5 秒</Button>
+          <Button size="lg" className="mt-3 w-full" disabled={!mimes.length || duration <= 0} onClick={() => start()}>
             <Film className="size-4" /> 開始匯出
           </Button>
         </>
@@ -132,7 +123,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         <div className="mt-4">
           <div className="flex justify-between text-sm font-semibold">
             <span className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin text-brand" /> 匯出中…
+              <Loader2 className="size-4 animate-spin text-brand" /> {stage}
             </span>
             <span className="tabular-nums">{Math.round(progress * 100)}%</span>
           </div>
@@ -148,22 +139,23 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       {state === 'done' && result && (
         <div className="mt-5 text-center">
           <CheckCircle2 className="mx-auto size-10 text-mint" />
-          <div className="mt-2 font-extrabold">匯出完成</div>
+          <div className="mt-2 font-extrabold">{result.test ? '測試匯出完成' : '匯出完成'}</div>
           <div className="text-xs text-ink-mute">
             {quality}p ・ {result.ext.toUpperCase()} ・ {(result.size / 1024 / 1024).toFixed(1)} MB
           </div>
           <video src={result.url} controls className="mx-auto mt-4 max-h-64 rounded-2xl bg-sunken" />
-          <a href={result.url} download={`${name || '片刻剪趣作品'}.${result.ext}`} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-white hover:bg-brand-hover">
+          <a href={result.url} download={`${name || '片刻剪趣作品'}${result.test ? '-測試' : ''}.${result.ext}`} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-white hover:bg-brand-hover">
             <Download className="size-4" /> 下載影片
           </a>
+          {result.test && <Button className="mt-3 w-full" onClick={() => start()}>確認正常，匯出完整影片</Button>}
         </div>
       )}
 
       {state === 'error' && (
         <div className="mt-5">
-          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">匯出失敗：{error}</p>
-          <Button className="mt-4 w-full" onClick={() => setState('idle')}>
-            再試一次
+          <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">匯出失敗：{error}</p>
+          <Button className="mt-4 w-full" onClick={() => { setQuality(720); setState('idle'); }}>
+            改用 720p 再試一次
           </Button>
         </div>
       )}

@@ -208,9 +208,13 @@ export default function Dashboard() {
           </Button>
           <Button
             onClick={async () => {
-              await api.updateProject(renaming!.id, { name: newName });
-              setRenaming(null);
-              load();
+              try {
+                await api.updateProject(renaming!.id, { name: newName, expectedUpdatedAt: renaming!.updatedAt });
+                setRenaming(null);
+                load();
+              } catch (error) {
+                toast(error instanceof Error ? error.message : '重新命名失敗，請稍後再試', 'error');
+              }
             }}
           >
             儲存

@@ -4,33 +4,10 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
-import type { CaptionStyle, LibraryTrack } from '../../lib/types';
+import type { LibraryTrack } from '../../lib/types';
+import { StylePreview } from '../../components/StylePreview';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { useEditor } from '../store';
-
-/** 卡片上的字樣預覽：用模板的字幕／花字樣式畫一小段字 */
-function StylePreview({ style, text, size }: { style: Omit<CaptionStyle, 'animation'>; text: string; size: number }) {
-  const sh = style.shadow;
-  const shadow = sh ? `${Math.cos((sh.angle * Math.PI) / 180) * sh.distance * 0.12}px ${Math.sin((sh.angle * Math.PI) / 180) * sh.distance * 0.12}px ${sh.blur * 0.12}px ${sh.color}` : undefined;
-  return (
-    <span
-      className="inline-block leading-tight font-black whitespace-nowrap"
-      style={{
-        fontFamily: `"${style.font}", "Noto Sans TC", sans-serif`,
-        fontSize: size,
-        color: style.color,
-        background: style.background ?? undefined,
-        padding: style.background ? '1px 6px' : undefined,
-        borderRadius: style.background ? 4 : undefined,
-        WebkitTextStroke: style.background ? undefined : `${Math.max(2, size / 7)}px ${style.stroke}`,
-        paintOrder: 'stroke',
-        textShadow: shadow,
-      }}
-    >
-      {text}
-    </span>
-  );
-}
 
 export function SmartEditPanel() {
   const { user } = useAuth();

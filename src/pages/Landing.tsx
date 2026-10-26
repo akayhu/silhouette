@@ -6,12 +6,17 @@ import { PlanCards } from '../components/Plans';
 import { Barcode, mkButton } from '../components/marketing';
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { OG_IMAGE, PUBLIC_ROUTES, SITE_NAME, SITE_URL } from '../lib/seo';
+import { SMART_TEMPLATES } from '../lib/templates';
+import { FILTER_PRESETS } from '../lib/filters';
+import { StylePreview } from '../components/StylePreview';
+import musicLibrary from '../../server/music/library.json';
 
 export default function Landing() {
   return (
     <MarketingLayout>
       <StructuredData />
       <Hero />
+      <Templates />
       <Itemized />
       <RealEditor />
       <Orders />
@@ -314,6 +319,62 @@ function Timeline({ effect, run }: { effect: Effect; run: number }) {
   );
 }
 
+// ---------- 智能剪輯模板（資料直接來自 App 的模板設定，新增模板首頁會自動出現） ----------
+
+const TRACK_TITLE = new Map(musicLibrary.items.map((t) => [t.id, t.title]));
+const INTENSITY_LABEL = { light: '輕微', normal: '標準', strong: '強烈' } as const;
+
+function Templates() {
+  return (
+    <section id="templates" className="scroll-mt-16 px-4 pt-20 pb-24 sm:px-8">
+      <Heading
+        title="選一個模板，一鍵剪好"
+        sub="智能剪輯會先剪掉空拍、上好字幕，再依模板換上字幕樣式，把重點句做成花字，配上音樂、音效和濾鏡。剪完每一項都能再調整。"
+      />
+      <div className="slip-edge-y mx-auto max-w-[1180px] bg-paper pt-2 pb-8 shadow-slip">
+        <div className="flex items-baseline justify-between border-b-2 border-dashed border-receipt/25 px-6 pt-6 pb-4 sm:px-8">
+          <h3 className="text-[20px] font-black">模板價目表</h3>
+          <span className="num text-[12px] text-receipt-mute">{SMART_TEMPLATES.length} 款・陸續新增</span>
+        </div>
+        <ul className="grid gap-x-6 gap-y-8 px-6 pt-6 sm:grid-cols-2 sm:px-8 lg:grid-cols-5">
+          {SMART_TEMPLATES.map((t) => {
+            const sfx = [t.sfx.intro, t.sfx.transition, t.sfx.flower, t.sfx.sticker].filter((x, i, a): x is string => !!x && a.indexOf(x) === i);
+            const rows: [string, string][] = [
+              ['配樂', TRACK_TITLE.get(t.music) ?? '—'],
+              ['音效', sfx.length ? sfx.map((x) => TRACK_TITLE.get(x) ?? x).join('・') : '無'],
+              ['濾鏡', t.filter ? (FILTER_PRESETS.find((p) => p.id === t.filter)?.name ?? '—') : '不改'],
+              ['特效', INTENSITY_LABEL[t.intensity]],
+              ['花字', `最多 ${t.flowerMax} 個`],
+            ];
+            return (
+              <li key={t.id}>
+                <div className="grid aspect-[16/7] place-items-center content-center gap-1.5 overflow-hidden rounded-[4px] px-2 sm:aspect-[4/3]" style={{ background: t.swatch }} aria-hidden>
+                  <StylePreview style={t.flower} text="超好吃！" size={26} />
+                  <StylePreview style={t.caption} text="字幕長這樣" size={14} />
+                </div>
+                <h4 className="mt-3 text-[18px] font-black">{t.name}</h4>
+                <p className="mt-1 text-[13px] leading-relaxed text-receipt-soft">{t.desc}</p>
+                <ul className="mt-3 space-y-1.5 text-[13px]">
+                  {rows.map(([k, v]) => (
+                    <li key={k} className="flex items-baseline gap-2">
+                      <span className="shrink-0 text-receipt-mute">{k}</span>
+                      <span className="leader" aria-hidden />
+                      <span className="text-right font-semibold">{v}</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mx-6 mt-8 border-t-2 border-dashed border-receipt/25 pt-4 text-[13px] leading-relaxed text-receipt-soft sm:mx-8">
+          再套用一次會換掉上一次的花字、模板配樂和音效，你自己加的音樂不會被動到。不滿意可以一鍵復原。智能剪輯是 <ProStamp /> 功能，新會員試用期間也能用。
+        </p>
+      </div>
+    </section>
+  );
+}
+
 // ---------- 完整功能明細 ----------
 
 type Item = { name: string; qty?: string; pro?: boolean; note?: string };
@@ -329,6 +390,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { name: '畫面縮放、位置、旋轉，九宮格對齊' },
       { name: '滑鼠框選，一次批次編輯' },
       { name: '鎖定軌道，避免誤改剪好的部分' },
+      { name: '預覽參考線：短影音安全框、垂直與水平中線' },
       { name: '復原／重做，自動儲存專案' },
     ],
   },
@@ -337,6 +399,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { name: '字幕樣式範本', qty: '8 款' },
       { name: '字型、大小、顏色、描邊、底色、陰影' },
+      { name: '選色器：色碼、滴管取色、透明度、我的顏色' },
       { name: '直接在預覽畫面拖曳字幕位置' },
       { name: '進場動畫：淡入、彈出、上滑、打字機', qty: '4 種' },
       { name: '一句的樣式套用到全部字幕' },
@@ -363,11 +426,13 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { name: '亮度、對比、飽和度、色溫、暗角、顆粒微調' },
       { name: '轉場', qty: '10 種' },
       { name: '片段動態：慢慢放大、縮小、特寫推近、震動', qty: '4 種' },
+      { name: '美肌：磨皮、美白、紅潤', note: '4 種預設，可個別微調；主軌和疊加片段都能用。' },
     ],
   },
   {
     title: 'AI 自動處理',
     items: [
+      { name: '智能剪輯', qty: '5 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
       { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、自動上字幕，讓你選剪輯前或剪輯後的版本。' },
       { name: 'AI 自動剪輯', pro: true, note: '依聲音起伏和字幕內容，加上特寫、運鏡、轉場、字幕動畫和貼紙。' },
       { name: '智能口播：剪掉停頓與「嗯、啊」', pro: true },
@@ -505,6 +570,8 @@ const faqs: [string, string][] = [
   ['需要安裝軟體嗎？', '不用。片刻剪趣直接在瀏覽器執行，建議使用最新版 Chrome 或 Edge。'],
   ['AI 自動字幕準確嗎？支援台灣用語嗎？', '使用 Whisper 語音辨識，並自動轉成繁體中文。準確度會受收音品質影響，辨識完可以逐句修改；第一次使用會下載語音模型。'],
   ['可以做子母畫面、把好幾支影片疊在一起嗎？', '可以。在素材按「疊加」，影片或圖片就會疊在主軌上方，層數不限。上層會蓋住下層，每一層都能各自調整位置、大小、透明度和濾鏡，匯出時一起輸出。'],
+  ['智能剪輯套用模板後還能改嗎？', '可以。套用後的字幕、花字、配樂、音效、濾鏡都是一般的項目，能在時間軸上逐一修改或刪除；不滿意可以一鍵復原，或換另一個模板重新套用。'],
+  ['美肌會不會把背景也磨糊？', '美肌在皮膚的範圍處理得最多，眼睛、頭髮和輪廓會保持清楚。它沒有臉部辨識，畫面中其他很平滑的地方也可能被輕微柔化，覺得太糊可以把磨皮調低。'],
   ['上傳的素材存在哪裡？', '素材和專案存在你的帳戶裡，只有你自己看得到，換一台電腦登入也能接著剪。刪除帳號時，專案和上傳的檔案會一併刪除。'],
   ['配樂、音效、貼紙、濾鏡可以用在商業影片嗎？', '可以。這些都是片刻剪趣原創製作，沒有版權問題，個人與商業影片都能免費使用，也不需要標註來源。'],
   ['可以用自己的聲音配音嗎？', '可以（專業版）。在「朗讀」錄一段約 10 秒的朗讀，就能建立你的 AI 聲音。請只使用自己的聲音，或已取得聲音主人同意的錄音。'],

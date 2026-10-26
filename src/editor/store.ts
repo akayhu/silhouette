@@ -4,7 +4,7 @@ import { totalDuration } from '../lib/timeline';
 
 export type SelItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string };
 export type Selection = SelItem | null;
-export type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
+export type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict';
 
 interface EditorState {
   projectId: string | null;
@@ -78,6 +78,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       selection: null,
       selected: [],
       time: 0,
+      playing: false,
+      eraseEdit: null,
+      junction: null,
       save: 'saved',
     }),
   commit: (fn) => {

@@ -1,5 +1,6 @@
 import type { Aspect, AudioClip, Caption, CaptionStyle, ClipTransform, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
 import { uid } from './format';
+import { splitCaptionByTime } from './captions';
 
 export const MIN_CLIP = 0.1;
 
@@ -113,10 +114,10 @@ export function splitAudioAt(d: ProjectData, id: string, t: number): ProjectData
 export function splitCaptionAt(d: ProjectData, id: string, t: number): ProjectData {
   const c = d.captions.find((x) => x.id === id);
   if (!c || t - c.start < MIN_CLIP || c.end - t < MIN_CLIP) return d;
-  return {
-    ...d,
-    captions: d.captions.flatMap((x) => (x.id === id ? [{ ...c, end: t }, { ...c, id: uid(), start: t }] : [x])),
-  };
+  try {
+    const pieces = splitCaptionByTime(c, t);
+    return { ...d, captions: d.captions.flatMap((x) => x.id === id ? pieces : [x]) };
+  } catch { return d; }
 }
 
 /** 排版後的片段還原成存檔用的片段（拿掉 start／end 等計算欄位） */

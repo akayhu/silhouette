@@ -277,6 +277,67 @@ export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'c
   return rippleRemove(rest, ranges);
 }
 
+export type TrimSide = 'left' | 'right';
+export type TrimItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string };
+
+/**
+ * 向左裁剪／向右裁剪：把項目在播放頭左邊（或右邊）的部分剪掉。
+ * 沒有指定項目時，對播放頭所在的主軌片段操作；選取多個項目時，只處理播放頭有經過的項目。
+ * 主軌片段用波紋刪除，後面的內容往前補；其他軌道只修改開始或結束，不移動別的東西。
+ * 回傳 trimmed：實際裁剪了幾個；main：主軌被剪掉的範圍（呼叫端用來移動播放頭）。
+ */
+export function trimAt(d: ProjectData, items: TrimItem[], t: number, side: TrimSide): { data: ProjectData; trimmed: number; main: Range | null } {
+  const placed = layoutMain(d.clips);
+  const targets = items.length ? items : (() => {
+    const hit = clipAt(placed, t);
+    return hit ? [{ type: 'clip' as const, id: hit.id }] : [];
+  })();
+  const ok = (a: number, b: number) => t - a >= MIN_CLIP && b - t >= MIN_CLIP;
+  let trimmed = 0;
+  let out = d;
+
+  const audio = out.audio.map((a) => {
+    if (!targets.some((x) => x.type === 'audio' && x.id === a.id) || isLocked(d, 'audio')) return a;
+    const end = a.start + clipLength(a);
+    if (!ok(a.start, end)) return a;
+    trimmed++;
+    return side === 'left' ? { ...a, start: t, in: a.in + (t - a.start), fadeIn: 0 } : { ...a, out: a.in + (t - a.start), fadeOut: 0 };
+  });
+  const captions = out.captions.map((c) => {
+    if (!targets.some((x) => x.type === 'caption' && x.id === c.id) || isLocked(d, 'caption')) return c;
+    if (!ok(c.start, c.end)) return c;
+    trimmed++;
+    return side === 'left' ? { ...c, start: t } : { ...c, end: t };
+  });
+  const stickers = out.stickers.map((st) => {
+    if (!targets.some((x) => x.type === 'sticker' && x.id === st.id) || isLocked(d, 'sticker')) return st;
+    if (!ok(st.start, st.end)) return st;
+    trimmed++;
+    return side === 'left' ? { ...st, start: t } : { ...st, end: t };
+  });
+  const overlays = out.overlays.map((o) => {
+    if (!targets.some((x) => x.type === 'overlay' && x.id === o.id) || isLocked(d, 'overlay')) return o;
+    if (!ok(o.start, overlayEnd(o))) return o;
+    trimmed++;
+    const cut = o.in + (t - o.start) * o.speed;
+    return side === 'left' ? { ...o, start: t, in: cut } : { ...o, out: cut };
+  });
+  out = { ...out, audio, captions, stickers, overlays };
+
+  // 主軌：剪掉播放頭左邊或右邊那段，後面的內容往前補
+  let main: Range | null = null;
+  if (!isLocked(d, 'main')) {
+    const hits = placed.filter((p) => targets.some((x) => x.type === 'clip' && x.id === p.id) && ok(p.start, p.end));
+    const ranges = hits.map((p): Range => (side === 'left' ? [p.start, t] : [t, p.end]));
+    if (ranges.length) {
+      out = rippleRemove(out, ranges);
+      trimmed += ranges.length;
+      main = ranges[0];
+    }
+  }
+  return { data: trimmed ? out : d, trimmed, main };
+}
+
 export function splitStickerAt(d: ProjectData, id: string, t: number): ProjectData {
   const s = d.stickers.find((x) => x.id === id);
   if (!s || t - s.start < MIN_CLIP || s.end - t < MIN_CLIP) return d;

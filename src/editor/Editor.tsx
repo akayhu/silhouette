@@ -3,10 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Keyboard, Loader2, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
-import { aspectSize, isLocked, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
+import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
 import { ensureUnlocked } from './locks';
 import type { Aspect } from '../lib/types';
-import { Button, Logo } from '../components/ui';
+import { Button, Logo, notify } from '../components/ui';
 import { useEditor } from './store';
 import { Preview } from './Preview';
 import { ToolTabs } from './ToolTabs';
@@ -130,6 +130,20 @@ export default function Editor() {
     else commit((d) => splitMainAt(d, time));
   }, []);
 
+  /** 向左／向右裁剪：剪掉選取項目（沒選就是播放頭所在的主軌片段）在播放頭左邊或右邊的部分 */
+  const trim = useCallback((side: TrimSide) => {
+    const { selected, time, data, commit } = useEditor.getState();
+    const result = trimAt(data, selected, time, side);
+    if (!result.trimmed) {
+      const anyLocked = (selected.length ? selected.map((s) => trackOf(s.type)) : ['main' as const]).some((t) => isLocked(data, t));
+      if (anyLocked) return void ensureUnlocked(...(selected.length ? selected.map((s) => trackOf(s.type)) : ['main' as const]));
+      return notify(selected.length ? '播放頭要在選取的項目中間，而且兩邊都至少留 0.1 秒' : '播放頭要在主軌片段中間，或先點選要裁剪的項目', 'info');
+    }
+    commit(() => result.data);
+    // 向左裁剪主軌後，後面的內容往前補，播放頭移到接起來的地方
+    if (side === 'left' && result.main) seek(result.main[0]);
+  }, [seek]);
+
   const removeSelected = useCallback(() => {
     const { selected, commit, select, data } = useEditor.getState();
     if (!selected.length) return;
@@ -180,6 +194,9 @@ export default function Editor() {
       } else if (!mod && (e.key === '[' || e.key === ']')) {
         e.preventDefault();
         setCaptionEdge(e.key === '[' ? 'start' : 'end');
+      } else if (!mod && (e.code === 'KeyQ' || e.code === 'KeyW')) {
+        e.preventDefault();
+        trim(e.code === 'KeyQ' ? 'left' : 'right');
       } else if (!mod && e.code === 'KeyK') {
         e.preventDefault();
         togglePlay();
@@ -198,7 +215,7 @@ export default function Editor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [loaded, togglePlay, split, removeSelected, selectAll, seek, undo, redo]);
+  }, [loaded, togglePlay, split, trim, removeSelected, selectAll, seek, undo, redo]);
 
   const openExport = () => {
     engineRef.current?.pause();
@@ -277,7 +294,7 @@ export default function Editor() {
               </div>
             </aside>
           </div>
-          <Timeline seek={seek} split={split} remove={removeSelected} togglePlay={togglePlay} />
+          <Timeline seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} />
         </div>
         {/* 右側預覽：從頂部延伸到底部 */}
         <Preview canvasRef={canvasRef} togglePlay={togglePlay} seek={seek} loading={!loaded} />

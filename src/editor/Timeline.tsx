@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { AudioLines, Film, Layers, Lock, LockOpen, Scissors, Smile, Trash2, Type, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import { AudioLines, Film, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import type { TrimSide } from '../lib/timeline';
 import { clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, TRACK_LABELS, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { AudioClip, Caption, TrackKey } from '../lib/types';
@@ -38,12 +39,29 @@ function useDrag() {
   };
 }
 
-export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number) => void; split: () => void; remove: () => void; togglePlay: () => void }) {
+/** 向左／向右裁剪的圖示：中間那條是播放頭，虛線那半邊是會被剪掉的部分 */
+function TrimIcon({ side }: { side: TrimSide }) {
+  const cut = side === 'left' ? 'M3 6.5h9v11H3z' : 'M12 6.5h9v11h-9z';
+  const keep = side === 'left' ? 'M12 6.5h9v11h-9z' : 'M3 6.5h9v11H3z';
+  return (
+    <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" aria-hidden>
+      <path d={cut} strokeDasharray="2 2.2" strokeWidth={1.6} />
+      <path d={keep} fill="currentColor" fillOpacity={0.45} />
+      <path d="M12 2.5v19" strokeLinecap="round" strokeWidth={2.2} />
+    </svg>
+  );
+}
+
+export function Timeline({ seek, split, trim, remove, togglePlay }: { seek: (t: number) => void; split: () => void; trim: (side: TrimSide) => void; remove: () => void; togglePlay: () => void }) {
   const data = useEditor((s) => s.data);
   const zoom = useEditor((s) => s.zoom);
   const time = useEditor((s) => s.time);
   const playing = useEditor((s) => s.playing);
   const selected = useEditor((s) => s.selected);
+  const canUndo = useEditor((s) => s.past.length > 0);
+  const canRedo = useEditor((s) => s.future.length > 0);
+  const undo = useEditor((s) => s.undo);
+  const redo = useEditor((s) => s.redo);
   const junction = useEditor((s) => s.junction);
   const locks = useEditor((s) => s.data.locks);
   const locked = (t: TrackKey) => !!locks?.[t];
@@ -380,8 +398,21 @@ export function Timeline({ seek, split, remove, togglePlay }: { seek: (t: number
           {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
         </IconBtn>
         <span className="mx-1 h-5 w-px bg-line" />
+        <IconBtn label="復原上一步（⌘Z）" onClick={undo} disabled={!canUndo}>
+          <Undo2 className="size-4" />
+        </IconBtn>
+        <IconBtn label="重做（⇧⌘Z）" onClick={redo} disabled={!canRedo}>
+          <Redo2 className="size-4" />
+        </IconBtn>
+        <span className="mx-1 h-5 w-px bg-line" />
         <IconBtn label="分割（⌘B）" onClick={split}>
-          <Scissors className="size-4" />
+          <SquareSplitHorizontal className="size-4" />
+        </IconBtn>
+        <IconBtn label="向左裁剪：剪掉播放頭左邊（Q）" onClick={() => trim('left')}>
+          <TrimIcon side="left" />
+        </IconBtn>
+        <IconBtn label="向右裁剪：剪掉播放頭右邊（W）" onClick={() => trim('right')}>
+          <TrimIcon side="right" />
         </IconBtn>
         <IconBtn label="刪除（Delete）" onClick={remove} disabled={!selected.length}>
           <Trash2 className="size-4" />

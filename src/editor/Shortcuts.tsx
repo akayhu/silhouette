@@ -30,6 +30,8 @@ export const SHORTCUTS: { group: string; items: [string[], string][] }[] = [
     group: '編輯',
     items: [
       [[mod, 'B'], '在播放頭位置分割選取的項目'],
+      [['Q'], '向左裁剪：剪掉播放頭左邊的部分'],
+      [['W'], '向右裁剪：剪掉播放頭右邊的部分'],
       [['Delete'], '刪除選取的項目'],
       [[mod, 'A'], '全選'],
       [['Esc'], '取消選取'],

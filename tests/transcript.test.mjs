@@ -102,3 +102,24 @@ test('bilingual captions: SRT puts the translation on the next line; split keeps
   const merged = captions.mergeCaptions([c('x', 0, 1, '你好', 'Hello'), c('y', 1, 2, '世界', 'world')], new Set(['x', 'y']));
   assert.equal(merged.captions[0].translation, 'Hello world');
 });
+
+test('trim left / right on the main track ripples; other tracks only move their own edge', () => {
+  const two = { ...project([]), clips: [{ id: 'c1', mediaId: 'm', in: 0, out: 4, speed: 1, volume: 1 }, { id: 'c2', mediaId: 'm', in: 5, out: 9, speed: 1, volume: 1 }], captions: [{ id: 'k', start: 5, end: 6, text: '後面', style }] };
+  // 沒選取：對播放頭所在的主軌片段
+  const left = timeline.trimAt(two, [], 1.5, 'left');
+  assert.equal(left.trimmed, 1);
+  assert.deepEqual(left.data.clips.map((c) => [c.in, c.out]), [[1.5, 4], [5, 9]]);
+  assert.deepEqual(left.main, [0, 1.5]);
+  assert.equal(left.data.captions[0].start, 3.5); // 後面的字幕跟著往前
+  const right = timeline.trimAt(two, [{ type: 'clip', id: 'c2' }], 6, 'right');
+  assert.deepEqual(right.data.clips.map((c) => [c.in, c.out]), [[0, 4], [5, 7]]);
+  // 字幕、音訊：只改自己的開始或結束
+  const d = { ...two, audio: [{ id: 'a', mediaId: 'm', start: 4, in: 2, out: 6, volume: 1 }] };
+  const r = timeline.trimAt(d, [{ type: 'audio', id: 'a' }, { type: 'caption', id: 'k' }], 5.4, 'left');
+  assert.equal(r.trimmed, 2);
+  assert.deepEqual([r.data.audio[0].start, +r.data.audio[0].in.toFixed(3), r.data.audio[0].out], [5.4, 3.4, 6]);
+  assert.equal(r.data.captions[0].start, 5.4);
+  assert.deepEqual(r.data.clips, d.clips);
+  // 播放頭不在項目中間就不動
+  assert.equal(timeline.trimAt(d, [{ type: 'caption', id: 'k' }], 2, 'right').trimmed, 0);
+});

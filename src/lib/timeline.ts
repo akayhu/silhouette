@@ -119,7 +119,8 @@ export function splitCaptionAt(d: ProjectData, id: string, t: number): ProjectDa
   };
 }
 
-const strip = (p: PlacedClip): VideoClip => ({
+/** 排版後的片段還原成存檔用的片段（拿掉 start／end 等計算欄位） */
+export const strip = (p: PlacedClip): VideoClip => ({
   id: p.id,
   mediaId: p.mediaId,
   in: p.in,
@@ -129,6 +130,7 @@ const strip = (p: PlacedClip): VideoClip => ({
   transform: p.transform,
   transition: p.transition,
   filter: p.filter,
+  motion: p.motion,
 });
 
 type Range = [number, number];
@@ -145,7 +147,8 @@ function normalize(ranges: Range[]): Range[] {
 }
 
 /** 刪掉某段時間後，原本時間點 t 會移到哪裡 */
-function remap(t: number, ranges: Range[]) {
+/** 剪掉 ranges 之後，原本時間 t 的新位置 */
+export function remap(t: number, ranges: Range[]) {
   let shift = 0;
   for (const [a, b] of ranges) {
     if (t <= a) break;

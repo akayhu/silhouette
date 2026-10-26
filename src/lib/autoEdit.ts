@@ -30,7 +30,7 @@ const SPEECH_PAD = 0.3;
 
 const overlaps = (a: Range, b: Range) => a[0] < b[1] && b[0] < a[1];
 
-function complement(gaps: Range[], from: number, to: number): Range[] {
+export function complement(gaps: Range[], from: number, to: number): Range[] {
   const out: Range[] = [];
   let t = from;
   for (const [a, b] of [...gaps].sort((x, y) => x[0] - y[0])) {
@@ -45,33 +45,46 @@ function subtract(ranges: Range[], cut: Range[]): Range[] {
   return ranges.flatMap((r) => complement(cut.filter((c) => overlaps(c, r)), r[0], r[1]));
 }
 
-export async function analyzeVideo(media: MediaItem, onStage: (stage: AutoEditStage, progress?: number) => void, model: string = ASR_MODELS[0].id): Promise<AutoEditResult> {
-  const duration = media.duration;
+/** 分析素材的某一段（素材時間 from–to）：要保留的人聲段落與字幕，時間都是素材時間 */
+export async function analyzeRange(
+  media: MediaItem,
+  from: number,
+  to: number,
+  onStage: (stage: AutoEditStage, progress?: number) => void,
+  model: string = ASR_MODELS[0].id,
+): Promise<{ keeps: Range[]; segments: Segment[]; hasSpeech: boolean }> {
   onStage('audio');
   const buffer = await decodeAudio(media.url);
+  const end = Math.min(to, buffer.duration);
 
   onStage('silence');
-  const silences = await detectSilence(buffer, 0, duration, { thresholdDb: -38, minSilence: 0.5, padding: 0.12 });
-  const sound = complement(silences, 0, duration);
+  const silences = await detectSilence(buffer, from, end, { thresholdDb: -38, minSilence: 0.5, padding: 0.12 });
+  const sound = complement(silences, from, end);
 
   onStage('speech');
-  const samples = await sliceMono(buffer, 0, duration, 16000);
-  const all = await transcribe(samples, model, (p) => (p.phase === 'download' ? onStage('download', p.progress) : onStage('speech')));
+  const samples = await sliceMono(buffer, from, end, 16000);
+  const raw = await transcribe(samples, model, (p) => (p.phase === 'download' ? onStage('download', p.progress) : onStage('speech')));
+  const all = raw.map((s) => ({ ...s, start: from + s.start, end: Math.min(end, from + s.end) }));
   // 只剩標點的片段（去掉句尾標點後是空字串）不當成字幕
   const segments = all.filter((s) => s.text.trim() && !isFiller(s.text));
   const fillers: Range[] = all.filter((s) => isFiller(s.text)).map((s) => [s.start, s.end]);
-
-  if (!segments.length) return { duration, keeps: [[0, duration]], segments: [], cuts: 0, removed: 0, hasSpeech: false };
+  if (!segments.length) return { keeps: [[from, end]], segments: [], hasSpeech: false };
 
   // 有聲音、而且附近有人說話的段落才保留，再扣掉只有語助詞的部分
   const speech: Range[] = segments.map((s) => [s.start - SPEECH_PAD, s.end + SPEECH_PAD]);
   const keeps = subtract(
-    sound.filter((r) => speech.some((s) => overlaps(s, r))),
+    sound.filter((r) => speech.some((sp) => overlaps(sp, r))),
     fillers,
-  ).filter(([a, b]) => b - a >= MIN_KEEP);
+  ).filter(([x, y]) => y - x >= MIN_KEEP);
+  return { keeps, segments, hasSpeech: true };
+}
 
-  const kept = keeps.reduce((n, [a, b]) => n + b - a, 0);
-  return { duration, keeps, segments, cuts: complement(keeps, 0, duration).filter(([a, b]) => b - a > 0.05).length, removed: duration - kept, hasSpeech: true };
+export async function analyzeVideo(media: MediaItem, onStage: (stage: AutoEditStage, progress?: number) => void, model?: string): Promise<AutoEditResult> {
+  const duration = media.duration;
+  const { keeps, segments, hasSpeech } = await analyzeRange(media, 0, duration, onStage, model);
+  if (!hasSpeech) return { duration, keeps, segments: [], cuts: 0, removed: 0, hasSpeech: false };
+  const kept = keeps.reduce((n, [x, y]) => n + y - x, 0);
+  return { duration, keeps, segments, cuts: complement(keeps, 0, duration).filter(([x, y]) => y - x > 0.05).length, removed: duration - kept, hasSpeech: true };
 }
 
 /** 素材時間 → 剪輯後的時間；落在被剪掉的空檔就對齊到下一段的開頭 */

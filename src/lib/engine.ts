@@ -1,4 +1,4 @@
-import type { Caption, ClipTransform, MediaItem, OverlayClip, ProjectData, StickerItem, TransitionType } from './types';
+import type { Caption, ClipMotion, ClipTransform, MediaItem, OverlayClip, ProjectData, StickerItem, TransitionType } from './types';
 import { stickerImage } from './stickers';
 import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
@@ -330,8 +330,10 @@ export class Engine {
     ctx.filter = `blur(${Math.round(W / 24)}px) brightness(0.9) ${css}`;
     ctx.drawImage(el, (W - sw * cover) / 2 - 20, (H - sh * cover) / 2 - 20, sw * cover + 40, sh * cover + 40);
     ctx.filter = css || 'none';
-    ctx.translate(cx, cy);
+    const mo = motionAt(clip.motion, this.time - clip.start, clip.end - clip.start);
+    ctx.translate(cx + mo.dx * W, cy + mo.dy * H);
     ctx.rotate((tf.rotation * Math.PI) / 180);
+    ctx.scale(mo.scale, mo.scale);
     ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
     ctx.filter = 'none';
     drawFilterOverlays(ctx, -dw / 2, -dh / 2, dw, dh, fp, this.time);
@@ -508,6 +510,32 @@ function composite(ctx: CanvasRenderingContext2D, a: HTMLCanvasElement, b: HTMLC
 }
 
 /** 片段畫面在畫布上的中心點與尺寸（預覽的框選圖層也用同一套算法） */
+const easeInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+
+/** 片段動態效果在某個時間點的縮放與位移（位移是畫面寬高的比例） */
+export function motionAt(motion: ClipMotion | undefined, local: number, length: number) {
+  const p = Math.min(1, Math.max(0, local / Math.max(length, 0.01)));
+  switch (motion) {
+    case 'zoomIn':
+      return { scale: 1 + 0.12 * easeInOut(p), dx: 0, dy: 0 };
+    case 'zoomOut':
+      return { scale: 1.12 - 0.12 * easeInOut(p), dx: 0, dy: 0 };
+    case 'punch': {
+      // 一開始 0.15 秒快速推近，之後停在特寫
+      const k = Math.min(1, Math.max(0, local) / 0.15);
+      return { scale: 1 + 0.15 * (1 - Math.pow(1 - k, 3)), dx: 0, dy: 0 };
+    }
+    case 'shake': {
+      // 開頭 0.6 秒逐漸減弱的震動
+      const decay = Math.max(0, 1 - local / 0.6);
+      const a = 0.018 * decay;
+      return { scale: 1.06, dx: Math.sin(local * 70) * a, dy: Math.cos(local * 53) * a };
+    }
+    default:
+      return { scale: 1, dx: 0, dy: 0 };
+  }
+}
+
 export function drawnRect(tf: ClipTransform, sw: number, sh: number, W: number, H: number) {
   const base = tf.fit === 'cover' ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh);
   return { cx: W / 2 + tf.x * W, cy: H / 2 + tf.y * H, dw: sw * base * tf.scale, dh: sh * base * tf.scale };

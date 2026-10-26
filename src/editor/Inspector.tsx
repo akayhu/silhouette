@@ -4,11 +4,18 @@ import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
 import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, layoutMain, overlayEnd, overlayLaneCount, placeOverlayLane, removeItems, removeMainClip, transformOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
-import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
+import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipMotion, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
 import { Button } from '../components/ui';
 import { useEditor } from './store';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+const MOTIONS: { id: ClipMotion; label: string }[] = [
+  { id: 'none', label: '無' },
+  { id: 'zoomIn', label: '慢慢放大' },
+  { id: 'zoomOut', label: '慢慢縮小' },
+  { id: 'punch', label: '特寫推近' },
+  { id: 'shake', label: '震動' },
+];
 export const CAPTION_COLORS = ['#ffffff', '#ffe14a', '#ff7a59', '#7cf0c4', '#a9a2ff', '#1f1d2b'];
 const FONTS = [
   { id: 'Noto Sans TC', label: '思源黑體' },
@@ -97,6 +104,14 @@ export function Inspector() {
           </div>
         </Section>
         <FrameSection clipId={clip.id} />
+        <Section title="動態效果">
+          <Chips
+            options={MOTIONS}
+            value={clip.motion ?? 'none'}
+            onChange={(motion) => commit((d) => ({ ...d, clips: d.clips.map((c) => (c.id === clip.id ? { ...c, motion: motion === 'none' ? undefined : motion } : c)) }))}
+          />
+          <p className="mt-2 text-[11px] text-ink-mute">播放這段時的運鏡，「AI 自動剪輯」也會自動設定。</p>
+        </Section>
         {m?.kind === 'video' && (
           <>
             <Section title="變速">

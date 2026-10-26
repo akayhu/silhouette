@@ -68,6 +68,9 @@ export interface Transition {
   duration: number;
 }
 
+/** 片段播放時的動態效果（運鏡） */
+export type ClipMotion = 'none' | 'zoomIn' | 'zoomOut' | 'punch' | 'shake';
+
 export interface VideoClip {
   id: string;
   mediaId: string;
@@ -78,6 +81,7 @@ export interface VideoClip {
   transform?: ClipTransform;
   transition?: Transition;
   filter?: ClipFilter;
+  motion?: ClipMotion;
 }
 
 /** 音訊軌可自由擺放 */

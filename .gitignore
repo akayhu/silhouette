@@ -24,3 +24,7 @@ tts/**/__pycache__/
 *.log
 *.tsbuildinfo
 dist-ssr/
+
+# Impeccable 設計流程的檢查截圖與暫存（不上傳）
+.impeccable/review/
+.impeccable/questions/

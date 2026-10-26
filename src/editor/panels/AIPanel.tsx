@@ -21,7 +21,7 @@ export function AIPanel() {
     <div className="divide-y divide-line">
       {!isPro && (
         <div className="p-4">
-          <button onClick={() => upgrade('AI 工具是專業版功能。')} className="w-full rounded-2xl bg-[linear-gradient(120deg,#ecebff,#fff0eb)] p-4 text-left">
+          <button onClick={() => upgrade('AI 工具是專業版功能。')} className="w-full rounded-2xl border border-brand/25 bg-brand-soft/60 p-4 text-left">
             <ProBadge />
             <div className="mt-2 text-sm font-extrabold">升級解鎖 AI 工具</div>
             <div className="mt-0.5 text-xs text-ink-soft">自動字幕、智能口播不限次數</div>

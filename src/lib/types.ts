@@ -68,6 +68,13 @@ export interface Transition {
   duration: number;
 }
 
+/** 美肌：0–100，0 代表不處理 */
+export interface ClipBeauty {
+  smooth: number;
+  whiten: number;
+  rosy: number;
+}
+
 /** 片段播放時的動態效果（運鏡） */
 export type ClipMotion = 'none' | 'zoomIn' | 'zoomOut' | 'punch' | 'shake';
 
@@ -82,6 +89,7 @@ export interface VideoClip {
   transition?: Transition;
   filter?: ClipFilter;
   motion?: ClipMotion;
+  beauty?: ClipBeauty;
 }
 
 /** 音訊軌可自由擺放 */
@@ -95,6 +103,8 @@ export interface AudioClip {
   /** 淡入／淡出秒數 */
   fadeIn?: number;
   fadeOut?: number;
+  /** 智能剪輯模板加的配樂／音效（重新套用模板時會先移除） */
+  role?: 'template';
 }
 
 export type CaptionAnimation = 'none' | 'fade' | 'pop' | 'typewriter' | 'slide';
@@ -130,6 +140,8 @@ export interface Caption {
   end: number;
   text: string;
   style: CaptionStyle;
+  /** 智能剪輯加上的花字（重新套用模板時會先移除） */
+  role?: 'flower';
 }
 
 export type StickerAnimation = 'none' | 'pop' | 'bounce' | 'wobble' | 'pulse' | 'spin' | 'float';
@@ -148,6 +160,7 @@ export interface OverlayClip {
   opacity: number;
   transform?: ClipTransform;
   filter?: ClipFilter;
+  beauty?: ClipBeauty;
 }
 
 export interface StickerItem {

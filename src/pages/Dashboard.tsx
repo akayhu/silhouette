@@ -133,7 +133,7 @@ export default function Dashboard() {
           {projects.map((p) => (
             <div key={p.id} className="group relative rounded-3xl border border-line bg-surface p-2 shadow-card transition hover:-translate-y-0.5 hover:shadow-pop">
               <Link to={`/editor/${p.id}`} className="block">
-                <div className="grid aspect-[4/3] place-items-center overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#ecebff,#fff0eb)]">
+                <div className="grid aspect-[4/3] place-items-center overflow-hidden rounded-2xl bg-sunken">
                   {p.thumbnail ? (
                     <img src={p.thumbnail} alt="" className="h-full w-full object-contain" />
                   ) : (

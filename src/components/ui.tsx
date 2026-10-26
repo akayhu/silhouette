@@ -6,10 +6,10 @@ type Variant = 'primary' | 'secondary' | 'ghost' | 'coral' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand text-white hover:bg-brand-hover shadow-[0_6px_16px_-8px_rgb(91_76_245/0.8)]',
+  primary: 'bg-brand text-white hover:bg-brand-hover',
   secondary: 'bg-surface text-ink border border-line hover:border-ink-mute/50 hover:bg-sunken/60',
   ghost: 'text-ink-soft hover:text-ink hover:bg-sunken',
-  coral: 'bg-coral text-white hover:brightness-95 shadow-[0_6px_16px_-8px_rgb(255_122_89/0.9)]',
+  coral: 'bg-coral text-white hover:bg-brand-hover',
   danger: 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-100',
 };
 const sizes: Record<Size, string> = {
@@ -30,15 +30,11 @@ export function Logo({ to = '/', compact = false }: { to?: string; compact?: boo
   return (
     <Link to={to} className="flex items-center gap-2 font-extrabold tracking-tight text-ink">
       <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
-        <rect width="32" height="32" rx="9" fill="var(--color-brand)" />
+        <rect width="32" height="32" rx="7" fill="var(--color-ink)" />
         <path d="M12 9.5v13l11-6.5z" fill="#fff" />
-        <circle cx="24" cy="8" r="3" fill="var(--color-coral)" />
+        <circle cx="24" cy="8" r="3.2" fill="var(--color-brand)" />
       </svg>
-      {!compact && (
-        <span className="text-[17px]">
-          片刻<span className="text-brand">剪趣</span>
-        </span>
-      )}
+      {!compact && <span className="text-[17px]">片刻剪趣</span>}
     </Link>
   );
 }

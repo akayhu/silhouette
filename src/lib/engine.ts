@@ -2,6 +2,7 @@ import type { Caption, ClipMotion, ClipTransform, MediaItem, OverlayClip, Projec
 import { stickerImage } from './stickers';
 import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
+import { applyBeauty, isBeautyOn } from './beauty';
 import { activeClips, clipLength, layoutMain, overlayEnd, overlayTransform, totalDuration, transformOf, type PlacedClip } from './timeline';
 
 interface MediaNode {
@@ -85,6 +86,8 @@ export class Engine {
     for (const m of data.media) {
       if (m.kind === 'image' && !this.images.has(m.id)) {
         const img = new Image();
+        // 允許跨網域圖片（例如圖庫網址）交給 WebGL 美肌與匯出使用
+        img.crossOrigin = 'anonymous';
         img.src = m.url;
         img.onload = () => !this.playing && this.render();
         this.images.set(m.id, img);
@@ -321,6 +324,8 @@ export class Engine {
     if (regions?.length && !this.bypassErase) {
       el = applyErase(source.el, Math.max(2, Math.round(Math.min(sw, dw))), Math.max(2, Math.round(Math.min(sh, dh))), regions);
     }
+    // 美肌：在 GPU 上處理，尺寸同去浮水印（不超過原始解析度）
+    if (isBeautyOn(clip.beauty)) el = applyBeauty(el, Math.max(2, Math.round(Math.min(sw, dw))), Math.max(2, Math.round(Math.min(sh, dh))), clip.beauty!);
     // 濾鏡：CSS 濾鏡處理亮度／對比／飽和等，其餘用疊加層
     const fp = resolveFilter(clip.filter);
     const css = filterCss(fp);
@@ -358,6 +363,7 @@ export class Engine {
     if (regions?.length && !this.bypassErase) {
       el = applyErase(source.el, Math.max(2, Math.round(Math.min(sw, dw))), Math.max(2, Math.round(Math.min(sh, dh))), regions);
     }
+    if (isBeautyOn(o.beauty)) el = applyBeauty(el, Math.max(2, Math.round(Math.min(sw, dw))), Math.max(2, Math.round(Math.min(sh, dh))), o.beauty!);
     const fp = resolveFilter(o.filter);
     ctx.save();
     ctx.globalAlpha = o.opacity;

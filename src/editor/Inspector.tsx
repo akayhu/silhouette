@@ -445,7 +445,7 @@ function MultiInspector() {
   const s0 = caps[0]?.style;
   const maxFade = auds.length ? Math.min(5, ...auds.map((a) => clipLength(a) / 2)) : 5;
   const counts = [
-    { n: clips.length, label: '影片', icon: Film, cls: 'bg-track-video text-[#4b3be6]' },
+    { n: clips.length, label: '影片', icon: Film, cls: 'bg-track-video text-ink-soft' },
     { n: caps.length, label: '字幕', icon: Type, cls: 'bg-track-caption text-[#b2432a]' },
     { n: stks.length, label: '貼紙', icon: Smile, cls: 'bg-track-sticker text-[#8a6100]' },
     { n: ovs.length, label: '疊加', icon: Layers, cls: 'bg-track-overlay text-[#1f5fbf]' },

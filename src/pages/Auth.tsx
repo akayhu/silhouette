@@ -92,15 +92,20 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
           </p>
         </div>
       </div>
-      <div className="relative hidden overflow-hidden bg-[linear-gradient(150deg,#ecebff,#fff0eb_70%)] lg:block">
+      <div className="relative hidden overflow-hidden bg-sunken lg:block">
         <div className="absolute inset-0 grid place-items-center p-12">
           <div className="w-full max-w-md">
-            <div className="mx-auto aspect-[9/16] w-56 -rotate-3 overflow-hidden rounded-[28px] border-[6px] border-white bg-[linear-gradient(170deg,#b9c9ff,#ffd6c6_55%,#ffeab0)] shadow-pop">
-              <div className="flex h-full flex-col justify-end p-5">
+            <div className="relative mx-auto aspect-[9/16] w-56 -rotate-3 overflow-hidden rounded-[28px] border-[6px] border-ink bg-sunken shadow-pop">
+              <img
+                src="https://images.unsplash.com/photo-1593960548354-62d1b5c9d542?w=448&h=796&fit=crop&q=70&auto=format"
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div className="relative flex h-full flex-col justify-end p-5">
                 <div className="text-center text-lg leading-snug font-black text-white [-webkit-text-stroke:6px_#1f1d2b] [paint-order:stroke]">
-                  三分鐘
+                  一次剪好
                   <br />
-                  剪好一支影片
+                  一支短影音
                 </div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Check, CloudOff, Download, Eraser, Film, Loader2, Music, Palette, Redo2, Smile, Sparkles, Type, Undo2 } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Check, CloudOff, Download, Eraser, Film, Loader2, Music, Palette, Redo2, ScanFace, Smile, Sparkles, Type, Undo2, WandSparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
@@ -22,6 +22,8 @@ import { ErasePanel } from './panels/ErasePanel';
 import { TransitionPanel } from './panels/TransitionPanel';
 import { StickerPanel } from './panels/StickerPanel';
 import { FilterPanel } from './panels/FilterPanel';
+import { BeautyPanel } from './panels/BeautyPanel';
+import { SmartEditPanel } from './panels/SmartEditPanel';
 import { ExportDialog } from './ExportDialog';
 import { AutoEditDialog } from './AutoEditDialog';
 
@@ -29,10 +31,12 @@ const PREVIEW_SHORT_SIDE = 540;
 
 const tabs = [
   { id: 'media', label: '素材', icon: Film },
+  { id: 'smart', label: '智能剪輯', icon: WandSparkles },
   { id: 'music', label: '音樂', icon: Music },
   { id: 'text', label: '字幕', icon: Type },
   { id: 'sticker', label: '貼紙', icon: Smile },
   { id: 'filter', label: '濾鏡', icon: Palette },
+  { id: 'beauty', label: '美肌', icon: ScanFace },
   { id: 'transition', label: '轉場', icon: ArrowRightLeft },
   { id: 'voice', label: '朗讀', icon: AudioLines },
   { id: 'ai', label: 'AI 工具', icon: Sparkles },
@@ -255,11 +259,13 @@ export default function Editor() {
               />
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {tab === 'media' && <MediaPanel />}
+                {tab === 'smart' && <SmartEditPanel />}
                 {tab === 'music' && <MusicPanel />}
                 {tab === 'text' && <TextPanel seek={seek} />}
                 {tab === 'voice' && <VoicePanel />}
                 {tab === 'sticker' && <StickerPanel />}
                 {tab === 'filter' && <FilterPanel />}
+                {tab === 'beauty' && <BeautyPanel />}
                 {tab === 'transition' && <TransitionPanel />}
                 {tab === 'ai' && <AIPanel />}
                 {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}

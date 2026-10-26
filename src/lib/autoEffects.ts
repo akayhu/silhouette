@@ -38,6 +38,8 @@ const TRANSITION_LEN = 0.4;
 
 const EXCLAIM = /[!！]|哇|超|太|真的|竟然|居然|絕對|一定|必|重點|最/;
 const QUESTION = /[?？]|嗎$|呢$|什麼|為什麼|怎麼/;
+/** 字幕是不是重點句（驚嘆、強調的語氣） */
+export const isEmphasis = (text: string) => EXCLAIM.test(text);
 
 /** 字幕關鍵字 → 貼紙（依序比對，第一個符合的） */
 const STICKER_RULES: [RegExp, string][] = [

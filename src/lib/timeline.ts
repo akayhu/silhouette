@@ -131,6 +131,7 @@ export const strip = (p: PlacedClip): VideoClip => ({
   transition: p.transition,
   filter: p.filter,
   motion: p.motion,
+  beauty: p.beauty,
 });
 
 type Range = [number, number];

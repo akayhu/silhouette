@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Loader2, Maximize2, Pause, Play, SkipBack } from 'lucide-react';
+import { Grid3x3, Loader2, Maximize2, Pause, Play, SeparatorHorizontal, SeparatorVertical, SkipBack } from 'lucide-react';
 import { formatTime } from '../lib/format';
 import { clipAt, layoutMain, overlayEnd, overlayTransform, transformOf } from '../lib/timeline';
+import { CenterLine, GuidesOverlay, usePreviewGuides } from './PreviewGuides';
 import { EraseOverlay } from './EraseOverlay';
 import { captionBox, drawnRect, stickerPose } from '../lib/engine';
 import { useEditor } from './store';
@@ -24,6 +25,7 @@ export function Preview({
   const empty = useEditor((s) => s.data.clips.length === 0 && s.data.captions.length === 0);
   const stageRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const { showGuides, setShowGuides, showVertical, setShowVertical, showHorizontal, setShowHorizontal } = usePreviewGuides();
 
   // 讓畫布在可用空間內等比例縮放
   useEffect(() => {
@@ -199,10 +201,31 @@ export function Preview({
 
   return (
     <section className="flex w-[clamp(320px,32vw,520px)] shrink-0 flex-col border-l border-line">
-      <div ref={stageRef} className="relative m-4 mb-2 flex-1">
+      <div className="flex items-center justify-end gap-1 px-4 pt-3" role="group" aria-label="預覽輔助線">
+        {[
+          { on: showGuides, set: setShowGuides, label: '參考線', title: '顯示短影音安全框', Icon: Grid3x3 },
+          { on: showVertical, set: setShowVertical, label: '垂直線', title: '顯示畫面正中央的垂直線', Icon: SeparatorVertical },
+          { on: showHorizontal, set: setShowHorizontal, label: '水平線', title: '顯示畫面正中央的水平線', Icon: SeparatorHorizontal },
+        ].map(({ on, set, label, title, Icon }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => set(!on)}
+            aria-pressed={on}
+            title={title}
+            className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-bold transition ${on ? 'bg-ink text-white' : 'text-ink-soft hover:bg-surface hover:text-ink'}`}
+          >
+            <Icon className="size-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+      <div ref={stageRef} className="relative m-4 mt-2 mb-2 flex-1">
         <div className="absolute inset-0 grid place-items-center">
           <div className="relative overflow-hidden rounded-2xl shadow-pop ring-1 ring-line" style={size}>
             <canvas ref={canvasRef} className="block h-full w-full cursor-move touch-none" onPointerDown={dragFrame} />
+            {showGuides && <GuidesOverlay />}
+            {showVertical && <CenterLine axis="vertical" />}
+            {showHorizontal && <CenterLine axis="horizontal" />}
             <EraseOverlay canvasW={canvasRef.current?.width ?? 0} canvasH={canvasRef.current?.height ?? 0} cssW={size.width} />
             {empty && !loading && (
               <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center">
@@ -226,7 +249,7 @@ export function Preview({
         <button onClick={() => seek(0)} className="grid size-8 place-items-center rounded-full text-ink-soft hover:bg-surface" aria-label="回到開頭">
           <SkipBack className="size-4" />
         </button>
-        <button onClick={togglePlay} className="grid size-11 place-items-center rounded-full bg-brand text-white shadow-[0_6px_16px_-6px_rgb(91_76_245/0.8)] transition hover:bg-brand-hover active:scale-95" aria-label={playing ? '暫停' : '播放'}>
+        <button onClick={togglePlay} className="grid size-11 place-items-center rounded-full bg-brand text-white transition hover:bg-brand-hover active:scale-95" aria-label={playing ? '暫停' : '播放'}>
           {playing ? <Pause className="size-5" fill="currentColor" /> : <Play className="ml-0.5 size-5" fill="currentColor" />}
         </button>
         <button

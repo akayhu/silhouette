@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Loader2, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Keyboard, Loader2, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
@@ -25,6 +25,7 @@ import { FilterPanel } from './panels/FilterPanel';
 import { BeautyPanel } from './panels/BeautyPanel';
 import { SmartEditPanel } from './panels/SmartEditPanel';
 import { ExportDialog } from './ExportDialog';
+import { setCaptionEdge, ShortcutsDialog } from './Shortcuts';
 import { AutoEditDialog } from './AutoEditDialog';
 import { useProjectPersistence } from './useProjectPersistence';
 import { NavigationWarning, PersistenceLoading, PersistenceNotice, SaveBadge } from './PersistenceUI';
@@ -52,6 +53,7 @@ export default function Editor() {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('media');
   const [exporting, setExporting] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const persistence = useProjectPersistence(user?.id, id, () => thumbnail(canvasRef.current));
@@ -172,6 +174,22 @@ export default function Editor() {
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         removeSelected();
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setShortcuts(true);
+      } else if (!mod && (e.key === '[' || e.key === ']')) {
+        e.preventDefault();
+        setCaptionEdge(e.key === '[' ? 'start' : 'end');
+      } else if (!mod && e.code === 'KeyK') {
+        e.preventDefault();
+        togglePlay();
+      } else if (!mod && (e.code === 'KeyJ' || e.code === 'KeyL')) {
+        e.preventDefault();
+        const step = e.shiftKey ? 5 : 1;
+        seek(Math.max(0, useEditor.getState().time + (e.code === 'KeyJ' ? -step : step)));
+      } else if (e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        seek(e.key === 'Home' ? 0 : useEditor.getState().data.duration);
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
         const step = e.shiftKey ? 1 : 1 / 30;
@@ -213,6 +231,9 @@ export default function Editor() {
           </IconBtn>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <IconBtn label="快捷鍵 (?)" onClick={() => setShortcuts(true)}>
+            <Keyboard className="size-4" />
+          </IconBtn>
           <AspectPicker value={data.aspect} onChange={(aspect) => useEditor.getState().commit((d) => ({ ...d, aspect }))} />
           <Button onClick={openExport} disabled={!data.duration}>
             <Download className="size-4" /> 匯出
@@ -263,6 +284,7 @@ export default function Editor() {
       </div>
       <NavigationWarning persistence={persistence} />
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
+      <ShortcutsDialog open={shortcuts} onClose={() => setShortcuts(false)} />
       <AutoEditDialog />
     </div>
   );

@@ -10,6 +10,7 @@ import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipMotion, ClipTra
 import { Button } from '../components/ui';
 import { ColorPicker } from '../components/ColorPicker';
 import { useEditor } from './store';
+import { TranslationField } from './TranslationField';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 const MOTIONS: { id: ClipMotion; label: string }[] = [
@@ -190,6 +191,7 @@ export function Inspector() {
           onFocus={checkpoint}
           onChange={(e) => setText(e.target.value)}
         />
+        <TranslationField caption={c} />
       </Section>
       <Section title="字型">
         <select className="h-9 w-full rounded-lg border border-line bg-surface px-2 text-sm" value={s.font} onChange={(e) => setStyle({ font: e.target.value })}>

@@ -72,7 +72,14 @@ export function mergeCaptions(captions: Caption[], ids: Set<string>) {
   if (positions.some((p, i) => i > 0 && p !== positions[i - 1] + 1)) throw new Error('只能合併相鄰字幕，請一併勾選中間的句子。');
   const first = selected[0];
   // 合併後多了換行，逐字時間對不上，改成整句時間
-  const merged = { ...first, end: Math.max(...selected.map((c) => c.end)), text: selected.map((c) => c.text.trim()).join('\n'), words: undefined };
+  const translations = selected.map((c) => c.translation?.trim()).filter(Boolean);
+  const merged = {
+    ...first,
+    end: Math.max(...selected.map((c) => c.end)),
+    text: selected.map((c) => c.text.trim()).join('\n'),
+    words: undefined,
+    translation: translations.length ? translations.join(' ') : first.translation,
+  };
   return { captions: captions.flatMap((c) => c.id === first.id ? [merged] : ids.has(c.id) ? [] : [c]), id: first.id };
 }
 
@@ -88,8 +95,10 @@ export function splitCaptionText(caption: Caption, caret: number, time?: number)
   const split = words && left + right === caption.text ? splitWords(words, [...left].length) : null;
   const at = ms(split?.at ?? time ?? caption.start + (caption.end - caption.start) * index / parts.length);
   if (at - caption.start < 0.1 - 1e-8 || caption.end - at < 0.1 - 1e-8) throw new Error('拆句後每句至少需保留 0.1 秒，請先延長字幕或調整拆句位置。');
-  if (split) return [{ ...caption, end: at, text: left, words: split.left }, { ...caption, id: uid(), start: at, text: right, style: structuredClone(caption.style), words: split.right }];
-  return [{ ...caption, end: at, text: left, words: undefined }, { ...caption, id: uid(), start: at, text: right, style: structuredClone(caption.style), words: undefined }];
+  // 翻譯沒辦法跟著拆，留在前一句（後一句不重複顯示），可以再重新翻譯
+  const second = { ...caption, id: uid(), start: at, text: right, style: structuredClone(caption.style), translation: caption.translation === undefined ? undefined : '' };
+  if (split) return [{ ...caption, end: at, text: left, words: split.left }, { ...second, words: split.right }];
+  return [{ ...caption, end: at, text: left, words: undefined }, { ...second, words: undefined }];
 }
 
 /** 在第 n 個字之後切開逐字時間；切在一個多字詞中間時，依字數比例分配時間 */
@@ -242,7 +251,9 @@ export function serializeSubtitles(captions: Caption[], format: 'srt' | 'vtt') {
   const lines = orderedCaptions(captions).map((c, i) => {
     if (!Number.isFinite(c.start) || !Number.isFinite(c.end) || c.start < 0 || c.end <= c.start || c.end > 359999.999) throw new Error(`第 ${i + 1} 句的時間無效，請調整後再匯出。`);
     if (!c.text.trim()) throw new Error(`第 ${i + 1} 句沒有文字，請修改或刪除後再匯出。`);
-    const text = c.text.trim().replace(/\r\n?/g, '\n').replace(/\n[ \t]*\n+/g, '\n')
+    // 雙語字幕：翻譯放在原文下一行
+    const full = c.translation?.trim() ? `${c.text.trim()}\n${c.translation.trim()}` : c.text.trim();
+    const text = full.replace(/\r\n?/g, '\n').replace(/\n[ \t]*\n+/g, '\n')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const start = Math.round(c.start * 1000) / 1000, end = Math.max(Math.round(c.end * 1000) / 1000, start + 0.001);
     const sep = format === 'srt' ? ',' : '.';

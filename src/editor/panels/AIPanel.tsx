@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Captions, Clapperboard, FileText, Loader2, Scissors, Sparkles } from 'lucide-react';
+import { Captions, Clapperboard, FileText, Languages, Loader2, Scissors, Sparkles } from 'lucide-react';
+import { TRANSLATE_TARGETS, translateTexts, type TranslateTarget } from '../../lib/translate';
 import { useAuth } from '../../lib/auth';
 import { ASR_MODELS, getConverter, isFiller, transcribe } from '../../lib/asr';
 import { captionWords, formatCaptionTime, parseEditTime, replaceCaptionsInRanges } from '../../lib/captions';
@@ -34,6 +35,7 @@ export function AIPanel() {
       <AutoEffects isPro={isPro} />
       <AutoCaptions isPro={isPro} />
       <ScriptSync isPro={isPro} />
+      <Bilingual isPro={isPro} />
       <SmartCut isPro={isPro} />
     </div>
   );
@@ -307,6 +309,82 @@ function TimeInput({ label, value, placeholder, onChange }: { label: string; val
         播放頭
       </button>
     </div>
+  );
+}
+
+/** 雙語字幕：把一般字幕翻成英文，顯示在原文下一行 */
+function Bilingual({ isPro }: { isPro: boolean }) {
+  const upgrade = useUpgrade();
+  const toast = useToast();
+  const [target, setTarget] = useState<TranslateTarget>('en');
+  const [onlyMissing, setOnlyMissing] = useState(true);
+  const [status, setStatus] = useState<string | null>(null);
+  const lines = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower' && c.text.trim()).length);
+  const translated = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower' && c.translation?.trim()).length);
+
+  const run = async () => {
+    if (!isPro) return upgrade('雙語字幕是專業版功能。');
+    if (!ensureUnlocked('caption')) return;
+    const { data, commit } = useEditor.getState();
+    const todo = data.captions.filter((c) => c.role !== 'flower' && c.text.trim() && (!onlyMissing || !c.translation?.trim()));
+    if (!todo.length) return toast(lines ? '每一句都已經有翻譯了' : '還沒有字幕，先產生或輸入字幕', 'info');
+    try {
+      setStatus('準備翻譯');
+      const out = await translateTexts(
+        todo.map((c) => c.text.replace(/\n/g, ' ')),
+        target,
+        (p) => setStatus(p.phase === 'download' ? `下載翻譯模型 ${Math.round(p.progress)}%（只有第一次）` : `翻譯中 ${Math.round(p.progress)}%`),
+      );
+      const map = new Map(todo.map((c, i) => [c.id, out[i] ?? '']));
+      // 翻譯期間字幕被改過的話，只更新文字沒變的句子
+      const texts = new Map(todo.map((c) => [c.id, c.text]));
+      commit((d) => ({ ...d, captions: d.captions.map((c) => (map.has(c.id) && texts.get(c.id) === c.text ? { ...c, translation: map.get(c.id) } : c)) }));
+      toast(`已翻譯 ${todo.length} 句，可以在「字幕」分頁逐句修改`, 'success');
+    } catch (e) {
+      toast('翻譯失敗：' + (e as Error).message, 'error');
+    } finally {
+      setStatus(null);
+    }
+  };
+
+  const remove = () => {
+    if (!ensureUnlocked('caption')) return;
+    useEditor.getState().commit((d) => ({ ...d, captions: d.captions.map(({ translation: _t, ...c }) => c) }));
+    toast('已移除所有翻譯', 'success');
+  };
+
+  return (
+    <section className="p-4">
+      <div className="flex items-center gap-2">
+        <span className="grid size-8 place-items-center rounded-xl bg-coral-soft text-coral">
+          <Languages className="size-4" />
+        </span>
+        <h2 className="text-sm font-extrabold">雙語字幕</h2>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+        把字幕翻成外語，顯示在原文下方、字小一點，經營海外觀眾更方便。翻譯在你的瀏覽器裡執行，匯出 SRT／VTT 時也會帶上翻譯。
+      </p>
+      <div className="mt-3">
+        <div className="mb-1.5 text-xs font-semibold text-ink-soft">翻譯成</div>
+        <Chips options={TRANSLATE_TARGETS.map((t) => ({ id: t.id, label: t.label }))} value={target} onChange={setTarget} />
+      </div>
+      {translated > 0 && (
+        <label className="mt-3 flex items-center gap-1.5 text-xs">
+          <input type="checkbox" className="accent-brand" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
+          只翻還沒有翻譯的句子（保留你改過的翻譯）
+        </label>
+      )}
+      <Button className="mt-3 w-full" onClick={run} disabled={!!status || !lines}>
+        {status ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
+        {status ?? (lines ? `翻譯 ${onlyMissing ? lines - translated : lines} 句字幕` : '先產生或輸入字幕')}
+      </Button>
+      {translated > 0 && (
+        <button className="mt-2 w-full text-center text-[11px] font-bold text-ink-soft hover:text-brand" onClick={remove}>
+          移除全部翻譯（目前 {translated} 句）
+        </button>
+      )}
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-mute">機器翻譯是逐句翻的，太短的句子可能翻得不完整，建議發佈前看過一遍。</p>
+    </section>
   );
 }
 

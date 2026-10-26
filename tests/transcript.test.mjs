@@ -91,3 +91,14 @@ test('re-recognizing a range replaces only captions centred inside it and keeps 
   // 沒給範圍＝整條重做，花字保留
   assert.deepEqual(captions.replaceCaptionsInRanges(old, fresh).map((x) => x.id), ['n', 'f']);
 });
+
+test('bilingual captions: SRT puts the translation on the next line; split keeps it once; merge joins them', () => {
+  const c = (id, start, end, text, translation) => ({ id, start, end, text, style, translation });
+  const srt = captions.serializeSubtitles([c('a', 0, 1, '你好', 'Hello')], 'srt');
+  assert.match(srt, /00:00:00,000 --> 00:00:01,000\n你好\nHello\n/);
+  const [l, r] = captions.splitCaptionText(c('b', 0, 2, '你好世界', 'Hello world'), 2);
+  assert.equal(l.translation, 'Hello world');
+  assert.equal(r.translation, '');
+  const merged = captions.mergeCaptions([c('x', 0, 1, '你好', 'Hello'), c('y', 1, 2, '世界', 'world')], new Set(['x', 'y']));
+  assert.equal(merged.captions[0].translation, 'Hello world');
+});

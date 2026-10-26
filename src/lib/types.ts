@@ -151,6 +151,8 @@ export interface Caption {
   style: CaptionStyle;
   /** 逐字時間（時間軸秒數）。文字或位置被改到對不上時視為失效，改用整句時間 */
   words?: CaptionWord[];
+  /** 雙語字幕：第二行的翻譯（顯示在原文下方、字小一點） */
+  translation?: string;
   /** 智能剪輯加上的花字（重新套用模板時會先移除） */
   role?: 'flower';
 }

@@ -89,6 +89,12 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
     if (editing.current?.id !== id || !editing.current.checkpointed) { state.checkpoint(); editing.current = { id, checkpointed: true }; }
     state.live((d) => ({ ...d, captions: d.captions.map((c) => c.id === id ? { ...c, text } : c) }));
   };
+  const changeTranslation = (id: string, translation: string) => {
+    if (!ensureUnlocked('caption')) return;
+    const state = useEditor.getState();
+    if (editing.current?.id !== id || !editing.current.checkpointed) { state.checkpoint(); editing.current = { id, checkpointed: true }; }
+    state.live((d) => ({ ...d, captions: d.captions.map((c) => c.id === id ? { ...c, translation } : c) }));
+  };
   const split = (id: string) => apply((d) => {
     const caption = d.captions.find((c) => c.id === id);
     if (!caption) return d;
@@ -180,7 +186,7 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
       {visible.map((c, index) => <CaptionRow key={c.id} caption={c} number={currentPage * PAGE + index + 1} checked={checked.has(c.id)} active={selection?.id === c.id} locked={locked}
         inputRef={(el) => { if (el) inputs.current.set(c.id, el); else inputs.current.delete(c.id); }}
         toggle={() => { if (ensureUnlocked('caption')) useEditor.getState().toggleSelect({ type: 'caption', id: c.id }); }}
-        focus={() => focus(c.id, c.start)} change={(text) => changeText(c.id, text)} split={() => { split(c.id); editing.current = null; }} next={() => next(c.id)} blur={() => { editing.current = null; }} error={(text) => inform(text, true)}
+        focus={() => focus(c.id, c.start)} change={(text) => changeText(c.id, text)} changeTranslation={(text) => changeTranslation(c.id, text)} split={() => { split(c.id); editing.current = null; }} next={() => next(c.id)} blur={() => { editing.current = null; }} error={(text) => inform(text, true)}
         retime={(start, end) => {
           if (start < 0 || end <= start) throw new Error('結束時間必須晚於開始時間。');
           apply((d) => ({ ...d, captions: d.captions.map((x) => x.id === c.id ? { ...x, start, end } : x) }));

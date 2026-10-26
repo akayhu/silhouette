@@ -658,19 +658,31 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
 const captionFont = (s: Caption['style'], size: number) => `${s.bold ? 800 : 500} ${size}px "${s.font}", "Noto Sans TC", sans-serif`;
 const clampTo = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
 
-/** 字幕完整文字的排版：中心點會限制在畫面內，字幕不會被拖到畫面外 */
+/** 雙語字幕的翻譯行：字級是原文的 60% */
+const TRANSLATION_SCALE = 0.6;
+
+/** 字幕完整文字的排版（含翻譯行）：中心點會限制在畫面內，字幕不會被拖到畫面外 */
 function layoutCaption(ctx: CanvasRenderingContext2D, c: Caption, W: number, H: number) {
   const s = c.style;
   const size = s.size * (Math.min(W, H) / 1080);
+  const tSize = size * TRANSLATION_SCALE;
+  const translation = c.translation?.trim() ?? '';
+  ctx.font = captionFont(s, tSize);
+  const tLines = translation ? wrap(ctx, translation, W * 0.86) : [];
+  const tWidest = Math.max(0, ...tLines.map((l) => ctx.measureText(l).width));
+  const tLh = tSize * 1.3;
+  const gap = tLines.length ? size * 0.12 : 0;
+  // 最後設回原文字型，呼叫端接著畫原文
   ctx.font = captionFont(s, size);
   const lines = wrap(ctx, c.text, W * 0.86);
   const lh = size * 1.28;
-  const blockH = lines.length * lh;
-  const widest = Math.max(0, ...lines.map((l) => ctx.measureText(l).width));
+  const mainH = lines.length * lh;
+  const blockH = mainH + gap + tLines.length * tLh;
+  const widest = Math.max(tWidest, ...lines.map((l) => ctx.measureText(l).width));
   const margin = size * 0.4;
   const cx = clampTo((s.x ?? 0.5) * W, widest / 2 + margin, W - widest / 2 - margin);
   const cy = clampTo(s.y * H, blockH / 2 + margin, H - blockH / 2 - margin);
-  return { size, lh, blockH, widest, margin, cx, cy };
+  return { size, lh, blockH, mainH, widest, margin, cx, cy, tSize, tLines, tLh, gap };
 }
 
 let measureCtx: CanvasRenderingContext2D | null = null;
@@ -744,7 +756,10 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
   ctx.textBaseline = 'middle';
   const lines = wrap(ctx, text, W * 0.86);
   const lh = layout.lh;
-  const blockH = lines.length * lh;
+  // 原文在上、翻譯在下，整塊以中心點置中；打字機效果打字時也用完整排版，不會跳動
+  const top = -layout.blockH / 2;
+  const lineY = (i: number) => top + lh * (i + 0.5);
+  const tY = (k: number) => top + layout.mainH + layout.gap + layout.tLh * (k + 0.5);
   ctx.globalAlpha = alpha;
   ctx.translate(layout.cx, layout.cy + dy);
   ctx.scale(zoom, zoom);
@@ -778,9 +793,9 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
     if (shadow && shadow.opacity > 0) withShadow(box);
     else box();
   } else {
-    withShadow(() =>
+    withShadow(() => {
       lines.forEach((line, i) => {
-        const y = -blockH / 2 + lh * (i + 0.5);
+        const y = lineY(i);
         if (s.stroke) {
           ctx.lineJoin = 'round';
           ctx.lineWidth = size * 0.16;
@@ -789,11 +804,30 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
         }
         ctx.fillStyle = s.color;
         ctx.fillText(line, 0, y);
-      }),
-    );
+      });
+      drawTranslation();
+    });
   }
+  function drawTranslation() {
+    if (!layout.tLines.length) return;
+    ctx.save();
+    ctx.font = captionFont(s, layout.tSize);
+    layout.tLines.forEach((line, k) => {
+      const y = tY(k);
+      if (s.stroke && !s.background) {
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = layout.tSize * 0.16;
+        ctx.strokeStyle = s.stroke;
+        ctx.strokeText(line, 0, y);
+      }
+      ctx.fillStyle = s.color;
+      ctx.fillText(line, 0, y);
+    });
+    ctx.restore();
+  }
+  drawTranslation();
   lines.forEach((line, i) => {
-    const y = -blockH / 2 + lh * (i + 0.5);
+    const y = lineY(i);
     if (s.stroke && !s.background) {
       ctx.lineJoin = 'round';
       ctx.lineWidth = size * 0.16;

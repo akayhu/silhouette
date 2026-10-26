@@ -20,9 +20,9 @@ function TimeField({ value, label, disabled, save, error }: { value: number; lab
     }} />;
 }
 
-export function CaptionRow({ caption: c, number, checked, active, locked, inputRef, toggle, focus, change, split, next, retime, error, blur }: {
+export function CaptionRow({ caption: c, number, checked, active, locked, inputRef, toggle, focus, change, changeTranslation, split, next, retime, error, blur }: {
   caption: Caption; number: number; checked: boolean; active: boolean; locked: boolean;
-  inputRef: RefCallback<HTMLTextAreaElement>; toggle: () => void; focus: () => void; change: (text: string) => void;
+  inputRef: RefCallback<HTMLTextAreaElement>; toggle: () => void; focus: () => void; change: (text: string) => void; changeTranslation: (text: string) => void;
   split: () => void; next: () => void; blur: () => void; retime: (start: number, end: number) => void; error: (text: string) => void;
 }) {
   return <li className={`rounded-xl border p-2 ${active || checked ? 'border-brand bg-brand-soft/30' : 'border-line'}`}>
@@ -39,6 +39,14 @@ export function CaptionRow({ caption: c, number, checked, active, locked, inputR
         if (e.metaKey || e.ctrlKey) { e.preventDefault(); split(); }
         else if (!e.shiftKey) { e.preventDefault(); next(); }
       }} />
+    {c.translation !== undefined && (
+      <div className="mt-1 flex items-start gap-1.5 border-t border-dashed border-line pt-1">
+        <span className="mt-1 shrink-0 rounded bg-sunken px-1 text-[10px] font-bold text-ink-soft">英文</span>
+        <textarea aria-label={`第 ${number} 句英文翻譯`} value={c.translation} disabled={locked} rows={1} placeholder="英文翻譯（留空就不顯示）"
+          className="min-w-0 flex-1 resize-y rounded-md bg-transparent px-1 py-0.5 text-xs leading-relaxed text-ink-soft outline-none focus:bg-surface focus:text-ink disabled:opacity-50"
+          onFocus={focus} onBlur={blur} onChange={(e) => changeTranslation(e.target.value)} />
+      </div>
+    )}
     <div className="mt-1 grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5">
       <span className="text-[10px] text-ink-mute">始</span><TimeField value={c.start} label={`第 ${number} 句開始時間`} disabled={locked} save={(start) => retime(start, c.end)} error={error} />
       <span className="text-[10px] text-ink-mute">終</span><TimeField value={c.end} label={`第 ${number} 句結束時間`} disabled={locked} save={(end) => retime(c.start, end)} error={error} />

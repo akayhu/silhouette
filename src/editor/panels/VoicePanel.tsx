@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { saveLocalFile } from '../../lib/localMedia';
 import { AudioLines, Loader2, Mic, Play, Sparkles, Square, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -37,9 +38,20 @@ const voiceLabel = (v: Voice) => {
   return VOICE_NAMES[base] ?? base;
 };
 
+/** 朗讀在伺服器產生，拿到後存到這台裝置（本機優先）；伺服器上的檔案之後會自動清掉 */
 async function toMedia(url: string, name: string): Promise<MediaItem> {
   const { duration } = await probe(url, 'audio');
-  return { id: uid(), name: name.slice(0, 18), kind: 'audio', url, duration, origin: 'tts' };
+  const id = uid();
+  const base: MediaItem = { id, name: name.slice(0, 18), kind: 'audio', url, duration, origin: 'tts' };
+  try {
+    const blob = await (await fetch(url)).blob();
+    const ext = url.match(/\.[a-z0-9]+$/i)?.[0] ?? '.wav';
+    const saved = await saveLocalFile(id, blob, base.name + ext);
+    return { ...base, url: saved.url, local: saved.local };
+  } catch {
+    // 存不到本機（空間不夠等）就先用伺服器上的檔案
+    return base;
+  }
 }
 
 export function VoicePanel() {

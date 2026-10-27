@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { hydrateLocalMedia, persistableData } from '../lib/localMedia';
 import { api, ApiError } from '../lib/api';
 import { projectDrafts, type Draft } from '../lib/projectDrafts';
 import { ProjectSave, sameContent, type SaveStatus } from '../lib/projectSave';
@@ -28,12 +29,15 @@ export function useProjectPersistence(userId: string | undefined, id: string | u
     const loadAbort = new AbortController();
     const deadline = setTimeout(() => loadAbort.abort(), 15_000);
     setReady(false); setError(''); setWarning(''); setRecovery([]); setStatus(initial);
-    start.current = (project, draft) => {
+    start.current = async (project, draft) => {
+      if (!active) return;
+      // 本機素材：把 local:id 換成這台裝置上的檔案（找不到的留空，由使用者重新提供）
+      const hydrated = await hydrateLocalMedia(draft?.data ?? project.data);
       if (!active) return;
       saver.current?.dispose(); unsubscribe?.();
-      useEditor.getState().load(project.id, draft?.name ?? project.name, draft?.data ?? project.data);
+      useEditor.getState().load(project.id, draft?.name ?? project.name, hydrated);
       // The store normalizes older project formats; take its actual initial snapshot.
-      const normalized = { ...project, name: useEditor.getState().name, data: useEditor.getState().data };
+      const normalized = { ...project, name: useEditor.getState().name, data: persistableData(useEditor.getState().data) };
       recoveredFrom.current = draft ?? null;
       let recovering = false;
       const coordinator = new ProjectSave({ userId, project: normalized, storage: projectDrafts,
@@ -52,7 +56,7 @@ export function useProjectPersistence(userId: string | undefined, id: string | u
       });
       saver.current = coordinator;
       unsubscribe = useEditor.subscribe((state, previous) => {
-        if (state.projectId === id && (state.data !== previous.data || state.name !== previous.name)) coordinator.change(state.name, state.data);
+        if (state.projectId === id && (state.data !== previous.data || state.name !== previous.name)) coordinator.change(state.name, persistableData(state.data));
       });
       recovering = !!draft;
       if (draft) coordinator.recover({ ...draft, data: normalized.data });

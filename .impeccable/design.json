@@ -1,360 +1,98 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-26T08:06:49.655145+00:00",
+  "generatedAt": "2026-10-27T11:59:09.517Z",
   "title": "Design System: 片刻剪趣",
   "extensions": {
     "scope": {
-      "world": "Marketing surfaces only (homepage, pricing, 404) under the .mk wrapper in MarketingLayout.",
-      "outOfScope": "App surfaces (editor, dashboard, account, admin, auth) share the brand colours and logo but keep their own Operate grammar (Plus Jakarta Sans / Noto Sans TC, rounded-xl, --shadow-card / --shadow-pop); receipt devices stay inside .mk.",
+      "world": "Marketing surfaces only (homepage, pricing, 404) under the .mk wrapper in MarketingLayout: a Taiwanese lifestyle-magazine first issue.",
+      "outOfScope": "App surfaces (editor, dashboard, account, admin, auth) keep their own Operate grammar (Plus Jakarta Sans / Noto Sans TC, rounded-xl, --shadow-card / --shadow-pop, brand red #d42c22). The shared mark is the logo (ink square, white play, red dot).",
       "openDecision": null,
-      "decided": "Owner chose to unify the app brand with the receipt world: --color-brand / --color-coral #d42c22, cool neutrals, ink logo with red dot, favicon and theme-color #d42c22."
+      "decided": "Owner replaced the receipt world with the 生活雜誌 direction (2026-10-27): neutral magazine paper, ink, one cobalt issue colour; brand red only in the logo dot."
     },
     "colorMeta": {
-      "invoice": {
+      "mag-blue": {
         "role": "primary",
-        "displayName": "Invoice Red",
-        "canonical": "#d42c22",
-        "oklch": "oklch(56.6% 0.205 28.9)",
-        "tonalRamp": [
-          "#1f0000",
-          "#4d0000",
-          "#810101",
-          "#b80304",
-          "#e33d30",
-          "#ff7463",
-          "#feb3a8",
-          "#fee9e6"
-        ]
+        "displayName": "Issue Cobalt",
+        "canonical": "#2343c8"
       },
-      "invoice-deep": {
+      "mag-blue-deep": {
         "role": "primary",
-        "displayName": "Deep Invoice Red",
-        "canonical": "#a8201a",
-        "oklch": "oklch(47.6% 0.172 28.5)",
-        "tonalRamp": [
-          "#1f0000",
-          "#4d0102",
-          "#800405",
-          "#ae2720",
-          "#d64f42",
-          "#ff7464",
-          "#ffb3a8",
-          "#ffe9e5"
-        ]
+        "displayName": "Deep Cobalt",
+        "canonical": "#1a33a1"
       },
-      "invoice-soft": {
+      "mag-blue-soft": {
         "role": "primary",
-        "displayName": "Invoice Blush",
-        "canonical": "#f8dcd8",
-        "oklch": "oklch(91.6% 0.032 27.4)",
-        "tonalRamp": [
-          "#160605",
-          "#331f1d",
-          "#523c39",
-          "#725b57",
-          "#957c78",
-          "#b89e9a",
-          "#ddc2be",
-          "#fee9e6"
-        ]
+        "displayName": "Cobalt Wash",
+        "canonical": "#e2e7fa"
       },
-      "receipt": {
+      "mag-ink": {
         "role": "neutral",
-        "displayName": "Carbon Print",
-        "canonical": "#18191d",
-        "oklch": "oklch(21.4% 0.008 274.5)",
-        "tonalRamp": [
-          "#0a0b0f",
-          "#242529",
-          "#414246",
-          "#606166",
-          "#818287",
-          "#a3a5aa",
-          "#c7c9ce",
-          "#edeef4"
-        ]
+        "displayName": "Ink",
+        "canonical": "#1b1b19"
       },
-      "receipt-soft": {
+      "mag-soft": {
         "role": "neutral",
-        "displayName": "Faded Print",
-        "canonical": "#474a52",
-        "oklch": "oklch(40.9% 0.014 269.3)",
-        "tonalRamp": [
-          "#090b11",
-          "#22252c",
-          "#3f424a",
-          "#5e6169",
-          "#7f828b",
-          "#a1a5ae",
-          "#c5c9d3",
-          "#ebeef8"
-        ]
+        "displayName": "Soft Ink",
+        "canonical": "#45453f"
       },
-      "receipt-mute": {
+      "mag-mute": {
         "role": "neutral",
-        "displayName": "Ghost Print",
-        "canonical": "#676b74",
-        "oklch": "oklch(52.7% 0.015 266.6)",
-        "tonalRamp": [
-          "#080b12",
-          "#22252d",
-          "#3e424a",
-          "#5d616a",
-          "#7e828c",
-          "#a1a5af",
-          "#c5c9d3",
-          "#eaeef9"
-        ]
+        "displayName": "Mute Ink",
+        "canonical": "#67675f"
       },
-      "paper": {
+      "mag-rule": {
         "role": "neutral",
-        "displayName": "Thermal Paper",
-        "canonical": "#f8f9f6",
-        "oklch": "oklch(98.1% 0.004 121.6)",
-        "tonalRamp": [
-          "#0b0b0a",
-          "#252523",
-          "#414240",
-          "#61625f",
-          "#828380",
-          "#a4a5a3",
-          "#c8c9c7",
-          "#eeefec"
-        ]
+        "displayName": "Rule",
+        "canonical": "#d6d7d1"
       },
-      "steel": {
+      "mag-paper": {
         "role": "neutral",
-        "displayName": "Counter Steel",
-        "canonical": "#e3e7ea",
-        "oklch": "oklch(92.6% 0.006 239.8)",
-        "tonalRamp": [
-          "#090c0d",
-          "#232528",
-          "#3f4245",
-          "#5e6264",
-          "#7f8386",
-          "#a2a6a8",
-          "#c6cacd",
-          "#ebeff2"
-        ]
+        "displayName": "Paper",
+        "canonical": "#f5f6f3"
       },
-      "steel-deep": {
+      "mag-white": {
         "role": "neutral",
-        "displayName": "Deep Steel",
-        "canonical": "#cdd3d8",
-        "oklch": "oklch(86.4% 0.010 242.9)",
-        "tonalRamp": [
-          "#080c0f",
-          "#212629",
-          "#3e4347",
-          "#5d6266",
-          "#7e8388",
-          "#a0a6ab",
-          "#c4cacf",
-          "#e9eff4"
-        ]
+        "displayName": "White Paper",
+        "canonical": "#fcfcfa"
+      },
+      "brand-red": {
+        "role": "accent",
+        "displayName": "Brand Red (logo dot only)",
+        "canonical": "#d42c22"
       }
-    },
-    "typographyMeta": {
-      "display": {
-        "displayName": "Display",
-        "purpose": "Hero headline only; one word may be Invoice Red. Closing band uses clamp(36px,5vw,68px) in the same voice."
-      },
-      "headline": {
-        "displayName": "Headline",
-        "purpose": "Centred section headings, text-wrap balance, 17px Faded Print sub."
-      },
-      "title": {
-        "displayName": "Title",
-        "purpose": "Slip names and group heads, 19 to 22px."
-      },
-      "body": {
-        "displayName": "Body",
-        "purpose": "Line items, FAQ answers, slip notes."
-      },
-      "lede": {
-        "displayName": "Lede",
-        "purpose": "Hero and pricing intro, max 30em."
-      },
-      "figure": {
-        "displayName": "Figure",
-        "purpose": "Prices, totals, 404 and invoice number in Martian Mono, 30 to 104px, font-stretch 76 to 85%."
-      },
-      "label": {
-        "displayName": "Label",
-        "purpose": "Quantities after leaders, dates, durations; Martian Mono tabular, 11 to 13px."
-      }
-    },
-    "shadows": [
-      {
-        "name": "slip",
-        "value": "0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35)",
-        "purpose": "Paper slips, the screenshot mat and the phone mockup. The only shadow in the world."
-      }
-    ],
-    "motion": [
-      {
-        "name": "print-line",
-        "value": "print-line 0.38s cubic-bezier(0.16, 1, 0.3, 1) both",
-        "purpose": "A new slip line clips in top-down like a receipt printer; disabled under reduced motion."
-      },
-      {
-        "name": "ease-print",
-        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "Print-line and demo timeline segment collapse (700ms)."
-      },
-      {
-        "name": "demo-step",
-        "value": "2600ms",
-        "purpose": "Autoplay interval per demo line; pausable, replayable, deterministic."
-      },
-      {
-        "name": "colour-swap",
-        "value": "transition-colors (150ms)",
-        "purpose": "Buttons, rows and links change colour only; 1px press on active."
-      }
-    ],
-    "breakpoints": [
-      {
-        "name": "sm",
-        "value": "640px"
-      },
-      {
-        "name": "md",
-        "value": "768px"
-      },
-      {
-        "name": "lg",
-        "value": "1024px"
-      }
-    ],
-    "devices": [
-      {
-        "name": "torn-edge",
-        "value": "7px zigzag CSS mask (.slip-edge-b bottom, .slip-edge-y both)",
-        "purpose": "Slip silhouette."
-      },
-      {
-        "name": "leader",
-        "value": "2px dotted, Carbon at 30%, raised 0.3em",
-        "purpose": "Joins item name to quantity."
-      },
-      {
-        "name": "tear-rule",
-        "value": "2px dashed, Carbon at 25%",
-        "purpose": "Divides slip header, body and total."
-      },
-      {
-        "name": "barcode",
-        "value": "Deterministic SVG bars from a string",
-        "purpose": "Slip foot and closing band."
-      }
-    ]
+    }
   },
   "components": [
     {
-      "name": "Red Button",
-      "kind": "button",
-      "refersTo": "button-red-lg",
-      "description": "Primary action: register, start editing, upgrade. One per view region.",
-      "html": "<button class=\"ds-btn-red\">免費開始剪輯 <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
-      "css": ":host{--color-invoice:#d42c22;--color-invoice-deep:#a8201a;--color-receipt:#18191d;--color-receipt-soft:#474a52;--color-receipt-mute:#676b74;--color-paper:#f8f9f6;--color-steel:#e3e7ea;--color-steel-deep:#cdd3d8;--shadow-slip:0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35);--font-hei:\"Chiron Hei HK\",\"Noto Sans TC\",system-ui,sans-serif;--font-receipt:\"Martian Mono\",\"Chiron Hei HK\",ui-monospace,monospace;} .ds-btn-red{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:6px;font-family:var(--font-hei);font-weight:700;white-space:nowrap;cursor:pointer;transition:background-color .15s,color .15s;height:56px;padding:0 28px;font-size:17px;border:none;background:var(--color-invoice);color:#fff;} .ds-btn-red:hover{background:var(--color-invoice-deep);} .ds-btn-red:active{transform:translateY(1px);} .ds-btn-red:focus-visible{outline:2px solid var(--color-invoice);outline-offset:3px;}"
+      "name": "mkButton ink",
+      "source": "src/components/marketing.tsx",
+      "description": "Solid ink, square, hover turns cobalt."
     },
     {
-      "name": "Ink Button",
-      "kind": "button",
-      "refersTo": "button-ink",
-      "description": "Secondary action beside a red button (free plan, 404 secondary).",
-      "html": "<button class=\"ds-btn-ink\">看價格方案</button>",
-      "css": ":host{--color-invoice:#d42c22;--color-invoice-deep:#a8201a;--color-receipt:#18191d;--color-receipt-soft:#474a52;--color-receipt-mute:#676b74;--color-paper:#f8f9f6;--color-steel:#e3e7ea;--color-steel-deep:#cdd3d8;--shadow-slip:0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35);--font-hei:\"Chiron Hei HK\",\"Noto Sans TC\",system-ui,sans-serif;--font-receipt:\"Martian Mono\",\"Chiron Hei HK\",ui-monospace,monospace;} .ds-btn-ink{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:6px;font-family:var(--font-hei);font-weight:700;white-space:nowrap;cursor:pointer;transition:background-color .15s,color .15s;height:44px;padding:0 20px;font-size:15px;background:transparent;border:2px solid var(--color-receipt);color:var(--color-receipt);} .ds-btn-ink:hover{background:var(--color-receipt);color:var(--color-paper);} .ds-btn-ink:active{transform:translateY(1px);} .ds-btn-ink:focus-visible{outline:2px solid var(--color-invoice);outline-offset:3px;}"
+      "name": "mkButton line",
+      "source": "src/components/marketing.tsx",
+      "description": "1px ink outline, hover fills ink."
     },
     {
-      "name": "Paper Button",
-      "kind": "button",
-      "refersTo": "button-paper",
-      "description": "The action on the full-bleed Invoice Red closing band only.",
-      "html": "<div class=\"ds-band\"><button class=\"ds-btn-paper\">免費開始剪輯 <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button></div>",
-      "css": ":host{--color-invoice:#d42c22;--color-invoice-deep:#a8201a;--color-receipt:#18191d;--color-receipt-soft:#474a52;--color-receipt-mute:#676b74;--color-paper:#f8f9f6;--color-steel:#e3e7ea;--color-steel-deep:#cdd3d8;--shadow-slip:0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35);--font-hei:\"Chiron Hei HK\",\"Noto Sans TC\",system-ui,sans-serif;--font-receipt:\"Martian Mono\",\"Chiron Hei HK\",ui-monospace,monospace;} .ds-band{background:var(--color-invoice);padding:32px;} .ds-btn-paper{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:6px;font-family:var(--font-hei);font-weight:700;white-space:nowrap;cursor:pointer;transition:background-color .15s,color .15s;height:56px;padding:0 28px;font-size:17px;border:none;background:var(--color-paper);color:var(--color-invoice-deep);} .ds-btn-paper:hover{background:#fff;} .ds-btn-paper:focus-visible{outline:2px solid #fff;outline-offset:3px;}"
+      "name": "mkButton paper",
+      "source": "src/components/marketing.tsx",
+      "description": "White paper button on the cobalt back cover."
     },
     {
-      "name": "Receipt Slip",
-      "kind": "card",
-      "refersTo": "receipt-slip",
-      "description": "The container for every list: torn edges, dashed tear rules, leaders to mono quantities, a total.",
-      "html": "<article class=\"ds-slip\"><header class=\"ds-slip-head\"><h3>美食與旅遊 Vlog</h3><span class=\"ds-num ds-tag\">示範</span></header><ul class=\"ds-slip-list\"><li><span>多段素材串接轉場</span><span class=\"ds-leader\"></span><span class=\"ds-num ds-qty\">5 個</span></li><li><span>美食濾鏡統一色調</span><span class=\"ds-leader\"></span><span class=\"ds-num ds-qty\">1 套</span></li><li><span>無版權配樂，淡入淡出</span><span class=\"ds-leader\"></span><span class=\"ds-num ds-qty\">1 首</span></li></ul><div class=\"ds-slip-total\"><span>成品長度</span><span class=\"ds-num ds-total\">00:38</span></div></article>",
-      "css": ":host{--color-invoice:#d42c22;--color-invoice-deep:#a8201a;--color-receipt:#18191d;--color-receipt-soft:#474a52;--color-receipt-mute:#676b74;--color-paper:#f8f9f6;--color-steel:#e3e7ea;--color-steel-deep:#cdd3d8;--shadow-slip:0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35);--font-hei:\"Chiron Hei HK\",\"Noto Sans TC\",system-ui,sans-serif;--font-receipt:\"Martian Mono\",\"Chiron Hei HK\",ui-monospace,monospace;} .ds-leader{flex:1;min-width:1.5rem;border-bottom:2px dotted color-mix(in oklab,var(--color-receipt) 30%,transparent);transform:translateY(-0.3em);} .ds-num{font-family:var(--font-receipt);font-variant-numeric:tabular-nums;} .ds-slip{--tooth:7px;-webkit-mask:linear-gradient(#000 0 0) center / 100% calc(100% - var(--tooth) * 2) no-repeat,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top / calc(var(--tooth) * 2) var(--tooth) repeat-x,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom / calc(var(--tooth) * 2) var(--tooth) repeat-x;mask:linear-gradient(#000 0 0) center / 100% calc(100% - var(--tooth) * 2) no-repeat,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top / calc(var(--tooth) * 2) var(--tooth) repeat-x,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom / calc(var(--tooth) * 2) var(--tooth) repeat-x;max-width:300px;background:var(--color-paper);color:var(--color-receipt);font-family:var(--font-hei);padding:8px 0 28px;box-shadow:var(--shadow-slip);} .ds-slip-head{display:flex;justify-content:space-between;align-items:baseline;padding:20px 20px 12px;border-bottom:2px dashed color-mix(in oklab,var(--color-receipt) 25%,transparent);} .ds-slip-head h3{margin:0;font-size:19px;font-weight:900;} .ds-tag{font-size:11px;color:var(--color-receipt-mute);} .ds-slip-list{list-style:none;margin:0;padding:16px 20px 0;display:grid;gap:10px;font-size:14px;} .ds-slip-list li{display:flex;align-items:baseline;gap:8px;} .ds-qty{font-size:12px;font-weight:600;flex-shrink:0;} .ds-slip-total{display:flex;justify-content:space-between;align-items:baseline;margin:16px 20px 0;padding-top:12px;border-top:2px dashed color-mix(in oklab,var(--color-receipt) 25%,transparent);font-size:14px;font-weight:900;} .ds-total{font-size:30px;line-height:1;font-weight:800;font-stretch:80%;color:var(--color-invoice);}"
+      "name": "RunningHead",
+      "source": "src/components/marketing.tsx",
+      "description": "Hairline running head: 刊名 left, page number and section right."
     },
     {
-      "name": "Interactive Line Item",
-      "kind": "custom",
-      "refersTo": "receipt-line-active",
-      "description": "Demo-slip row: click to play that effect. Steel on hover, Invoice Red when active.",
-      "html": "<ol class=\"ds-lines\"><li><button class=\"ds-line\"><span>剪掉空拍</span><span class=\"ds-leader\"></span><span class=\"ds-num ds-q\">4 段</span><span class=\"ds-num ds-amt\">−11.6 秒</span></button></li><li><button class=\"ds-line\" aria-pressed=\"true\"><span>自動字幕</span><span class=\"ds-leader\"></span><span class=\"ds-num ds-q\">6 句</span></button></li></ol>",
-      "css": ":host{--color-invoice:#d42c22;--color-invoice-deep:#a8201a;--color-receipt:#18191d;--color-receipt-soft:#474a52;--color-receipt-mute:#676b74;--color-paper:#f8f9f6;--color-steel:#e3e7ea;--color-steel-deep:#cdd3d8;--shadow-slip:0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35);--font-hei:\"Chiron Hei HK\",\"Noto Sans TC\",system-ui,sans-serif;--font-receipt:\"Martian Mono\",\"Chiron Hei HK\",ui-monospace,monospace;} .ds-leader{flex:1;min-width:1.5rem;border-bottom:2px dotted color-mix(in oklab,var(--color-receipt) 30%,transparent);transform:translateY(-0.3em);} .ds-num{font-family:var(--font-receipt);font-variant-numeric:tabular-nums;} .ds-lines{list-style:none;margin:0;padding:12px;max-width:340px;background:var(--color-paper);font-family:var(--font-hei);color:var(--color-receipt);} .ds-line{display:flex;align-items:baseline;gap:8px;width:100%;height:40px;padding:10px 12px 0;border:none;border-radius:4px;background:transparent;color:inherit;font:inherit;font-size:15px;font-weight:500;text-align:left;cursor:pointer;transition:background-color .15s;} .ds-line:hover{background:var(--color-steel);} .ds-line:focus-visible{outline:2px solid var(--color-invoice);outline-offset:3px;} .ds-line[aria-pressed=true]{background:var(--color-invoice);color:#fff;font-weight:900;} .ds-line[aria-pressed=true] .ds-leader{opacity:0;} .ds-q{font-size:13px;flex-shrink:0;} .ds-amt{font-size:13px;font-stretch:82%;color:var(--color-invoice);white-space:nowrap;} .ds-line[aria-pressed=true] .ds-amt{color:inherit;}"
+      "name": "PlanCards",
+      "source": "src/components/Plans.tsx",
+      "description": "Two plan columns between ink rules; featured header in cobalt."
     },
     {
-      "name": "Stamp",
-      "kind": "chip",
-      "refersTo": "pro-stamp",
-      "description": "Rotated red rubber stamp marking 專業版 items and 示範 content.",
-      "html": "<p class=\"ds-stamp-row\">AI 自動字幕<span class=\"ds-stamp\">專業版</span></p>",
-      "css": ":host{--color-invoice:#d42c22;--color-invoice-deep:#a8201a;--color-receipt:#18191d;--color-receipt-soft:#474a52;--color-receipt-mute:#676b74;--color-paper:#f8f9f6;--color-steel:#e3e7ea;--color-steel-deep:#cdd3d8;--shadow-slip:0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35);--font-hei:\"Chiron Hei HK\",\"Noto Sans TC\",system-ui,sans-serif;--font-receipt:\"Martian Mono\",\"Chiron Hei HK\",ui-monospace,monospace;} .ds-stamp-row{font-family:var(--font-hei);font-size:15px;color:var(--color-receipt);} .ds-stamp{display:inline-block;margin-left:8px;transform:rotate(-6deg);border:2px solid var(--color-invoice);border-radius:3px;padding:1px 6px;font-size:11px;line-height:1.25;font-weight:900;letter-spacing:.08em;color:var(--color-invoice);vertical-align:2px;}"
-    },
-    {
-      "name": "Site Header",
-      "kind": "nav",
-      "refersTo": "",
-      "description": "Sticky steel header with printed logo, bold links and the red action.",
-      "html": "<header class=\"ds-nav\"><a class=\"ds-logo\" href=\"#\"><svg viewBox=\"0 0 32 32\" width=\"32\" height=\"32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"7\" fill=\"#18191d\"/><path d=\"M12 9.5v13l11-6.5z\" fill=\"#f8f9f6\"/><circle cx=\"24\" cy=\"8\" r=\"3.2\" fill=\"#d42c22\"/></svg>片刻剪趣</a><nav class=\"ds-links\"><a href=\"#\">功能明細</a><a href=\"#\">價格</a><a href=\"#\">常見問題</a></nav><a class=\"ds-nav-cta\" href=\"#\">免費開始剪輯</a></header>",
-      "css": ":host{--color-invoice:#d42c22;--color-invoice-deep:#a8201a;--color-receipt:#18191d;--color-receipt-soft:#474a52;--color-receipt-mute:#676b74;--color-paper:#f8f9f6;--color-steel:#e3e7ea;--color-steel-deep:#cdd3d8;--shadow-slip:0 1px 1px rgb(24 25 29 / 0.06), 0 18px 32px -18px rgb(24 25 29 / 0.35);--font-hei:\"Chiron Hei HK\",\"Noto Sans TC\",system-ui,sans-serif;--font-receipt:\"Martian Mono\",\"Chiron Hei HK\",ui-monospace,monospace;} .ds-nav{display:flex;align-items:center;justify-content:space-between;gap:24px;height:64px;padding:0 32px;background:color-mix(in oklab,var(--color-steel) 90%,transparent);backdrop-filter:blur(4px);border-bottom:1px solid color-mix(in oklab,var(--color-receipt) 10%,transparent);font-family:var(--font-hei);} .ds-logo{display:flex;align-items:center;gap:8px;color:var(--color-receipt);text-decoration:none;font-size:19px;font-weight:900;letter-spacing:.02em;} .ds-links{display:flex;gap:28px;} .ds-links a{font-size:15px;font-weight:700;color:var(--color-receipt-soft);text-decoration:none;text-underline-offset:6px;} .ds-links a:hover{color:var(--color-receipt);text-decoration:underline;} .ds-links a:focus-visible,.ds-logo:focus-visible,.ds-nav-cta:focus-visible{outline:2px solid var(--color-invoice);outline-offset:3px;} .ds-nav-cta{display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:6px;background:var(--color-invoice);color:#fff;font-size:15px;font-weight:700;text-decoration:none;} .ds-nav-cta:hover{background:var(--color-invoice-deep);}"
+      "name": "Cover / EditDemo",
+      "source": "src/pages/Landing.tsx",
+      "description": "Vertical 明體 title, cobalt demo block with phone, interactive cover lines."
     }
   ],
-  "narrative": {
-    "northStar": "The Edit Receipt（剪輯明細單）",
-    "overview": "The marketing surfaces read as a convenience-store checkout counter in Taiwan: a brushed stainless-steel ground, long strips of thermal paper laid on it, carbon-black print, and invoice red reserved for the action and the total. The product promise (\"drop in a video, get back an itemized slip of what was cut and what was added\") is told in the slip's own grammar: line items with dotted leaders to a quantity, dashed tear rules between header, body and total, a zigzag torn edge, a barcode at the foot, and a rotated red rubber stamp for 專業版 and 示範.\n\nDensity is receipt-dense inside the slip (40px line rows, 13px tabular numerals) and generous outside it (96 to 112px section padding on the steel). Slips sit slightly crooked (1 to 1.6 degrees) as if dropped on the counter. Motion is the printer: lines clip in top-down one at a time, and nothing else drifts or floats.\n\n**Scope.** The full receipt world (slips, torn edges, leaders, Chiron Hei HK + Martian Mono) is scoped by the `.mk` wrapper in `MarketingLayout` and applies to the homepage, pricing and 404. The app (editor, dashboard, account, admin, auth) shares the brand but not the receipt devices: the owner decided to unify the brand, so the app's tokens now use the same ink and invoice red (`--color-brand` / `--color-coral` `#d42c22`, hover `#a8201a`, soft `#fbe4e2`; ink `#18191d` / `#474a52` / `#676b74`; cool neutrals canvas `#eef0f2`, sunken `#e8ebee`, line `#dce0e4`), the same logo (ink square, white play mark, red dot, all-ink wordmark), favicon and theme-color `#d42c22`. The app keeps its own Operate grammar: Plus Jakarta Sans / Noto Sans TC, rounded-xl surfaces, soft card shadows. Exceptions that stay as they are: sticker artwork colours, user-pickable caption/shadow swatches, and the admin chart palette (validated categorical palette, paid `#5b4cf5`).",
-    "keyCharacteristics": [
-      "Steel ground, thermal-paper slips, carbon print, invoice-red action and totals.",
-      "Two faces only: Chiron Hei HK for Chinese and prose, Martian Mono for every number, code and quantity.",
-      "Receipt devices carry structure: dotted leaders, dashed tear rules, zigzag torn edges, barcodes, rotated stamps.",
-      "One soft drop shadow (the slip resting on steel); no stacked card shadows, no gradients, no emoji.",
-      "Square slips, small button radii (6px); the only large radius is the phone mockup."
-    ],
-    "rules": [
-      {
-        "name": "The Red Means Money Rule",
-        "body": "Invoice red marks only the action, the total, the stamp and the active line. Never use it for decoration, section tints or icons that are not an action (the FAQ plus is the one sanctioned exception, as an open/close control).",
-        "section": "colors"
-      },
-      {
-        "name": "The Ink On Paper Rule",
-        "body": "Ghost Print (`receipt-mute`) is for text on Thermal Paper only (5.05:1). On steel or deep steel it falls below 4.5:1 for small text; use Faded Print (`receipt-soft`) there instead.",
-        "section": "colors"
-      },
-      {
-        "name": "The Numbers Are Printed Rule",
-        "body": "Every numeral that is a quantity, price, time or code is set in Martian Mono with tabular figures (`.num`); Chinese words around it stay in Chiron Hei HK.",
-        "section": "typography"
-      },
-      {
-        "name": "The One Shadow Rule",
-        "body": "Only paper objects cast the slip shadow; buttons, stamps, rows and the header are shadowless.",
-        "section": "elevation"
-      }
-    ],
-    "dos": [
-      "**Do** put every list of features, plans or results on a Thermal Paper slip with leaders and mono quantities.",
-      "**Do** reserve Invoice Red for the primary action, totals, stamps and the active line.",
-      "**Do** set every number in Martian Mono with tabular figures; condense large figures with `font-stretch` 76 to 85%.",
-      "**Do** separate slip regions with 2px dashed rules and rows with 1px dashed rules, never with boxes.",
-      "**Do** label demonstration content with the red 示範 stamp or a mono 示範 tag.",
-      "**Do** give motion a printer's logic (top-down line print, typed captions) and honour reduced motion by showing the finished state."
-    ],
-    "donts": [
-      "**Don't** use gradients, glows, emoji or stacked card shadows; the slip shadow is the only shadow.",
-      "**Don't** use a black page background (owner requirement); steel is the ground and Carbon appears only as print, bezel and button fill.",
-      "**Don't** use Ghost Print for small text on steel or deep steel; it fails contrast there.",
-      "**Don't** bring the app's Plus Jakarta Sans or rounded-xl surfaces into `.mk`, and don't put receipt devices (torn edges, leaders, stamps, Martian Mono) into the app; the two share only the brand colours and logo.",
-      "**Don't** round slips; their edges are square or torn."
-    ]
-  }
+  "narrative": "Creative North Star 「創刊號」: the homepage is the first issue of a Taiwanese lifestyle magazine about cutting one short video. Paper and ink with one committed cobalt; 明體 headings and folios, 黑體 prose, 霞鶩文楷 notes; vertical cover title; hairline rules instead of cards."
 }

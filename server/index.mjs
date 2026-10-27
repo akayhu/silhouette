@@ -441,6 +441,7 @@ app.patch('/api/projects/:id', requireAuth, (req, res) => {
   const updatedAt = new Date(Math.max(Date.now(), Date.parse(row.updated_at) + 1)).toISOString();
   const result = db.prepare(`UPDATE projects SET name=?, data=?, thumbnail=?, updated_at=? WHERE id=? AND updated_at=?`).run(name, data, thumbnail, updatedAt, row.id, row.updated_at);
   if (!result.changes) return res.status(409).json({ error: '專案已被更新', code: 'PROJECT_CONFLICT' });
+  if (req.body.data !== undefined) cleanUnusedFiles(req.user.id, row.id, req.body.data);
   res.json({ project: projectRow(db.prepare(`SELECT * FROM projects WHERE id=?`).get(row.id)) });
 });
 
@@ -453,20 +454,35 @@ app.delete('/api/projects/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- 媒體上傳（串流寫入，不佔記憶體） ----------
-app.post('/api/projects/:id/media', requireAuth, (req, res) => {
-  const row = ownProject(req, res);
-  if (!row) return;
-  const original = decodeURIComponent(String(req.headers['x-filename'] || 'file'));
-  const ext = path.extname(original).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 8);
-  const dir = path.join(UPLOAD_DIR, req.user.id, row.id);
-  fs.mkdirSync(dir, { recursive: true });
-  const fileName = `${randomUUID()}${ext}`;
-  const out = fs.createWriteStream(path.join(dir, fileName));
-  req.pipe(out);
-  out.on('finish', () => res.json({ url: `/uploads/${req.user.id}/${row.id}/${fileName}` }));
-  out.on('error', () => res.status(500).json({ error: '上傳失敗' }));
-});
+// ---------- 素材 ----------
+// 本機優先：使用者的影片、圖片、音樂只存在自己的電腦，伺服器不再接收素材上傳。
+// 伺服器上只剩朗讀產生的音訊（前端拿到後會存到本機）與改版前上傳的舊素材；
+// 專案存檔時，刪掉專案資料夾裡不再被使用的檔案。
+const UNUSED_GRACE_MS = 10 * 60 * 1000;
+
+function cleanUnusedFiles(userId, projectId, data) {
+  const dir = path.join(UPLOAD_DIR, userId, projectId);
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const prefix = `/uploads/${userId}/${projectId}/`;
+  const used = new Set((data?.media ?? []).map((m) => (typeof m?.url === 'string' && m.url.startsWith(prefix) ? m.url.slice(prefix.length) : null)).filter(Boolean));
+  const now = Date.now();
+  for (const e of entries) {
+    // 只看專案資料夾第一層的檔案（exports 等子資料夾另外管理）
+    if (!e.isFile() || used.has(e.name)) continue;
+    const file = path.join(dir, e.name);
+    try {
+      // 剛產生的檔案（例如朗讀結果還沒下載到本機）先不刪
+      if (now - fs.statSync(file).mtimeMs > UNUSED_GRACE_MS) fs.rmSync(file, { force: true });
+    } catch {
+      /* 刪不掉下次存檔再試 */
+    }
+  }
+}
 
 // ---------- 匯出的成品（存到帳戶，每個專案只留最近幾支） ----------
 const EXPORTS_PER_PROJECT = 3;

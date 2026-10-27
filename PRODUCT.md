@@ -22,7 +22,7 @@ web
 ## Operating Context
 
 - 素材多半是手機直拍的 9:16 影片，也支援 16:9、1:1。
-- 在桌機瀏覽器剪輯（建議最新版 Chrome 或 Edge），專案存在帳戶裡，換電腦可接著剪。
+- 在桌機瀏覽器剪輯（建議最新版 Chrome 或 Edge）。本機優先：原始影片、圖片、音樂只存在使用者電腦的瀏覽器裡，伺服器不接收素材上傳；帳戶只存專案（剪輯、字幕、設定）。換電腦或清除瀏覽器資料後需重新提供素材（依檔名與大小自動配對）。
 - 輸出直接上傳 IG Reels、TikTok、YouTube Shorts。
 
 ## Capabilities and Constraints

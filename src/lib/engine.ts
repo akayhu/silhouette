@@ -85,6 +85,22 @@ export class Engine {
   }
 
   setData(data: ProjectData) {
+    // 素材網址換了（例如重新提供本機素材）：拿掉舊的播放器，下面會用新網址重建
+    const changed = new Set(data.media.filter((m) => this.mediaById.has(m.id) && this.mediaById.get(m.id)!.url !== m.url).map((m) => m.id));
+    if (changed.size) {
+      const drop = (map: Map<string, MediaNode>, test: (key: string) => boolean) => {
+        for (const [key, node] of map) {
+          if (!test(key)) continue;
+          node.el.pause();
+          node.el.removeAttribute('src');
+          map.delete(key);
+        }
+      };
+      drop(this.videos, (key) => changed.has(key.split('#')[0]));
+      drop(this.audios, (key) => changed.has(data.audio.find((a) => a.id === key)?.mediaId ?? ''));
+      drop(this.overlayNodes, (key) => changed.has(data.overlays.find((o) => o.id === key)?.mediaId ?? ''));
+      for (const id of changed) this.images.delete(id);
+    }
     this.data = data;
     this.placed = layoutMain(data.clips);
     this.duration = totalDuration(data);
@@ -94,10 +110,10 @@ export class Engine {
     for (const c of this.placed) {
       const m = byId.get(c.mediaId);
       const key = slotKey(c);
-      if (m?.kind === 'video' && !this.videos.has(key)) this.videos.set(key, this.mediaNode('video', m.url));
+      if (m?.kind === 'video' && m.url && !this.videos.has(key)) this.videos.set(key, this.mediaNode('video', m.url));
     }
     for (const m of data.media) {
-      if (m.kind === 'image' && !this.images.has(m.id)) {
+      if (m.kind === 'image' && m.url && !this.images.has(m.id)) {
         const img = new Image();
         // 允許跨網域圖片（例如圖庫網址）交給 WebGL 美肌與匯出使用
         img.crossOrigin = 'anonymous';
@@ -108,7 +124,7 @@ export class Engine {
     }
     for (const a of data.audio) {
       const m = byId.get(a.mediaId);
-      if (m && !this.audios.has(a.id)) this.audios.set(a.id, this.mediaNode('audio', m.url));
+      if (m?.url && !this.audios.has(a.id)) this.audios.set(a.id, this.mediaNode('audio', m.url));
     }
     for (const [id, node] of this.audios) {
       if (!data.audio.some((a) => a.id === id)) {
@@ -119,7 +135,7 @@ export class Engine {
     }
     for (const o of data.overlays ?? []) {
       const m = byId.get(o.mediaId);
-      if (m?.kind === 'video' && !this.overlayNodes.has(o.id)) this.overlayNodes.set(o.id, this.mediaNode('video', m.url));
+      if (m?.kind === 'video' && m.url && !this.overlayNodes.has(o.id)) this.overlayNodes.set(o.id, this.mediaNode('video', m.url));
     }
     for (const [id, node] of this.overlayNodes) {
       if (!(data.overlays ?? []).some((o) => o.id === id)) {
@@ -137,7 +153,7 @@ export class Engine {
     el.crossOrigin = 'anonymous';
     el.preload = 'auto';
     el.src = url;
-    el.addEventListener('error', () => this.fail(new Error('素材播放失敗，請重新上傳後再匯出。')));
+    el.addEventListener('error', () => this.fail(new Error('素材播放失敗，請重新提供素材後再匯出。')));
     if (el instanceof HTMLVideoElement) {
       el.playsInline = true;
       // 逐格匯出時由 renderAt 自己畫，不要每次跳轉都多畫一次

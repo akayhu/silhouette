@@ -43,12 +43,6 @@ export const api = {
   updateProject: (id: string, d: { name?: string; data?: ProjectData; thumbnail?: string; expectedUpdatedAt?: string }, signal?: AbortSignal) =>
     request<{ project: ProjectSummary }>(`/api/projects/${id}`, { ...json('PATCH', d), signal }),
   deleteProject: (id: string) => request(`/api/projects/${id}`, json('DELETE')),
-  upload: (id: string, file: File | Blob, name: string) =>
-    request<{ url: string }>(`/api/projects/${id}/media`, {
-      method: 'POST',
-      body: file,
-      headers: { 'X-Filename': encodeURIComponent(name), 'Content-Type': 'application/octet-stream' },
-    }),
 
   exports: (id: string) => request<{ exports: SavedExport[] }>(`/api/projects/${id}/exports`),
   deleteExport: (id: string, exportId: string) => request(`/api/projects/${id}/exports/${exportId}`, json('DELETE')),

@@ -34,7 +34,7 @@ export function validateExport(data: ProjectData) {
   const used = [...data.clips, ...data.audio, ...data.overlays];
   for (const clip of used) {
     const media = data.media.find((m) => m.id === clip.mediaId);
-    if (!media?.url) throw new Error('專案有遺失的素材，請重新加入素材後再匯出。');
+    if (!media?.url) throw new Error(media?.local ? `素材「${media.name}」不在這台裝置上，請到素材庫按「重新提供素材」後再匯出。` : '專案有遺失的素材，請重新加入素材後再匯出。');
     if ('speed' in clip && media.kind === 'audio') {
       throw new Error(`素材「${media.name}」不是影片或圖片，請從畫面軌移除。`);
     }

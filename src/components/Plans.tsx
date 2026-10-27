@@ -21,35 +21,35 @@ const rows: { label: string; free: string | boolean; pro: string | boolean }[] =
 ];
 
 function Cell({ v }: { v: string | boolean }) {
-  if (v === true) return <Check className="size-4 text-receipt" strokeWidth={3} aria-label="有" />;
-  if (v === false) return <Minus className="size-4 text-receipt-mute/70" aria-label="沒有" />;
-  return <span className="num text-[13px] font-semibold">{v}</span>;
+  if (v === true) return <Check className="size-4 text-mag-ink" strokeWidth={2.5} aria-label="有" />;
+  if (v === false) return <Minus className="size-4 text-mag-mute" aria-label="沒有" />;
+  return <span className="num text-[14px] font-bold">{v}</span>;
 }
 
-/** 兩張方案明細單：免費版是白單，專業版抬頭印發票紅 */
+/** 方案頁：雜誌的兩欄比較，中間一條直線分欄；專業版的欄頭是期色鈷藍 */
 export function PlanCards() {
   const { user } = useAuth();
   const isPro = isPaidPro(user);
   return (
-    <div className="mx-auto grid max-w-[960px] items-start gap-8 md:grid-cols-2">
-      <Slip
+    <div className="mx-auto grid max-w-[1000px] border-y border-mag-ink md:grid-cols-2 md:divide-x md:divide-mag-ink/20">
+      <Column
         name="免費版"
         price="0"
         note={`註冊就送 ${TRIAL_DAYS} 天專業版，之後可以一直免費使用。`}
         cta={
-          <Link to={user ? '/dashboard' : '/register'} className={mkButton('ink', 'lg', 'w-full')}>
+          <Link to={user ? '/dashboard' : '/register'} className={mkButton('line', 'lg', 'w-full')}>
             {user ? (user.plan === 'pro' ? '回到我的專案' : '目前方案') : `免費註冊・送 ${TRIAL_DAYS} 天專業版`}
           </Link>
         }
         plan="free"
       />
-      <Slip
+      <Column
         name="專業版"
         price="399"
         featured
         note={`經營自媒體、接案剪片，AI 功能全開。新會員可先免費試用 ${TRIAL_DAYS} 天。`}
         cta={
-          <Link to={isPro ? '/account' : user ? '/checkout' : '/register'} className={mkButton('red', 'lg', 'w-full')}>
+          <Link to={isPro ? '/account' : user ? '/checkout' : '/register'} className={mkButton('ink', 'lg', 'w-full')}>
             {isPro ? '管理訂閱' : user ? '升級專業版' : `免費試用 ${TRIAL_DAYS} 天`}
           </Link>
         }
@@ -59,28 +59,25 @@ export function PlanCards() {
   );
 }
 
-function Slip({ name, price, note, cta, plan, featured }: { name: string; price: string; note: string; cta: ReactNode; plan: 'free' | 'pro'; featured?: boolean }) {
+function Column({ name, price, note, cta, plan, featured }: { name: string; price: string; note: string; cta: ReactNode; plan: 'free' | 'pro'; featured?: boolean }) {
   return (
-    <article className={`slip-edge-b bg-paper pb-8 shadow-slip ${featured ? 'md:-translate-y-3' : ''}`}>
-      <header className={`flex items-baseline justify-between px-7 pt-6 pb-5 ${featured ? 'bg-invoice text-white' : 'border-b-2 border-dashed border-receipt/25'}`}>
-        <h3 className="text-[22px] font-black">{name}</h3>
-        {featured && <span className="text-[13px] font-bold">AI 全開</span>}
+    <article className="border-b border-mag-ink/20 pb-10 last:border-b-0 md:border-b-0">
+      <header className={`flex items-baseline justify-between px-6 pt-5 pb-4 sm:px-8 ${featured ? 'bg-mag-blue text-white' : 'border-b border-mag-ink/15'}`}>
+        <h3 className="font-ming text-[24px] font-black">{name}</h3>
+        {featured && <span className="font-kai text-[16px]">AI 全開</span>}
       </header>
-      <div className="px-7 pt-6">
+      <div className="px-6 pt-7 sm:px-8">
         <div className="flex items-baseline gap-2">
-          <span className="num text-[15px] font-semibold">NT$</span>
-          <span className="num text-[64px] leading-none font-extrabold tracking-[-0.04em]" style={{ fontStretch: '80%' }}>
-            {price}
-          </span>
-          <span className="text-[15px] text-receipt-soft">／月</span>
+          <span className="num text-[16px] font-bold">NT$</span>
+          <span className="num font-ming text-[76px] leading-none font-black tracking-[-0.03em]">{price}</span>
+          <span className="text-[15px] text-mag-soft">／月</span>
         </div>
-        <p className="mt-3 text-[15px] leading-relaxed text-receipt-soft">{note}</p>
+        <p className="mt-4 text-[15px] leading-relaxed text-mag-soft">{note}</p>
         <div className="mt-6">{cta}</div>
-        <ul className="mt-7 space-y-3 border-t-2 border-dotted border-receipt/25 pt-6 text-[15px]">
+        <ul className="mt-8 divide-y divide-mag-ink/10 border-t border-mag-ink/15 text-[15px]">
           {rows.map((r) => (
-            <li key={r.label} className="flex items-baseline gap-2">
-              <span className={r[plan] === false ? 'text-receipt-mute' : ''}>{r.label}</span>
-              <span className="leader" aria-hidden />
+            <li key={r.label} className="flex items-center justify-between gap-4 py-2.5">
+              <span className={r[plan] === false ? 'text-mag-mute' : ''}>{r.label}</span>
               <Cell v={r[plan]} />
             </li>
           ))}

@@ -1,4 +1,5 @@
-import { ALL_FORMATS, CanvasSink, Input, UrlSource, type WrappedCanvas } from 'mediabunny';
+import { ALL_FORMATS, BlobSource, CanvasSink, Input, UrlSource, type WrappedCanvas } from 'mediabunny';
+import { blobForUrl } from './localMedia';
 
 /**
  * 逐格匯出用的影片解碼：每個片段要取的時間點事先排好，交給解碼器一路往前解，
@@ -31,7 +32,9 @@ export class FrameDecoder {
     let entry = this.inputs.get(url);
     if (!entry) {
       entry = (async () => {
-        const input = new Input({ source: new UrlSource(url), formats: ALL_FORMATS });
+        // 本機素材直接讀檔案；伺服器上的舊素材用網址
+        const blob = blobForUrl(url);
+        const input = new Input({ source: blob ? new BlobSource(blob) : new UrlSource(url), formats: ALL_FORMATS });
         try {
           const track = await input.getPrimaryVideoTrack();
           if (!track || !(await track.canDecode())) throw new Error('無法解碼');

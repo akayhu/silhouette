@@ -34,6 +34,8 @@ export interface MediaItem {
   erase?: EraseRegion[];
   /** 音訊波形（0–1），音樂面板顯示用 */
   peaks?: number[];
+  /** 本機素材：檔案只存在使用者的裝置，帳戶裡只記檔名與大小（換裝置時用來配對重新提供的檔案） */
+  local?: { fileName: string; size: number; type: string };
 }
 
 export type EraseMode = 'fill' | 'blur' | 'mosaic';

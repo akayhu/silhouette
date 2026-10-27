@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { saveLocalFile } from '../../lib/localMedia';
 import { Check, Loader2, Music, Pause, Play, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatTime, uid } from '../../lib/format';
@@ -116,10 +117,12 @@ export function MusicPanel() {
       const local = URL.createObjectURL(file);
       try {
         const [meta, peaks] = await Promise.all([probe(local, 'audio'), audioPeaks(file)]);
-        const { url } = await api.upload(projectId, file, file.name);
-        const m: MediaItem = { id: uid(), name: file.name.replace(/\.[^.]+$/, ''), kind: 'audio', url, origin: 'upload', peaks, ...meta };
+        // 本機優先：音樂檔只存在這台裝置，不上傳到伺服器
+        const id = uid();
+        const { url, local: stored } = await saveLocalFile(id, file, file.name);
+        const m: MediaItem = { id, name: file.name.replace(/\.[^.]+$/, ''), kind: 'audio', url, origin: 'upload', peaks, local: stored, ...meta };
         useEditor.getState().commit((d) => ({ ...d, media: [...d.media, m] }));
-        toast(`已上傳「${m.name}」`, 'success');
+        toast(`已加入「${m.name}」`, 'success');
       } catch (err) {
         toast((err as Error).message || `無法讀取 ${file.name}`, 'error');
       } finally {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { deleteLocalFiles } from '../lib/localMedia';
 import { Link, useNavigate } from 'react-router-dom';
 import { Clapperboard, Crown, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
@@ -232,7 +233,13 @@ export default function Dashboard() {
           <Button
             variant="danger"
             onClick={async () => {
+              // 先記下這個專案在這台裝置上的素材，刪除專案後一起清掉
+              const localIds = await api
+                .project(deleting!.id)
+                .then((r) => r.project.data.media.filter((m) => m.local).map((m) => m.id))
+                .catch(() => [] as string[]);
               await api.deleteProject(deleting!.id);
+              await deleteLocalFiles(localIds);
               setDeleting(null);
               toast('已刪除專案');
               load();

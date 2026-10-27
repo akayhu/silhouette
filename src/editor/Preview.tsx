@@ -8,11 +8,13 @@ import { captionBox, drawnRect, stickerPose } from '../lib/engine';
 import { useEditor } from './store';
 
 export function Preview({
+  width,
   canvasRef,
   togglePlay,
   seek,
   loading,
 }: {
+  width: number;
   canvasRef: RefObject<HTMLCanvasElement | null>;
   togglePlay: () => void;
   seek: (t: number) => void;
@@ -200,7 +202,7 @@ export function Preview({
   const size = { width: Math.floor(aw * scale), height: Math.floor(ah * scale) };
 
   return (
-    <section className="flex w-[clamp(320px,32vw,520px)] shrink-0 flex-col border-l border-line">
+    <section className="flex shrink-0 flex-col border-l border-line" style={{ width }}>
       <div className="flex items-center justify-end gap-1 px-4 pt-3" role="group" aria-label="預覽輔助線">
         {[
           { on: showGuides, set: setShowGuides, label: '參考線', title: '顯示短影音安全框', Icon: Grid3x3 },

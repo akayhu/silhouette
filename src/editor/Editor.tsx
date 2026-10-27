@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Keyboard, Loader2, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Keyboard, Loader2, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
@@ -26,6 +26,7 @@ import { BeautyPanel } from './panels/BeautyPanel';
 import { SmartEditPanel } from './panels/SmartEditPanel';
 import { ExportDialog } from './ExportDialog';
 import { setCaptionEdge, ShortcutsDialog } from './Shortcuts';
+import { LAYOUT_DEFAULT, Splitter, useEditorLayout } from './Splitter';
 import { AutoEditDialog } from './AutoEditDialog';
 import { useProjectPersistence } from './useProjectPersistence';
 import { NavigationWarning, PersistenceLoading, PersistenceNotice, SaveBadge } from './PersistenceUI';
@@ -54,6 +55,9 @@ export default function Editor() {
   const [tab, setTab] = useState<Tab>('media');
   const [exporting, setExporting] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
+  // 工具區寬度、預覽寬度、時間軸高度：拖曳分隔線調整，記在這台瀏覽器
+  const [layout, setLayout] = useEditorLayout();
+  const dragFrom = useRef(layout);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const persistence = useProjectPersistence(user?.id, id, () => thumbnail(canvasRef.current));
@@ -82,7 +86,8 @@ export default function Editor() {
       engine.destroy();
       engineRef.current = null;
     };
-  }, [loaded, id, persistence.generation]);
+    // 切換版面時預覽的畫布會重建，引擎也要接到新的畫布
+  }, [loaded, id, persistence.generation, layout.mode]);
 
   useEffect(() => {
     engineRef.current?.setWatermark(user?.plan !== 'pro');
@@ -97,7 +102,7 @@ export default function Editor() {
       canvas.height = height;
     }
     engineRef.current?.setData(data);
-  }, [data]);
+  }, [data, layout.mode]);
 
   const togglePlay = useCallback(() => {
     const engine = engineRef.current;
@@ -225,6 +230,74 @@ export default function Editor() {
 
   if (!loaded) return <PersistenceLoading persistence={persistence} />;
 
+  // 編輯器各區塊；依版面模式（預覽在右側／上方）排列
+  const toolsPanel = (
+    <section className="flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: layout.tools }}>
+      {/* 工具列：放在素材區上方，橫向排列 */}
+      <ToolTabs
+        tabs={tabs}
+        value={tab}
+        onChange={(id) => {
+          setTab(id);
+          if (id !== 'erase') useEditor.getState().setEraseEdit(null);
+        }}
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === 'media' && <MediaPanel />}
+        {tab === 'smart' && <SmartEditPanel />}
+        {tab === 'music' && <MusicPanel />}
+        {tab === 'text' && <TextPanel seek={seek} />}
+        {tab === 'transcript' && <TranscriptPanel seek={seek} />}
+        {tab === 'voice' && <VoicePanel />}
+        {tab === 'sticker' && <StickerPanel />}
+        {tab === 'filter' && <FilterPanel />}
+        {tab === 'beauty' && <BeautyPanel />}
+        {tab === 'transition' && <TransitionPanel />}
+        {tab === 'ai' && <AIPanel />}
+        {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}
+      </div>
+    </section>
+  );
+  const toolsSplit = (
+    <Splitter
+      direction="col"
+      label="調整工具區寬度"
+      onStart={() => (dragFrom.current = layout)}
+      onDrag={(d) => setLayout({ tools: dragFrom.current.tools + d })}
+      onKey={(d) => setLayout({ tools: layout.tools + d })}
+      onReset={() => setLayout({ tools: LAYOUT_DEFAULT().tools })}
+    />
+  );
+  const inspectorPanel = (
+    <aside className="min-w-0 flex-1 overflow-y-auto bg-surface">
+      <div className="mx-auto h-full max-w-xl">
+        <Inspector />
+      </div>
+    </aside>
+  );
+  const previewSplit = (
+    <Splitter
+      direction="col"
+      label="調整預覽區寬度"
+      onStart={() => (dragFrom.current = layout)}
+      onDrag={(d) => setLayout({ preview: dragFrom.current.preview - d })}
+      onKey={(d) => setLayout({ preview: layout.preview - d })}
+      onReset={() => setLayout({ preview: LAYOUT_DEFAULT().preview })}
+    />
+  );
+  const previewPanel = <Preview width={layout.preview} canvasRef={canvasRef} togglePlay={togglePlay} seek={seek} loading={!loaded} />;
+  const timelineSplit = (
+    <Splitter
+      direction="row"
+      label="調整時間軸高度"
+      onStart={() => (dragFrom.current = layout)}
+      onDrag={(d) => setLayout({ timeline: dragFrom.current.timeline - d })}
+      onKey={(d) => setLayout({ timeline: layout.timeline - d })}
+      onReset={() => setLayout({ timeline: LAYOUT_DEFAULT().timeline })}
+    />
+  );
+  const timelinePanel = <Timeline height={layout.timeline} seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} />;
+
   return (
     <div className="flex h-screen min-w-[1024px] flex-col overflow-hidden bg-[#f4f2ee]">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
@@ -248,6 +321,13 @@ export default function Editor() {
           </IconBtn>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <IconBtn
+            label={layout.mode === 'top' ? '改成預覽在右側' : '改成預覽在上方（時間軸延伸到右邊）'}
+            onClick={() => setLayout({ mode: layout.mode === 'top' ? 'side' : 'top' })}
+            aria-pressed={layout.mode === 'top'}
+          >
+            {layout.mode === 'top' ? <PanelRight className="size-4" /> : <PanelTop className="size-4" />}
+          </IconBtn>
           <IconBtn label="快捷鍵 (?)" onClick={() => setShortcuts(true)}>
             <Keyboard className="size-4" />
           </IconBtn>
@@ -259,46 +339,35 @@ export default function Editor() {
       </header>
       <PersistenceNotice persistence={persistence} />
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
+      {layout.mode === 'top' ? (
+        // 預覽在上方：上排是工具、屬性、預覽，時間軸橫跨整個寬度
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1">
-            <section className="flex w-[360px] shrink-0 flex-col border-r border-line bg-surface">
-              {/* 工具列：放在素材區上方，橫向排列 */}
-              <ToolTabs
-                tabs={tabs}
-                value={tab}
-                onChange={(id) => {
-                  setTab(id);
-                  if (id !== 'erase') useEditor.getState().setEraseEdit(null);
-                }}
-              />
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {tab === 'media' && <MediaPanel />}
-                {tab === 'smart' && <SmartEditPanel />}
-                {tab === 'music' && <MusicPanel />}
-                {tab === 'text' && <TextPanel seek={seek} />}
-                {tab === 'transcript' && <TranscriptPanel seek={seek} />}
-                {tab === 'voice' && <VoicePanel />}
-                {tab === 'sticker' && <StickerPanel />}
-                {tab === 'filter' && <FilterPanel />}
-                {tab === 'beauty' && <BeautyPanel />}
-                {tab === 'transition' && <TransitionPanel />}
-                {tab === 'ai' && <AIPanel />}
-                {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}
-              </div>
-            </section>
-            {/* 中間：屬性編輯區；右側：預覽 */}
-            <aside className="min-w-0 flex-1 overflow-y-auto bg-surface">
-              <div className="mx-auto h-full max-w-xl">
-                <Inspector />
-              </div>
-            </aside>
+            {toolsPanel}
+            {toolsSplit}
+            {inspectorPanel}
+            {previewSplit}
+            {previewPanel}
           </div>
-          <Timeline seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} />
+          {timelineSplit}
+          {timelinePanel}
         </div>
-        {/* 右側預覽：從頂部延伸到底部 */}
-        <Preview canvasRef={canvasRef} togglePlay={togglePlay} seek={seek} loading={!loaded} />
-      </div>
+      ) : (
+        // 預覽在右側：預覽從上到下，左邊是工具、屬性與時間軸
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1">
+              {toolsPanel}
+              {toolsSplit}
+              {inspectorPanel}
+            </div>
+            {timelineSplit}
+            {timelinePanel}
+          </div>
+          {previewSplit}
+          {previewPanel}
+        </div>
+      )}
       <NavigationWarning persistence={persistence} />
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       <ShortcutsDialog open={shortcuts} onClose={() => setShortcuts(false)} />

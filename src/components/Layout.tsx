@@ -6,67 +6,60 @@ import { isPaidPro, isTrial, trialDaysLeft } from '../lib/plan';
 import { Logo, buttonClass } from './ui';
 import { mkButton, PrintedLogo } from './marketing';
 
-/** 雜誌刊頭：刊名、期別、目錄式導覽（附頁碼） */
 export function SiteHeader() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const links = [
-    { href: '/#editor-note', label: '本機剪輯', page: 'p.02' },
-    { href: '/#templates', label: '智能剪輯', page: 'p.04' },
-    { href: '/#features', label: '功能索引', page: 'p.06' },
-    { href: '/pricing', label: '方案', page: 'p.12' },
-    { href: '/#faq', label: '問與答', page: 'p.14' },
+    { href: '/#ai', label: 'AI 功能' },
+    { href: '/#local', label: '本機剪輯' },
+    { href: '/#features', label: '全部功能' },
+    { href: '/pricing', label: '價格' },
+    { href: '/#faq', label: '常見問題' },
   ];
   return (
-    <header className="sticky top-0 z-40 border-b border-mag-ink/15 bg-mag-paper/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 border-b border-site-line/80 bg-white/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-[1240px] items-center justify-between gap-6 px-4 sm:px-8">
-        <div className="flex items-baseline gap-4">
-          <PrintedLogo />
-          <span className="hidden font-ming text-[13px] tracking-[0.14em] text-mag-soft xl:inline">ISSUE 01・剪一支短影音的一天</span>
-        </div>
-        <nav className="hidden items-baseline gap-6 lg:flex" aria-label="主要">
+        <PrintedLogo />
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="主要">
           {links.map((l) => (
-            <a key={l.href} href={l.href} className="group flex items-baseline gap-1.5 text-[15px] font-bold text-mag-soft transition-colors hover:text-mag-ink">
-              <span className="num text-[12px] font-medium text-mag-mute group-hover:text-mag-blue">{l.page}</span>
+            <a key={l.href} href={l.href} className="rounded-full px-3.5 py-2 text-[15px] font-bold text-site-soft transition-colors hover:bg-site-band hover:text-site-ink">
               {l.label}
             </a>
           ))}
         </nav>
-        <div className="hidden items-center gap-5 lg:flex">
+        <div className="hidden items-center gap-3 lg:flex">
           {user ? (
-            <Link to="/dashboard" className={mkButton('ink')}>
+            <Link to="/dashboard" className={mkButton('red')}>
               進入我的專案
             </Link>
           ) : (
             <>
-              <Link to="/login" className="text-[15px] font-bold text-mag-soft hover:text-mag-ink">
+              <Link to="/login" className="rounded-full px-3.5 py-2 text-[15px] font-bold text-site-soft hover:text-site-ink">
                 登入
               </Link>
-              <Link to="/register" className={mkButton('ink')}>
+              <Link to="/register" className={mkButton('red')}>
                 免費開始剪輯
               </Link>
             </>
           )}
         </div>
-        <button className="grid size-10 place-items-center text-mag-ink lg:hidden" onClick={() => setOpen(!open)} aria-label={open ? '關閉選單' : '開啟選單'} aria-expanded={open}>
+        <button className="grid size-10 place-items-center rounded-full text-site-ink hover:bg-site-band lg:hidden" onClick={() => setOpen(!open)} aria-label={open ? '關閉選單' : '開啟選單'} aria-expanded={open}>
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
       </div>
       {open && (
-        <div className="border-t border-mag-ink/15 bg-mag-white px-4 pt-2 pb-4 lg:hidden">
-          <div className="pt-2 pb-1 font-ming text-[13px] tracking-[0.14em] text-mag-mute">本期目錄</div>
+        <div className="border-t border-site-line bg-white px-4 pt-2 pb-4 lg:hidden">
           {links.map((l) => (
-            <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="flex items-baseline justify-between border-b border-mag-ink/10 py-3 font-bold text-mag-ink">
+            <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="flex border-b border-site-line py-3 font-bold text-site-ink">
               {l.label}
-              <span className="num text-[13px] font-medium text-mag-mute">{l.page}</span>
             </a>
           ))}
           {!user && (
-            <Link to="/login" className="flex py-3 font-bold text-mag-soft">
+            <Link to="/login" className="flex py-3 font-bold text-site-soft">
               登入
             </Link>
           )}
-          <Link to={user ? '/dashboard' : '/register'} className={mkButton('ink', 'md', 'mt-2 w-full')}>
+          <Link to={user ? '/dashboard' : '/register'} className={mkButton('red', 'md', 'mt-2 w-full')}>
             {user ? '進入我的專案' : '免費開始剪輯'}
           </Link>
         </div>
@@ -76,27 +69,26 @@ export function SiteHeader() {
 }
 
 const FOOTER_COLS = [
-  { title: '產品', items: [['功能索引', '/#features'], ['價格方案', '/pricing'], ['開始剪輯', '/register']] },
-  { title: '支援', items: [['問與答', '/#faq'], ['帳戶設定', '/account']] },
+  { title: '產品', items: [['AI 功能', '/#ai'], ['全部功能', '/#features'], ['價格方案', '/pricing'], ['開始剪輯', '/register']] },
+  { title: '支援', items: [['常見問題', '/#faq'], ['帳戶設定', '/account']] },
   { title: '公司', items: [['關於我們', '/'], ['服務條款', '/'], ['隱私權政策', '/']] },
 ];
 
-/** 版權頁：雜誌最後的出版資訊 */
 export function SiteFooter() {
   return (
-    <footer className="border-t border-mag-ink/15 bg-mag-white text-mag-ink">
+    <footer className="border-t border-site-line bg-site-band text-site-ink">
       <div className="mx-auto grid max-w-[1240px] gap-10 px-4 pt-14 pb-10 sm:px-8 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
         <div>
           <PrintedLogo />
-          <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-mag-soft">在瀏覽器裡完成剪輯、上字幕、配音。影片留在你的電腦，不用安裝軟體，打開就能剪。</p>
+          <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-site-soft">在瀏覽器裡完成剪輯、上字幕、配音。影片留在你的電腦，不用安裝軟體，打開就能剪。</p>
         </div>
         {FOOTER_COLS.map((col) => (
           <div key={col.title}>
-            <div className="font-ming text-[15px] font-black">{col.title}</div>
-            <ul className="mt-3 space-y-2.5 text-[15px] text-mag-soft">
+            <div className="text-[15px] font-black">{col.title}</div>
+            <ul className="mt-3 space-y-2.5 text-[15px] text-site-soft">
               {col.items.map(([label, href]) => (
                 <li key={label}>
-                  <a href={href} className="underline-offset-4 hover:text-mag-ink hover:underline">
+                  <a href={href} className="underline-offset-4 hover:text-site-ink hover:underline">
                     {label}
                   </a>
                 </li>
@@ -105,13 +97,13 @@ export function SiteFooter() {
           </div>
         ))}
       </div>
-      <div className="mx-auto flex max-w-[1240px] flex-col gap-2 border-t border-mag-ink/15 px-4 py-6 text-[13px] text-mag-soft sm:flex-row sm:justify-between sm:px-8">
+      <div className="mx-auto flex max-w-[1240px] flex-col gap-2 border-t border-site-line px-4 py-6 text-[13px] text-site-soft sm:flex-row sm:justify-between sm:px-8">
         <span>
-          <span className="num">© {new Date().getFullYear()}</span> 片刻剪趣　創刊號
+          <span className="num">© {new Date().getFullYear()}</span> 片刻剪趣
         </span>
         <span>
-          本期示範照片：Roméo A.、Robson Hatsukami Morgan、Brandon Lee／
-          <a href="https://unsplash.com" className="underline underline-offset-2 hover:text-mag-ink" rel="noopener">
+          示範照片：Roméo A.、Robson Hatsukami Morgan、Brandon Lee／
+          <a href="https://unsplash.com" className="underline underline-offset-2 hover:text-site-ink" rel="noopener">
             Unsplash
           </a>
         </span>

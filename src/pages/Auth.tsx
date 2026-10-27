@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { Check } from 'lucide-react';
 import { Button, Field, Logo, inputClass, useToast } from '../components/ui';
 
 export default function Auth({ mode }: { mode: 'login' | 'register' }) {
@@ -37,13 +38,13 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
       <div className="flex flex-col px-6 py-8 sm:px-12">
         <Logo />
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-12">
-          <h1 className="text-3xl font-black tracking-tight">{isLogin ? '歡迎回來' : '建立免費帳號'}</h1>
+          <h1 className="text-[34px] leading-tight font-black tracking-tight">{isLogin ? '歡迎回來' : '建立免費帳號'}</h1>
           <p className="mt-2 text-ink-soft">{isLogin ? '登入後繼續剪輯你的專案。' : '註冊就送 7 天專業版，不需信用卡。'}</p>
 
           <button
             type="button"
             onClick={() => toast('Google 登入需要先設定 Google OAuth 用戶端 ID，目前請先用 Email 登入')}
-            className="mt-8 flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-line bg-surface text-sm font-semibold transition hover:bg-sunken/60"
+            className="mt-8 flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-line bg-surface text-sm font-bold transition hover:border-ink"
           >
             <svg viewBox="0 0 48 48" className="size-5" aria-hidden>
               <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
@@ -92,27 +93,29 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
           </p>
         </div>
       </div>
-      <div className="relative hidden overflow-hidden bg-sunken lg:block">
+      <div className="relative hidden overflow-hidden bg-[#f4f5f7] lg:block">
         <div className="absolute inset-0 grid place-items-center p-12">
           <div className="w-full max-w-md">
-            <div className="relative mx-auto aspect-[9/16] w-56 -rotate-3 overflow-hidden rounded-[28px] border-[6px] border-ink bg-sunken shadow-pop">
+            <div className="relative mx-auto aspect-[9/16] w-56 overflow-hidden rounded-[30px] border-[7px] border-[#16171b] bg-[#e3e5e9] shadow-[0_2px_6px_rgb(22_23_27/0.06),0_24px_48px_-24px_rgb(22_23_27/0.28)]">
               <img
                 src="https://images.unsplash.com/photo-1593960548354-62d1b5c9d542?w=448&h=796&fit=crop&q=70&auto=format"
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
               />
               <div className="relative flex h-full flex-col justify-end p-5">
-                <div className="text-center text-lg leading-snug font-black text-white [-webkit-text-stroke:6px_#1f1d2b] [paint-order:stroke]">
+                <div className="text-center text-lg leading-snug font-black text-white [-webkit-text-stroke:6px_#16171b] [paint-order:stroke]">
                   一次剪好
                   <br />
                   一支短影音
                 </div>
               </div>
             </div>
-            <ul className="mx-auto mt-10 w-fit space-y-2.5 text-[15px] font-semibold text-ink">
-              {['AI 自動上字幕，轉成繁體中文', '一鍵剪掉停頓和口誤', '文字直接變成中文配音'].map((t) => (
+            <ul className="mx-auto mt-10 w-fit space-y-3 text-[15px] font-bold text-ink">
+              {['剪掉空拍、自動上繁體中文字幕', '刪掉一句話，影片就剪掉那一段', '影片留在你的電腦，不必上傳'].map((t) => (
                 <li key={t} className="flex items-center gap-2.5">
-                  <span className="grid size-5 place-items-center rounded-full bg-brand text-[11px] text-white">✓</span>
+                  <span className="grid size-5 place-items-center rounded-full bg-brand text-white">
+                    <Check className="size-3" strokeWidth={3.5} />
+                  </span>
                   {t}
                 </li>
               ))}

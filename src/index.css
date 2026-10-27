@@ -32,19 +32,19 @@
   --color-track-audio: #d3f3e8;
   --color-track-audio-edge: #19b38a;
 
-  /* 行銷頁（首頁、價格、404）：生活雜誌《片刻剪趣》創刊號 */
-  --font-hei: 'Chiron Hei HK', 'Noto Sans TC', system-ui, sans-serif;
-  --font-ming: 'Noto Serif TC', 'Songti TC', serif;
-  --font-kai: 'LXGW WenKai TC', 'Kaiti TC', 'Noto Serif TC', serif;
-  --color-mag-paper: #f5f6f3;
-  --color-mag-white: #fcfcfa;
-  --color-mag-ink: #1b1b19;
-  --color-mag-soft: #45453f;
-  --color-mag-mute: #67675f;
-  --color-mag-rule: #d6d7d1;
-  --color-mag-blue: #2343c8;
-  --color-mag-blue-deep: #1a33a1;
-  --color-mag-blue-soft: #e2e7fa;
+  /* 行銷頁（首頁、價格、404、登入註冊）：明亮的創作者軟體官網，品牌紅是唯一的行動色 */
+  --font-hei: 'Noto Sans TC', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --color-site-bg: #ffffff;
+  --color-site-band: #f4f5f7;
+  --color-site-ink: #16171b;
+  --color-site-soft: #4b4e57;
+  --color-site-mute: #6b6f78;
+  --color-site-line: #e3e5e9;
+  --color-site-red: #d42c22;
+  --color-site-red-deep: #a8201a;
+  --color-site-red-soft: #fdecea;
+  --color-site-sun: #ffc94a;
+  --shadow-site: 0 2px 6px rgb(22 23 27 / 0.06), 0 24px 48px -24px rgb(22 23 27 / 0.28);
 
   --shadow-card: 0 1px 2px rgb(31 29 43 / 0.04), 0 8px 24px -12px rgb(31 29 43 / 0.12);
   --shadow-pop: 0 12px 40px -12px rgb(31 29 43 / 0.25);
@@ -123,30 +123,28 @@ input[type='range'] {
 @keyframes tr-wipe { 0%, 15% { clip-path: inset(0 100% 0 0) } 70%, 100% { clip-path: inset(0 0 0 0) } }
 @keyframes tr-circle { 0%, 15% { clip-path: circle(0% at 50% 50%) } 70%, 100% { clip-path: circle(75% at 50% 50%) } }
 
-/* ---------- 行銷頁：生活雜誌 ---------- */
+/* ---------- 行銷頁：明亮的創作者軟體官網 ---------- */
 .mk {
   font-family: var(--font-hei);
-  background: var(--color-mag-paper);
-  color: var(--color-mag-ink);
+  background: var(--color-site-bg);
+  color: var(--color-site-ink);
 }
 .mk ::selection {
-  background: var(--color-mag-blue);
+  background: var(--color-site-red);
   color: #fff;
 }
 .mk :focus-visible {
-  outline: 2px solid var(--color-mag-blue);
+  outline: 2px solid var(--color-site-red);
   outline-offset: 3px;
 }
 .mk .num {
-  font-family: var(--font-ming);
-  font-variant-numeric: tabular-nums lining-nums;
+  font-family: 'Plus Jakarta Sans', var(--font-hei);
+  font-variant-numeric: tabular-nums;
 }
-/* 直排標題：桌機直排，手機改橫排 */
-@media (min-width: 1024px) {
-  .mk .tategaki {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-  }
+/* 螢光筆標記：重點詞底下一道陽光黃 */
+.mk .marker {
+  background: linear-gradient(transparent 62%, var(--color-site-sun) 62%, var(--color-site-sun) 92%, transparent 92%);
+  padding: 0 0.06em;
 }
 @keyframes demo-type {
   from {

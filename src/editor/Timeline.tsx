@@ -9,7 +9,7 @@ import { useEditor, type SelItem } from './store';
 import { IconBtn } from './Editor';
 
 const PAD = 16;
-const GUTTER = 76;
+const GUTTER = 96;
 const SNAP_PX = 8;
 
 /** 拖曳工具：第一次移動才寫入復原點，單純點擊不會產生歷史紀錄 */
@@ -52,7 +52,7 @@ function TrimIcon({ side }: { side: TrimSide }) {
   );
 }
 
-export function Timeline({ seek, split, trim, remove, togglePlay }: { seek: (t: number) => void; split: () => void; trim: (side: TrimSide) => void; remove: () => void; togglePlay: () => void }) {
+export function Timeline({ height, seek, split, trim, remove, togglePlay }: { height: number; seek: (t: number) => void; split: () => void; trim: (side: TrimSide) => void; remove: () => void; togglePlay: () => void }) {
   const data = useEditor((s) => s.data);
   const zoom = useEditor((s) => s.zoom);
   const time = useEditor((s) => s.time);
@@ -70,6 +70,7 @@ export function Timeline({ seek, split, trim, remove, togglePlay }: { seek: (t: 
     locked(t) ? 'bg-[repeating-linear-gradient(135deg,rgb(31_29_43/0.05)_0_6px,transparent_6px_12px)] [&>*]:opacity-55 [&>*]:cursor-not-allowed' : '';
   const { setZoom, select, live, setSelected, toggleSelect } = useEditor.getState();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const labelsRef = useRef<HTMLDivElement>(null);
   const tracksRef = useRef<HTMLDivElement>(null);
   const drag = useDrag();
   const [reorder, setReorder] = useState<{ id: string; dx: number } | null>(null);
@@ -392,7 +393,7 @@ export function Timeline({ seek, split, trim, remove, togglePlay }: { seek: (t: 
   };
 
   return (
-    <section className="flex h-[300px] shrink-0 flex-col border-t border-line bg-surface select-none">
+    <section className="flex shrink-0 flex-col border-t border-line bg-surface select-none" style={{ height }}>
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-line px-3">
         <IconBtn label={playing ? '暫停（空白鍵）' : '播放（空白鍵）'} onClick={togglePlay}>
           {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
@@ -438,7 +439,10 @@ export function Timeline({ seek, split, trim, remove, togglePlay }: { seek: (t: 
         </div>
       </div>
       <div className="flex min-h-0 flex-1">
-        <div className="w-[76px] shrink-0 border-r border-line bg-canvas pt-7 text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
+        {/* 軌道名稱：上方留時間尺的高度（時間尺固定不捲動），下面跟著軌道一起上下捲動 */}
+        <div className="flex w-[96px] shrink-0 flex-col border-r border-line bg-canvas text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
+          <div className="h-7 shrink-0 border-b border-line bg-surface" />
+          <div ref={labelsRef} className="min-h-0 flex-1 overflow-hidden">
           <TrackLabel track="caption" locked={locked('caption')} icon={<Type className="size-3.5" />} label="字幕" h="h-10" />
           <TrackLabel track="sticker" locked={locked('sticker')} icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
           {Array.from({ length: ovLanes }, (_, i) => ovLanes - i).map((n) => (
@@ -446,10 +450,16 @@ export function Timeline({ seek, split, trim, remove, togglePlay }: { seek: (t: 
           ))}
           <TrackLabel track="main" locked={locked('main')} icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" />
           <TrackLabel track="audio" locked={locked('audio')} icon={<AudioLines className="size-3.5" />} label="音訊" h="" style={{ height: laneCount * 40 + 8 }} />
+            {/* 右邊有水平捲軸佔掉高度，這裡多留一點，捲到最底時名稱仍然對齊 */}
+            <div className="h-5" aria-hidden />
+          </div>
         </div>
         <div
           ref={scrollRef}
           className="relative min-w-0 flex-1 overflow-auto"
+          onScroll={(e) => {
+            if (labelsRef.current) labelsRef.current.scrollTop = e.currentTarget.scrollTop;
+          }}
           onWheel={(e) => {
             if (e.ctrlKey || e.metaKey) {
               e.preventDefault();
@@ -622,7 +632,7 @@ function TrackLabel({ track, locked, icon, label, h, style }: { track: TrackKey;
   return (
     <div className={`group/track flex items-center gap-1.5 border-b border-line/60 pr-1.5 pl-3 ${h} ${locked ? 'text-ink-mute' : ''}`} style={style}>
       {icon}
-      {label}
+      <span className="whitespace-nowrap">{label}</span>
       <button
         onClick={() => useEditor.getState().toggleLock(track)}
         title={locked ? `解鎖${name}` : `鎖定${name}`}

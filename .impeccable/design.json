@@ -1,98 +1,88 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-27T11:59:09.517Z",
+  "generatedAt": "2026-10-27T12:29:50.914Z",
   "title": "Design System: 片刻剪趣",
   "extensions": {
     "scope": {
-      "world": "Marketing surfaces only (homepage, pricing, 404) under the .mk wrapper in MarketingLayout: a Taiwanese lifestyle-magazine first issue.",
+      "world": "Marketing surfaces (homepage, pricing, 404) under .mk, plus the auth side panel: a bright, product-forward software site.",
       "outOfScope": "App surfaces (editor, dashboard, account, admin, auth) keep their own Operate grammar (Plus Jakarta Sans / Noto Sans TC, rounded-xl, --shadow-card / --shadow-pop, brand red #d42c22). The shared mark is the logo (ink square, white play, red dot).",
       "openDecision": null,
-      "decided": "Owner replaced the receipt world with the 生活雜誌 direction (2026-10-27): neutral magazine paper, ink, one cobalt issue colour; brand red only in the logo dot."
+      "decided": "Owner replaced the magazine world with a bright software-site direction inspired by a commercial editor site (2026-10-27): all light, brand red as the only action colour."
     },
     "colorMeta": {
-      "mag-blue": {
+      "site-red": {
         "role": "primary",
-        "displayName": "Issue Cobalt",
-        "canonical": "#2343c8"
+        "displayName": "Brand Red",
+        "canonical": "#d42c22"
       },
-      "mag-blue-deep": {
+      "site-red-deep": {
         "role": "primary",
-        "displayName": "Deep Cobalt",
-        "canonical": "#1a33a1"
+        "displayName": "Deep Red",
+        "canonical": "#a8201a"
       },
-      "mag-blue-soft": {
+      "site-red-soft": {
         "role": "primary",
-        "displayName": "Cobalt Wash",
-        "canonical": "#e2e7fa"
+        "displayName": "Red Wash",
+        "canonical": "#fdecea"
       },
-      "mag-ink": {
+      "site-sun": {
+        "role": "accent",
+        "displayName": "Sun (highlighter only)",
+        "canonical": "#ffc94a"
+      },
+      "site-ink": {
         "role": "neutral",
         "displayName": "Ink",
-        "canonical": "#1b1b19"
+        "canonical": "#16171b"
       },
-      "mag-soft": {
+      "site-soft": {
         "role": "neutral",
         "displayName": "Soft Ink",
-        "canonical": "#45453f"
+        "canonical": "#4b4e57"
       },
-      "mag-mute": {
+      "site-mute": {
         "role": "neutral",
         "displayName": "Mute Ink",
-        "canonical": "#67675f"
+        "canonical": "#6b6f78"
       },
-      "mag-rule": {
+      "site-line": {
         "role": "neutral",
-        "displayName": "Rule",
-        "canonical": "#d6d7d1"
+        "displayName": "Line",
+        "canonical": "#e3e5e9"
       },
-      "mag-paper": {
+      "site-band": {
         "role": "neutral",
-        "displayName": "Paper",
-        "canonical": "#f5f6f3"
+        "displayName": "Band",
+        "canonical": "#f4f5f7"
       },
-      "mag-white": {
+      "site-bg": {
         "role": "neutral",
-        "displayName": "White Paper",
-        "canonical": "#fcfcfa"
-      },
-      "brand-red": {
-        "role": "accent",
-        "displayName": "Brand Red (logo dot only)",
-        "canonical": "#d42c22"
+        "displayName": "White",
+        "canonical": "#ffffff"
       }
     }
   },
   "components": [
     {
-      "name": "mkButton ink",
+      "name": "mkButton",
       "source": "src/components/marketing.tsx",
-      "description": "Solid ink, square, hover turns cobalt."
+      "description": "Pill buttons: red (primary), outline, white (on the red band)."
     },
     {
-      "name": "mkButton line",
+      "name": "SectionTitle",
       "source": "src/components/marketing.tsx",
-      "description": "1px ink outline, hover fills ink."
-    },
-    {
-      "name": "mkButton paper",
-      "source": "src/components/marketing.tsx",
-      "description": "White paper button on the cobalt back cover."
-    },
-    {
-      "name": "RunningHead",
-      "source": "src/components/marketing.tsx",
-      "description": "Hairline running head: 刊名 left, page number and section right."
+      "description": "Centred section headline with sub."
     },
     {
       "name": "PlanCards",
       "source": "src/components/Plans.tsx",
-      "description": "Two plan columns between ink rules; featured header in cobalt."
+      "description": "Two rounded plan cards; featured has a red border and pill badge."
     },
     {
-      "name": "Cover / EditDemo",
+      "name": "Hero / AiTabs",
       "source": "src/pages/Landing.tsx",
-      "description": "Vertical 明體 title, cobalt demo block with phone, interactive cover lines."
+      "description": "Editor screenshot in a browser frame with chips; five AI tabs with product-built demos."
     }
   ],
-  "narrative": "Creative North Star 「創刊號」: the homepage is the first issue of a Taiwanese lifestyle magazine about cutting one short video. Paper and ink with one committed cobalt; 明體 headings and folios, 黑體 prose, 霞鶩文楷 notes; vertical cover title; hairline rules instead of cards."
+  "narrative": "Creative North Star \"Studio Bright\": a bright, product-forward software site. White and light-grey bands, brand red as the only action colour, sun-yellow highlighter, Noto Sans TC 900 headings, pill buttons, rounded panels, one soft shadow."
 }

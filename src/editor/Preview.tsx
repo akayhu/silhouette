@@ -232,9 +232,9 @@ export function Preview({
             {empty && !loading && (
               <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center">
                 <div className="rounded-2xl bg-surface/90 px-4 py-3 text-sm font-semibold text-ink-soft shadow-card">
-                  從左側「素材」上傳影片，
+                  加入影片後，
                   <br />
-                  加到時間軸就會出現在這裡
+                  剪好的畫面會出現在這裡
                 </div>
               </div>
             )}

@@ -10,6 +10,7 @@ import { useToast } from '../../components/ui';
 import { Chips } from '../Inspector';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
+import { SoundMixer } from './SoundMixer';
 
 type Tab = 'music' | 'sfx' | 'mine';
 const TABS: { id: Tab; label: string }[] = [
@@ -139,7 +140,8 @@ export function MusicPanel() {
   return (
     <div className="p-4">
       <h2 className="text-sm font-extrabold">音樂庫</h2>
-      <p className="mt-1 text-xs text-ink-mute">無版權音樂，可免費用於個人與商業影片；也可以上傳自己的音樂。</p>
+      <p className="mt-1 text-xs text-ink-mute">無版權音樂，可免費用於個人與商業影片；也可以加入自己的音樂。</p>
+      <SoundMixer />
 
       <div className="mt-3 grid grid-cols-3 rounded-xl bg-sunken p-0.5">
         {TABS.map((t) => (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { AudioLines, Film, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import { AudioLines, Film, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
 import type { TrimSide } from '../lib/timeline';
 import { clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, TRACK_LABELS, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
@@ -52,7 +52,8 @@ function TrimIcon({ side }: { side: TrimSide }) {
   );
 }
 
-export function Timeline({ height, seek, split, trim, remove, togglePlay }: { height: number; seek: (t: number) => void; split: () => void; trim: (side: TrimSide) => void; remove: () => void; togglePlay: () => void }) {
+export function Timeline({ height, seek, split, trim, remove, togglePlay, onCover }: { height: number; seek: (t: number) => void; split: () => void; trim: (side: TrimSide) => void; remove: () => void; togglePlay: () => void; onCover: () => void }) {
+  const coverThumb = useEditor((s) => s.data.cover?.thumb);
   const data = useEditor((s) => s.data);
   const zoom = useEditor((s) => s.zoom);
   const time = useEditor((s) => s.time);
@@ -448,7 +449,18 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay }: { he
           {Array.from({ length: ovLanes }, (_, i) => ovLanes - i).map((n) => (
             <TrackLabel key={n} track="overlay" locked={locked('overlay')} icon={<Layers className="size-3.5" />} label={`疊加${ovLanes > 1 ? n : ''}`} h="h-12" />
           ))}
-          <TrackLabel track="main" locked={locked('main')} icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" />
+          <div className="relative">
+            <TrackLabel track="main" locked={locked('main')} icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" style={{ alignItems: 'flex-start', paddingTop: 8 }} />
+            {/* 封面（仿剪映：放在主軌最前面） */}
+            <button
+              onClick={onCover}
+              className="absolute bottom-1.5 left-3 flex h-7 items-center gap-1 overflow-hidden rounded-md border border-line bg-surface pr-1.5 text-[11px] font-bold text-ink-soft hover:border-brand hover:text-brand"
+              title={coverThumb ? '編輯封面' : '設定封面'}
+            >
+              {coverThumb ? <img src={coverThumb} alt="" className="h-full w-5 object-cover" /> : <ImageIcon className="ml-1.5 size-3.5" />}
+              {coverThumb ? '封面' : '設定封面'}
+            </button>
+          </div>
           <TrackLabel track="audio" locked={locked('audio')} icon={<AudioLines className="size-3.5" />} label="音訊" h="" style={{ height: laneCount * 40 + 8 }} />
             {/* 右邊有水平捲軸佔掉高度，這裡多留一點，捲到最底時名稱仍然對齊 */}
             <div className="h-5" aria-hidden />

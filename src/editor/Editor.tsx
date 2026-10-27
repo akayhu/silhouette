@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Film, Keyboard, Loader2, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Compass, Film, Keyboard, Loader2, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
@@ -27,6 +27,8 @@ import { SmartEditPanel } from './panels/SmartEditPanel';
 import { ExportDialog } from './ExportDialog';
 import { setCaptionEdge, ShortcutsDialog } from './Shortcuts';
 import { LAYOUT_DEFAULT, Splitter, useEditorLayout } from './Splitter';
+import { Guide, guideEnabled } from './Guide';
+import { CoverDialog } from './CoverDialog';
 import { AutoEditDialog } from './AutoEditDialog';
 import { useProjectPersistence } from './useProjectPersistence';
 import { NavigationWarning, PersistenceLoading, PersistenceNotice, SaveBadge } from './PersistenceUI';
@@ -55,12 +57,15 @@ export default function Editor() {
   const [tab, setTab] = useState<Tab>('media');
   const [exporting, setExporting] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
+  // 首次使用引導：新專案（主軌還沒有影片）預設打開，其他工具收起來
+  const [guide, setGuide] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
   // 工具區寬度、預覽寬度、時間軸高度：拖曳分隔線調整，記在這台瀏覽器
   const [layout, setLayout] = useEditorLayout();
   const dragFrom = useRef(layout);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
-  const persistence = useProjectPersistence(user?.id, id, () => thumbnail(canvasRef.current));
+  const persistence = useProjectPersistence(user?.id, id, () => useEditor.getState().data.cover?.thumb ?? thumbnail(canvasRef.current));
   const projectLoaded = useEditor((s) => s.projectId === id);
   const loaded = projectLoaded && persistence.ready;
   const data = useEditor((s) => s.data);
@@ -92,6 +97,10 @@ export default function Editor() {
   useEffect(() => {
     engineRef.current?.setWatermark(user?.plan !== 'pro');
   }, [user?.plan]);
+
+  useEffect(() => {
+    if (loaded) setGuide(guideEnabled() && useEditor.getState().data.clips.length === 0);
+  }, [loaded, id]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -258,6 +267,20 @@ export default function Editor() {
       </div>
     </section>
   );
+  const guidePanel = (
+    <div className="flex min-w-0 flex-1 justify-center bg-surface">
+      <div className="flex w-full max-w-[560px] min-w-0 flex-col border-x border-line">
+        <Guide
+          onExpandTools={() => setGuide(false)}
+          onExport={openExport}
+          seek={seek}
+          play={() => {
+            if (!engineRef.current?.playing) togglePlay();
+          }}
+        />
+      </div>
+    </div>
+  );
   const toolsSplit = (
     <Splitter
       direction="col"
@@ -296,7 +319,8 @@ export default function Editor() {
       onReset={() => setLayout({ timeline: LAYOUT_DEFAULT().timeline })}
     />
   );
-  const timelinePanel = <Timeline height={layout.timeline} seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} />;
+  // 引導中時間軸縮小，讓位給引導步驟（不改使用者設定的高度）
+  const timelinePanel = <Timeline height={guide ? Math.min(layout.timeline, 190) : layout.timeline} seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} onCover={() => setCoverOpen(true)} />;
 
   return (
     <div className="flex h-screen min-w-[1024px] flex-col overflow-hidden bg-[#f4f2ee]">
@@ -321,6 +345,14 @@ export default function Editor() {
           </IconBtn>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setGuide(!guide)}
+            aria-pressed={guide}
+            className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm font-bold transition ${guide ? 'bg-brand-soft text-brand' : 'text-ink-soft hover:bg-sunken hover:text-ink'}`}
+            title={guide ? '關閉引導，顯示全部工具' : '打開四步引導'}
+          >
+            <Compass className="size-4" /> 引導
+          </button>
           <IconBtn
             label={layout.mode === 'top' ? '改成預覽在右側' : '改成預覽在上方（時間軸延伸到右邊）'}
             onClick={() => setLayout({ mode: layout.mode === 'top' ? 'side' : 'top' })}
@@ -343,9 +375,13 @@ export default function Editor() {
         // 預覽在上方：上排是工具、屬性、預覽，時間軸橫跨整個寬度
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1">
-            {toolsPanel}
-            {toolsSplit}
-            {inspectorPanel}
+            {guide ? guidePanel : (
+              <>
+                {toolsPanel}
+                {toolsSplit}
+                {inspectorPanel}
+              </>
+            )}
             {previewSplit}
             {previewPanel}
           </div>
@@ -357,9 +393,13 @@ export default function Editor() {
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1">
-              {toolsPanel}
-              {toolsSplit}
-              {inspectorPanel}
+              {guide ? guidePanel : (
+                <>
+                  {toolsPanel}
+                  {toolsSplit}
+                  {inspectorPanel}
+                </>
+              )}
             </div>
             {timelineSplit}
             {timelinePanel}
@@ -371,6 +411,7 @@ export default function Editor() {
       <NavigationWarning persistence={persistence} />
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       <ShortcutsDialog open={shortcuts} onClose={() => setShortcuts(false)} />
+      {coverOpen && <CoverDialog onClose={() => setCoverOpen(false)} />}
       <AutoEditDialog />
     </div>
   );

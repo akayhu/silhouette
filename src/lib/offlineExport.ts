@@ -1,4 +1,5 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
+import { COVER_IN_VIDEO_SECONDS } from './cover';
 import type { Engine } from './engine';
 import { decodeAudio } from './media';
 import { clipLength, layoutMain } from './timeline';
@@ -259,9 +260,12 @@ export async function encodeOffline(
   audio: AudioChoice,
   signal: AbortSignal,
   report: ExportReporter,
+  /** 影片開頭顯示的封面（已畫好的畫面）；沒有就從第一格開始正常算圖 */
+  cover?: HTMLCanvasElement | null,
 ): Promise<Blob> {
   const { onStage, onProgress } = report;
   const fps = video.framerate ?? 30;
+  const coverFrames = cover ? Math.max(1, Math.round(COVER_IN_VIDEO_SECONDS * fps)) : 0;
   const keyframeEvery = Math.round(fps * 2);
   let failure: EncoderError | null = null;
   const fail = (part: 'video' | 'audio') => (error: unknown) => {
@@ -325,7 +329,8 @@ export async function encodeOffline(
     const frames = Math.max(1, Math.ceil(duration * fps - 1e-6));
     // 先排好每個片段要取的所有時間點，解碼器才能一路往前解，不必每格跳轉
     const schedule = new Map<string, { url: string; times: number[] }>();
-    for (let i = 0; i < frames; i++) {
+    // 封面那幾格不用解碼影片，排程從封面之後開始
+    for (let i = coverFrames; i < frames; i++) {
       for (const { key, url, time } of engine.videoTargets(Math.min(i / fps, duration))) {
         let entry = schedule.get(key);
         if (!entry) schedule.set(key, (entry = { url, times: [] }));
@@ -344,7 +349,8 @@ export async function encodeOffline(
     try {
       for (let i = 0; i < frames; i++) {
         check();
-        await engine.renderAt(i / fps, signal);
+        if (cover && i < coverFrames) canvas.getContext('2d')!.drawImage(cover, 0, 0, canvas.width, canvas.height);
+        else await engine.renderAt(i / fps, signal);
         const frame = new VideoFrame(canvas, { timestamp: Math.round(i * frameUs), duration: Math.round(frameUs) });
         try {
           guard('video', () => ve.encode(frame, { keyFrame: i % keyframeEvery === 0 }));

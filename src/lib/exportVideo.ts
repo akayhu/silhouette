@@ -1,4 +1,5 @@
 import { Engine } from './engine';
+import { renderCover } from './cover';
 import { supportedExportMimes, waitForReady } from './exportSupport';
 import {
   DEFAULT_SETTINGS,
@@ -124,6 +125,8 @@ async function exportOffline(
 ): Promise<ExportResult> {
   const { signal, onStage, onProgress } = options;
   const used = new Set([...source.clips, ...source.audio, ...source.overlays].map((c) => c.mediaId));
+  // 封面用的圖片不在時間軸上，也要保留
+  if (source.cover?.mediaId) used.add(source.cover.mediaId);
   const data = { ...source, media: source.media.filter((m) => used.has(m.id)) };
   const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
   window.addEventListener('beforeunload', beforeUnload);
@@ -137,6 +140,8 @@ async function exportOffline(
     signal.throwIfAborted();
     // Test capture before encoding: a cross-origin canvas must not produce a broken download.
     canvas.toDataURL('image/png');
+    // 封面放在影片開頭：先畫好（免費版一樣有浮水印）
+    const coverCanvas = data.cover?.inVideo ? await renderCover(data, data.cover, canvas.width, canvas.height, { signal, watermark: options.watermark }) : null;
     options.onStep?.('audio');
     onStage('混合聲音…');
     const mixed = await mixAudio(data, duration, signal);
@@ -146,7 +151,7 @@ async function exportOffline(
     let a = 0;
     while (true) {
       try {
-        const blob = await encodeOffline(engine, canvas, mixed, duration, config.video[v], config.audio[a], signal, options);
+        const blob = await encodeOffline(engine, canvas, mixed, duration, config.video[v], config.audio[a], signal, options, coverCanvas);
         onStage('檢查輸出影片…');
         try {
           await verifyOutput(blob, canvas.width, canvas.height, duration, signal);
@@ -194,6 +199,8 @@ async function exportRealtime(canvas: HTMLCanvasElement, source: ProjectData, op
   if (document.visibilityState === 'hidden') throw new Error('請回到這個分頁後再開始匯出。');
   signal.throwIfAborted();
   const used = new Set([...source.clips, ...source.audio, ...source.overlays].map((c) => c.mediaId));
+  // 封面用的圖片不在時間軸上，也要保留
+  if (source.cover?.mediaId) used.add(source.cover.mediaId);
   const data = { ...source, media: source.media.filter((m) => used.has(m.id)) };
   const scope = new AbortController();
   let engine: Engine | undefined;

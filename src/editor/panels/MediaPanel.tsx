@@ -54,6 +54,27 @@ const readAuto = () => {
   }
 };
 
+/**
+ * 加入一個素材檔：讀出長度與縮圖、存到這台裝置（本機優先），加進素材庫。
+ * 素材面板與首次使用引導共用；不放上時間軸，由呼叫端決定。
+ */
+export async function importMediaFile(file: File): Promise<MediaItem> {
+  const kind = kindOf(file);
+  if (!kind) throw new Error(`不支援的檔案：${file.name}`);
+  const preview = URL.createObjectURL(file);
+  try {
+    const meta = await probe(preview, kind);
+    const thumb = kind === 'video' ? await videoPoster(preview) : kind === 'image' ? await imageThumb(preview) : undefined;
+    const id = uid();
+    const { url, local } = await saveLocalFile(id, file, file.name);
+    const m: MediaItem = { id, name: file.name.replace(/\.[^.]+$/, ''), kind, url, origin: 'upload', thumb, local, ...meta };
+    useEditor.getState().commit((d) => ({ ...d, media: [...d.media, m] }));
+    return m;
+  } finally {
+    URL.revokeObjectURL(preview);
+  }
+}
+
 export function MediaPanel() {
   const projectId = useEditor((s) => s.projectId)!;
   const media = useEditor((s) => s.data.media);
@@ -89,23 +110,15 @@ export function MediaPanel() {
       }
       const item = { name: file.name };
       setUploading((u) => [...u, item]);
-      const local = URL.createObjectURL(file);
       try {
-        const meta = await probe(local, kind);
-        const thumb = kind === 'video' ? await videoPoster(local) : kind === 'image' ? await imageThumb(local) : undefined;
-        // 本機優先：檔案只存在這台裝置，不上傳到伺服器
-        const id = uid();
-        const { url, local: stored } = await saveLocalFile(id, file, file.name);
-        const m: MediaItem = { id, name: file.name.replace(/\.[^.]+$/, ''), kind, url, origin: 'upload', thumb, local: stored, ...meta };
         const first = useEditor.getState().data.clips.length === 0 && kind !== 'audio';
-        useEditor.getState().commit((d) => ({ ...d, media: [...d.media, m] }));
+        const m = await importMediaFile(file);
         // 影片交給自動剪輯，分析完讓使用者選版本後才放上時間軸
         if (kind === 'video' && autoEdit) useAutoEdit.getState().enqueue(m);
         else if (first) addToTimeline(m);
       } catch (err) {
         toast((err as Error).message, 'error');
       } finally {
-        URL.revokeObjectURL(local);
         setUploading((u) => u.filter((x) => x !== item));
       }
     }

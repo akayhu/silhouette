@@ -194,7 +194,24 @@ export interface StickerItem {
 /** 時間軸的四條軌道 */
 export type TrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio';
 
+/** 影片封面：從影片挑一格畫面（或用一張圖片），再加上封面標題 */
+export interface VideoCover {
+  source: 'frame' | 'image';
+  /** source 為 frame 時，取時間軸上第幾秒的畫面 */
+  time: number;
+  /** source 為 image 時，素材庫裡的圖片 */
+  mediaId?: string;
+  title: string;
+  style: CaptionStyle;
+  /** 匯出影片時，開頭 0.1 秒顯示封面（讓平台抓到封面） */
+  inVideo: boolean;
+  /** 小縮圖（我的專案列表使用） */
+  thumb?: string;
+}
+
 export interface ProjectData {
+  /** 影片封面 */
+  cover?: VideoCover;
   /** 專案內的人名、品牌與常見辨識錯字校正表 */
   captionDictionary?: { from: string; to: string }[];
   /** 鎖定的軌道：不能選取、編輯，也不會被其他軌的波紋刪除移動 */

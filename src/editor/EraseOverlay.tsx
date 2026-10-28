@@ -60,7 +60,7 @@ export function EraseOverlay({ canvasW, canvasH, cssW }: { canvasW: number; canv
       },
       () => {
         setDraft(null);
-        if (box.w > 0.01 && box.h > 0.01) updateErase(mediaId, (rs) => [...rs, { id: uid(), ...box, mode: 'fill' }]);
+        if (box.w > 0.01 && box.h > 0.01) updateErase(mediaId, (rs) => [...rs, { id: uid(), ...box, mode: 'blur' }]);
       },
     );
   };

@@ -2,7 +2,6 @@ import type { EraseRegion } from './types';
 
 /**
  * 去浮水印：把畫面中指定的區域補掉。
- * - fill：由外往內的平滑填補（多尺度調和插值），適合小 Logo、文字
  * - blur：高斯模糊
  * - mosaic：馬賽克
  * 每一格畫面即時處理，預覽與匯出共用。
@@ -29,8 +28,7 @@ export function applyErase(source: CanvasImageSource, w: number, h: number, regi
     const rw = Math.min(w - x, Math.ceil(r.w * w));
     const rh = Math.min(h - y, Math.ceil(r.h * h));
     if (rw < 2 || rh < 2) continue;
-    if (r.mode === 'fill') fillRegion(ctx, x, y, rw, rh, w, h);
-    else if (r.mode === 'blur') blurRegion(ctx, x, y, rw, rh);
+    if (r.mode === 'blur') blurRegion(ctx, x, y, rw, rh);
     else mosaicRegion(ctx, x, y, rw, rh);
   }
   return work;
@@ -66,115 +64,6 @@ function mosaicRegion(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(scratch, 0, 0, tw, th, x, y, w, h);
   ctx.restore();
-}
-
-/** 區域內的像素當作未知，用周圍一圈已知像素做多尺度調和填補 */
-function fillRegion(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, W: number, H: number) {
-  const pad = 3;
-  const sx = Math.max(0, x - pad);
-  const sy = Math.max(0, y - pad);
-  const sw = Math.min(W - sx, w + (x - sx) + pad);
-  const sh = Math.min(H - sy, h + (y - sy) + pad);
-  const img = ctx.getImageData(sx, sy, sw, sh);
-  const known = new Uint8Array(sw * sh);
-  for (let j = 0; j < sh; j++)
-    for (let i = 0; i < sw; i++) {
-      const gx = sx + i;
-      const gy = sy + j;
-      known[j * sw + i] = gx < x || gx >= x + w || gy < y || gy >= y + h ? 1 : 0;
-    }
-  const n = sw * sh;
-  const data = new Float32Array(n * 3);
-  for (let p = 0; p < n; p++) {
-    data[p * 3] = img.data[p * 4];
-    data[p * 3 + 1] = img.data[p * 4 + 1];
-    data[p * 3 + 2] = img.data[p * 4 + 2];
-  }
-  solve(data, known, sw, sh);
-  // 加一點點顆粒，避免補出來的區域太「塑膠」
-  let seed = 1234567;
-  for (let p = 0; p < n; p++) {
-    if (known[p]) continue;
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    const grain = ((seed / 0x7fffffff) - 0.5) * 3;
-    img.data[p * 4] = data[p * 3] + grain;
-    img.data[p * 4 + 1] = data[p * 3 + 1] + grain;
-    img.data[p * 4 + 2] = data[p * 3 + 2] + grain;
-  }
-  ctx.putImageData(img, sx, sy);
-}
-
-/** 由粗到細的調和插值：先在縮小的影像上求解，再放大當作初始值細修 */
-function solve(data: Float32Array, known: Uint8Array, w: number, h: number) {
-  if (w <= 6 || h <= 6) {
-    let sum = [0, 0, 0];
-    let count = 0;
-    for (let p = 0; p < w * h; p++)
-      if (known[p]) {
-        sum = [sum[0] + data[p * 3], sum[1] + data[p * 3 + 1], sum[2] + data[p * 3 + 2]];
-        count++;
-      }
-    for (let p = 0; p < w * h; p++)
-      if (!known[p]) for (let c = 0; c < 3; c++) data[p * 3 + c] = count ? sum[c] / count : 128;
-    relax(data, known, w, h, 60);
-    return;
-  }
-  const cw = Math.ceil(w / 2);
-  const ch = Math.ceil(h / 2);
-  const cd = new Float32Array(cw * ch * 3);
-  const ck = new Uint8Array(cw * ch);
-  for (let j = 0; j < ch; j++)
-    for (let i = 0; i < cw; i++) {
-      let s0 = 0, s1 = 0, s2 = 0, k = 0;
-      for (let dy = 0; dy < 2; dy++)
-        for (let dx = 0; dx < 2; dx++) {
-          const fx = i * 2 + dx;
-          const fy = j * 2 + dy;
-          if (fx >= w || fy >= h) continue;
-          const p = fy * w + fx;
-          if (!known[p]) continue;
-          s0 += data[p * 3];
-          s1 += data[p * 3 + 1];
-          s2 += data[p * 3 + 2];
-          k++;
-        }
-      const q = j * cw + i;
-      if (k) {
-        ck[q] = 1;
-        cd[q * 3] = s0 / k;
-        cd[q * 3 + 1] = s1 / k;
-        cd[q * 3 + 2] = s2 / k;
-      }
-    }
-  solve(cd, ck, cw, ch);
-  for (let j = 0; j < h; j++)
-    for (let i = 0; i < w; i++) {
-      const p = j * w + i;
-      if (known[p]) continue;
-      const q = (j >> 1) * cw + (i >> 1);
-      data[p * 3] = cd[q * 3];
-      data[p * 3 + 1] = cd[q * 3 + 1];
-      data[p * 3 + 2] = cd[q * 3 + 2];
-    }
-  relax(data, known, w, h, 12);
-}
-
-function relax(data: Float32Array, known: Uint8Array, w: number, h: number, iters: number) {
-  for (let it = 0; it < iters; it++)
-    for (let j = 0; j < h; j++)
-      for (let i = 0; i < w; i++) {
-        const p = j * w + i;
-        if (known[p]) continue;
-        for (let c = 0; c < 3; c++) {
-          let s = 0;
-          let k = 0;
-          if (i > 0) (s += data[(p - 1) * 3 + c]), k++;
-          if (i < w - 1) (s += data[(p + 1) * 3 + c]), k++;
-          if (j > 0) (s += data[(p - w) * 3 + c]), k++;
-          if (j < h - 1) (s += data[(p + w) * 3 + c]), k++;
-          data[p * 3 + c] = s / k;
-        }
-      }
 }
 
 // ---------- 自動偵測 ----------

@@ -12,7 +12,6 @@ import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 
 const MODES: { id: EraseMode; label: string }[] = [
-  { id: 'fill', label: '智能填補' },
   { id: 'blur', label: '模糊' },
   { id: 'mosaic', label: '馬賽克' },
 ];
@@ -49,7 +48,7 @@ export function ErasePanel({ onCompare }: { onCompare: (on: boolean) => void }) 
         toast(mostlyStatic ? '畫面幾乎沒有變動，無法自動判斷，請改用手動框選' : '沒有偵測到固定的浮水印，可以改用手動框選');
         return;
       }
-      updateErase(media.id, (rs) => [...rs, ...found.map((r) => ({ id: uid(), ...r, mode: 'fill' as const }))]);
+      updateErase(media.id, (rs) => [...rs, ...found.map((r) => ({ id: uid(), ...r, mode: 'blur' as const }))]);
       useEditor.getState().setEraseEdit(media.id);
       const logos = found.filter((r) => r.kind === 'logo').length;
       const subs = found.length - logos;
@@ -117,7 +116,7 @@ export function ErasePanel({ onCompare }: { onCompare: (on: boolean) => void }) 
                         <Trash2 className="size-3.5" />
                       </button>
                     </div>
-                    <Chips options={MODES} value={r.mode} onChange={(mode) => updateErase(media.id, (rs) => rs.map((x) => (x.id === r.id ? { ...x, mode } : x)))} />
+                    <Chips options={MODES} value={r.mode === 'fill' ? 'blur' : r.mode} onChange={(mode) => updateErase(media.id, (rs) => rs.map((x) => (x.id === r.id ? { ...x, mode } : x)))} />
                   </li>
                 ))}
               </ul>
@@ -138,10 +137,10 @@ export function ErasePanel({ onCompare }: { onCompare: (on: boolean) => void }) 
           )}
 
           <ul className="mt-4 space-y-1.5 text-[11px] leading-relaxed text-ink-soft">
-            <li>・<b>智能填補</b>用周圍的畫面補起來，適合小 Logo、文字浮水印、背景單純的位置</li>
-            <li>・背景很複雜時，改用<b>模糊</b>或<b>馬賽克</b>會比較自然</li>
+            <li>・畫面單純、背景平坦的位置，選<b>模糊</b>效果最自然</li>
+            <li>・畫面複雜、細節多的位置，改用<b>馬賽克</b>比較不會看出痕跡</li>
             <li>・框稍微比浮水印大一點，效果會更好</li>
-            <li>・自動偵測也會找出影片原本燒在畫面上的<b>字幕帶</b>；字幕區面積大，補完會看得出痕跡，要換成自己的字幕時，可以改用模糊，或讓新字幕加上底色直接蓋過去</li>
+            <li>・自動偵測也會找出影片原本燒在畫面上的<b>字幕帶</b>；字幕區面積大，補完會看得出痕跡，要換成自己的字幕時，可以讓新字幕加上底色直接蓋過去</li>
           </ul>
         </>
       )}

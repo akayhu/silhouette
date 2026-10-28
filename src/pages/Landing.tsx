@@ -734,7 +734,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、自動上字幕，讓你選剪輯前或剪輯後的版本。' },
       { name: 'AI 自動剪輯', pro: true, note: '依聲音起伏和字幕內容，加上特寫、運鏡、轉場、字幕動畫和貼紙。' },
       { name: '智能口播：剪掉停頓與「嗯、啊」', pro: true },
-      { name: '去浮水印：偵測 Logo 與字幕帶', pro: true, note: '智能填補、模糊、馬賽克三種方式，只處理你有權使用的影片。' },
+      { name: '去浮水印：偵測 Logo 與字幕帶', pro: true, note: '模糊、馬賽克兩種方式，只處理你有權使用的影片。' },
     ],
   },
   {

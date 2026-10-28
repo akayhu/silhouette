@@ -51,7 +51,8 @@ export async function runSmartEdit(
   let d = plan.data;
   const counts: SmartEditResult['counts'] = { ...plan.counts, flowers: 0, sfx: 0, music: null, filter: null, captionStyled: 0 };
   const captionOpen = !isLocked(d, 'caption');
-  const audioOpen = !isLocked(d, 'audio');
+  // 配樂、音效分成獨立軌道；任一軌鎖定就先不動音訊，避免只套用一半
+  const audioOpen = !isLocked(d, 'audio-music') && !isLocked(d, 'audio-sfx');
   onProgress?.('套用模板');
 
   // 2. 字幕樣式（保留 AI 依內容挑的進場動畫）＋花字

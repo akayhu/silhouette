@@ -1,4 +1,4 @@
-import type { Aspect, AudioClip, Caption, CaptionStyle, CaptionWord, ClipTransform, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
+import type { Aspect, AudioClip, Caption, CaptionStyle, CaptionWord, ClipTransform, MediaItem, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
 import { uid } from './format';
 import { captionWords, splitCaptionByTime } from './captions';
 
@@ -6,10 +6,31 @@ export { captionWords };
 
 export const MIN_CLIP = 0.1;
 
-export const TRACK_LABELS: Record<TrackKey, string> = { caption: '字幕軌', sticker: '貼紙軌', overlay: '疊加軌', main: '主軌', audio: '音訊軌' };
+export const TRACK_LABELS: Record<TrackKey, string> = {
+  caption: '字幕軌',
+  sticker: '貼紙軌',
+  overlay: '疊加軌',
+  main: '主軌',
+  'audio-music': '背景音樂軌',
+  'audio-voice': '人聲軌',
+  'audio-sfx': '音效軌',
+};
 
-/** 選取項目的類型對應到哪一條軌道 */
-export const trackOf = (type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'): TrackKey => (type === 'clip' ? 'main' : type);
+/** 音訊依素材判斷屬於哪一類：朗讀配音、音效庫的音效，其餘都算背景音樂 */
+export const audioCategoryOf = (m: MediaItem | undefined): 'music' | 'voice' | 'sfx' => {
+  if (m?.origin === 'tts') return 'voice';
+  if (m && /\/music\/sfx-/.test(m.url)) return 'sfx';
+  return 'music';
+};
+export const audioTrackOf = (a: AudioClip, media: MediaItem[]): TrackKey => `audio-${audioCategoryOf(media.find((m) => m.id === a.mediaId))}`;
+
+/** 選取項目對應到哪一條軌道；音訊依素材類型分成三條獨立軌道 */
+export const trackOf = (item: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string }, d: Pick<ProjectData, 'audio' | 'media'>): TrackKey => {
+  if (item.type === 'clip') return 'main';
+  if (item.type !== 'audio') return item.type;
+  const clip = d.audio.find((a) => a.id === item.id);
+  return clip ? audioTrackOf(clip, d.media) : 'audio-music';
+};
 export const isLocked = (d: Pick<ProjectData, 'locks'>, track: TrackKey) => !!d.locks?.[track];
 
 export const DEFAULT_TRANSFORM: ClipTransform = { x: 0, y: 0, scale: 1, rotation: 0, fit: 'contain' };
@@ -105,10 +126,10 @@ export function captionFromWords(start: number, end: number, text: string, style
 export function cutTranscript(d: ProjectData, ranges: Range[]): ProjectData {
   const before = mainDuration(d.clips);
   const out = rippleRemove(d, ranges);
-  if (isLocked(out, 'audio')) return out;
-  // 原本跟影片一起結束的配樂，剪完也跟著縮短，結尾不會多出一段沒有畫面的聲音
+  // 原本跟影片一起結束的配樂，剪完也跟著縮短，結尾不會多出一段沒有畫面的聲音（鎖定的軌道不動）
   const after = mainDuration(out.clips);
   const audio = out.audio.map((a) => {
+    if (isLocked(out, audioTrackOf(a, out.media))) return a;
     const end = a.start + clipLength(a);
     const original = d.audio.find((x) => x.id === a.id);
     const wasToEnd = original && Math.abs(original.start + clipLength(original) - before) < 0.05;
@@ -238,7 +259,7 @@ export function rippleRemove(d: ProjectData, input: Range[]): ProjectData {
           return { ...moved, words: kept, text: kept.map((w) => w.text).join('') };
         })
         .filter((c) => c.end - c.start >= 0.05);
-  const audio = isLocked(d, 'audio') ? d.audio : d.audio.map((a) => ({ ...a, start: remap(a.start, ranges) }));
+  const audio = d.audio.map((a) => (isLocked(d, audioTrackOf(a, d.media)) ? a : { ...a, start: remap(a.start, ranges) }));
   const stickers = isLocked(d, 'sticker')
     ? (d.stickers ?? [])
     : (d.stickers ?? []).map((s) => ({ ...s, start: remap(s.start, ranges), end: remap(s.end, ranges) })).filter((s) => s.end - s.start >= 0.05);
@@ -263,7 +284,7 @@ export function moveMainClip(d: ProjectData, from: number, to: number): ProjectD
 
 /** 一次刪除多個項目：音訊與字幕直接移除，主軌片段用波紋刪除讓後面的內容補上 */
 export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string }[]): ProjectData {
-  const ids = new Set(items.filter((i) => !isLocked(d, trackOf(i.type))).map((i) => i.id));
+  const ids = new Set(items.filter((i) => !isLocked(d, trackOf(i, d))).map((i) => i.id));
   const ranges = layoutMain(d.clips)
     .filter((c) => ids.has(c.id))
     .map((c): [number, number] => [c.start, c.end]);
@@ -297,7 +318,7 @@ export function trimAt(d: ProjectData, items: TrimItem[], t: number, side: TrimS
   let out = d;
 
   const audio = out.audio.map((a) => {
-    if (!targets.some((x) => x.type === 'audio' && x.id === a.id) || isLocked(d, 'audio')) return a;
+    if (!targets.some((x) => x.type === 'audio' && x.id === a.id) || isLocked(d, audioTrackOf(a, d.media))) return a;
     const end = a.start + clipLength(a);
     if (!ok(a.start, end)) return a;
     trimmed++;

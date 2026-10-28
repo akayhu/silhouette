@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { AudioLines, Film, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import { AudioLines, Film, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, Volume2, VolumeX, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
 import type { TrimSide } from '../lib/timeline';
-import { clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, TRACK_LABELS, trackOf } from '../lib/timeline';
+import { audioCategoryOf, clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, TRACK_LABELS, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { AudioClip, Caption, TrackKey } from '../lib/types';
 import { stickerDef, stickerUrl } from '../lib/stickers';
@@ -9,8 +9,17 @@ import { useEditor, type SelItem } from './store';
 import { IconBtn } from './Editor';
 
 const PAD = 16;
-const GUTTER = 96;
+const GUTTER = 112;
 const SNAP_PX = 8;
+
+/** 音訊依類型分成獨立軌道：背景音樂、人聲（朗讀配音）、音效，彼此不會合併，可各自鎖定、靜音 */
+type AudioCat = 'music' | 'voice' | 'sfx';
+const AUDIO_CATS: { id: AudioCat; label: string }[] = [
+  { id: 'music', label: '音樂' },
+  { id: 'voice', label: '人聲' },
+  { id: 'sfx', label: '音效' },
+];
+const audioTrackKey = (cat: AudioCat): TrackKey => `audio-${cat}`;
 
 /** 拖曳工具：第一次移動才寫入復原點，單純點擊不會產生歷史紀錄 */
 function useDrag() {
@@ -123,8 +132,83 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
     window.addEventListener('pointerup', up);
   };
 
-  const lanes = useMemo(() => audioLanes(data.audio), [data.audio]);
-  const laneCount = Math.max(1, ...lanes.map((l) => l.lane + 1));
+  // 音訊依類型（背景音樂／人聲／音效）分成獨立軌道，不會因為時間重疊而合併在一起；
+  // 同一類型裡真的重疊的片段，才會在那一軌裡再分子列
+  const audioCategory = (a: AudioClip): AudioCat => audioCategoryOf(media.get(a.mediaId));
+  const audioRows = useMemo(() => {
+    const byCat = new Map<AudioCat, AudioClip[]>();
+    for (const a of data.audio) {
+      const cat = audioCategory(a);
+      byCat.set(cat, [...(byCat.get(cat) ?? []), a]);
+    }
+    let top = 0;
+    const rows = AUDIO_CATS.filter((c) => byCat.get(c.id)?.length).map((c) => {
+      const clips = audioLanes(byCat.get(c.id)!);
+      const laneCount = Math.max(1, ...clips.map((l) => l.lane + 1));
+      const row = { ...c, clips, laneCount, top, height: laneCount * 40 };
+      top += row.height;
+      return row;
+    });
+    return { rows, totalHeight: top || 40 };
+  }, [data.audio, media]);
+  const audioLabelRows = audioRows.rows.length ? audioRows.rows : [{ id: 'music' as AudioCat, label: '音訊', clips: [], laneCount: 1, top: 0, height: 40 }];
+  // 每一軌各自靜音：記住靜音前各自的音量，再次點擊還原
+  const audioVolumeBefore = useRef<Map<string, number>>(new Map());
+  const toggleAudioMute = (cat: AudioCat) => {
+    const clips = audioRows.rows.find((r) => r.id === cat)?.clips.map((l) => l.clip) ?? [];
+    if (locked(audioTrackKey(cat)) || !clips.length) return;
+    useEditor.getState().checkpoint();
+    const muted = clips.every((c) => c.volume === 0);
+    const ids = new Set(clips.map((c) => c.id));
+    if (muted) {
+      const before = audioVolumeBefore.current;
+      useEditor.getState().live((d) => ({ ...d, audio: d.audio.map((a) => (ids.has(a.id) ? { ...a, volume: before.get(a.id) ?? 1 } : a)) }));
+    } else {
+      clips.forEach((c) => audioVolumeBefore.current.set(c.id, c.volume));
+      useEditor.getState().live((d) => ({ ...d, audio: d.audio.map((a) => (ids.has(a.id) ? { ...a, volume: 0 } : a)) }));
+    }
+  };
+  // 影片原聲靜音：主軌、疊加各自獨立；只影響真正有畫面的影片片段，圖片沒有聲音不受影響
+  const mainVolumeBefore = useRef<Map<string, number>>(new Map());
+  const mainVideoClips = () => data.clips.filter((c) => media.get(c.mediaId)?.kind === 'video');
+  const mainMuted = (() => {
+    const vs = mainVideoClips();
+    return vs.length > 0 && vs.every((c) => c.volume === 0);
+  })();
+  const toggleMainMute = () => {
+    const vs = mainVideoClips();
+    if (locked('main') || !vs.length) return;
+    useEditor.getState().checkpoint();
+    const muted = vs.every((c) => c.volume === 0);
+    const ids = new Set(vs.map((c) => c.id));
+    if (muted) {
+      const before = mainVolumeBefore.current;
+      useEditor.getState().live((d) => ({ ...d, clips: d.clips.map((c) => (ids.has(c.id) ? { ...c, volume: before.get(c.id) ?? 1 } : c)) }));
+    } else {
+      vs.forEach((c) => mainVolumeBefore.current.set(c.id, c.volume));
+      useEditor.getState().live((d) => ({ ...d, clips: d.clips.map((c) => (ids.has(c.id) ? { ...c, volume: 0 } : c)) }));
+    }
+  };
+  const overlayVolumeBefore = useRef<Map<string, number>>(new Map());
+  const overlayVideoClips = () => data.overlays.filter((o) => media.get(o.mediaId)?.kind === 'video');
+  const overlayMuted = (() => {
+    const vs = overlayVideoClips();
+    return vs.length > 0 && vs.every((o) => o.volume === 0);
+  })();
+  const toggleOverlayMute = () => {
+    const vs = overlayVideoClips();
+    if (locked('overlay') || !vs.length) return;
+    useEditor.getState().checkpoint();
+    const muted = vs.every((o) => o.volume === 0);
+    const ids = new Set(vs.map((o) => o.id));
+    if (muted) {
+      const before = overlayVolumeBefore.current;
+      useEditor.getState().live((d) => ({ ...d, overlays: d.overlays.map((o) => (ids.has(o.id) ? { ...o, volume: before.get(o.id) ?? 1 } : o)) }));
+    } else {
+      vs.forEach((o) => overlayVolumeBefore.current.set(o.id, o.volume));
+      useEditor.getState().live((d) => ({ ...d, overlays: d.overlays.map((o) => (ids.has(o.id) ? { ...o, volume: 0 } : o)) }));
+    }
+  };
   const ovLanes = overlayLaneCount(data.overlays);
   const OV_ROW = 48;
   const OV_TOP = 80;
@@ -138,7 +222,15 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
     ...data.stickers.map((st) => ({ item: { type: 'sticker', id: st.id } as SelItem, x0: x(st.start), x1: x(st.end), y0: 45, y1: 75 })),
     ...data.overlays.map((o) => ({ item: { type: 'overlay', id: o.id } as SelItem, x0: x(o.start), x1: x(overlayEnd(o)), y0: ovRowTop(o.lane) + 5, y1: ovRowTop(o.lane) + 43 })),
     ...placed.map((c) => ({ item: { type: 'clip', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: MAIN_TOP + 6, y1: MAIN_TOP + 62 })),
-    ...lanes.map(({ clip: a, lane }) => ({ item: { type: 'audio', id: a.id } as SelItem, x0: x(a.start), x1: x(a.start + clipLength(a)), y0: MAIN_TOP + 72 + lane * 40, y1: MAIN_TOP + 106 + lane * 40 })),
+    ...audioRows.rows.flatMap((row) =>
+      row.clips.map(({ clip: a, lane }) => ({
+        item: { type: 'audio', id: a.id } as SelItem,
+        x0: x(a.start),
+        x1: x(a.start + clipLength(a)),
+        y0: MAIN_TOP + 72 + row.top + lane * 40,
+        y1: MAIN_TOP + 106 + row.top + lane * 40,
+      })),
+    ),
   ];
 
   // 在空白處拖曳＝框選（按住 Shift／⌘ 可以加選）；單純點一下＝移動播放頭並取消選取
@@ -162,7 +254,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
       const box = { left: Math.min(p0.x, p1.x), top: Math.min(p0.y, p1.y), width: Math.abs(p1.x - p0.x), height: Math.abs(p1.y - p0.y) };
       setMarquee(box);
       const hits = boxes
-        .filter((b) => !locked(trackOf(b.item.type)))
+        .filter((b) => !locked(trackOf(b.item, data)))
         .filter((b) => b.x1 > box.left && b.x0 < box.left + box.width && b.y1 > box.top && b.y0 < box.top + box.height)
         .map((b) => b.item);
       setSelected([...base, ...hits.filter((h) => !base.some((s) => s.id === h.id))]);
@@ -186,7 +278,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
    */
   const press = (e: RPointerEvent, item: SelItem, mode: 'move' | 'left' | 'right') => {
     if (e.button !== 0) return false;
-    if (locked(trackOf(item.type))) return false;
+    if (locked(trackOf(item, data))) return false;
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       e.stopPropagation();
       e.preventDefault();
@@ -441,16 +533,34 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
       </div>
       <div className="flex min-h-0 flex-1">
         {/* 軌道名稱：上方留時間尺的高度（時間尺固定不捲動），下面跟著軌道一起上下捲動 */}
-        <div className="flex w-[96px] shrink-0 flex-col border-r border-line bg-canvas text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
+        <div className="flex w-[112px] shrink-0 flex-col border-r border-line bg-canvas text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
           <div className="h-7 shrink-0 border-b border-line bg-surface" />
           <div ref={labelsRef} className="min-h-0 flex-1 overflow-hidden">
           <TrackLabel track="caption" locked={locked('caption')} icon={<Type className="size-3.5" />} label="字幕" h="h-10" />
           <TrackLabel track="sticker" locked={locked('sticker')} icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
           {Array.from({ length: ovLanes }, (_, i) => ovLanes - i).map((n) => (
-            <TrackLabel key={n} track="overlay" locked={locked('overlay')} icon={<Layers className="size-3.5" />} label={`疊加${ovLanes > 1 ? n : ''}`} h="h-12" />
+            <TrackLabel
+              key={n}
+              track="overlay"
+              locked={locked('overlay')}
+              icon={<Layers className="size-3.5" />}
+              label={`疊加${ovLanes > 1 ? n : ''}`}
+              h="h-12"
+              muted={overlayMuted}
+              onToggleMute={overlayVideoClips().length ? toggleOverlayMute : undefined}
+            />
           ))}
           <div className="relative">
-            <TrackLabel track="main" locked={locked('main')} icon={<Film className="size-3.5" />} label="主軌" h="h-[68px]" style={{ alignItems: 'flex-start', paddingTop: 8 }} />
+            <TrackLabel
+              track="main"
+              locked={locked('main')}
+              icon={<Film className="size-3.5" />}
+              label="主軌"
+              h="h-[68px]"
+              style={{ alignItems: 'flex-start', paddingTop: 8 }}
+              muted={mainMuted}
+              onToggleMute={mainVideoClips().length ? toggleMainMute : undefined}
+            />
             {/* 封面（仿剪映：放在主軌最前面） */}
             <button
               onClick={onCover}
@@ -461,7 +571,19 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
               {coverThumb ? '封面' : '設定封面'}
             </button>
           </div>
-          <TrackLabel track="audio" locked={locked('audio')} icon={<AudioLines className="size-3.5" />} label="音訊" h="" style={{ height: laneCount * 40 + 8 }} />
+          {audioLabelRows.map((row, i) => (
+            <TrackLabel
+              key={row.id}
+              track={audioTrackKey(row.id)}
+              locked={locked(audioTrackKey(row.id))}
+              icon={<AudioLines className="size-3.5" />}
+              label={row.label}
+              h=""
+              style={{ height: row.height + (i === audioLabelRows.length - 1 ? 8 : 0) }}
+              muted={row.clips.length > 0 && row.clips.every((l) => l.clip.volume === 0)}
+              onToggleMute={row.clips.length ? () => toggleAudioMute(row.id) : undefined}
+            />
+          ))}
             {/* 右邊有水平捲軸佔掉高度，這裡多留一點，捲到最底時名稱仍然對齊 */}
             <div className="h-5" aria-hidden />
           </div>
@@ -596,27 +718,33 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
                   );
                 })}
               </div>
-              {/* 音訊軌 */}
-              <div className={`relative ${lockedRow('audio')}`} style={{ height: laneCount * 40 + 8 }}>
-                {lanes.map(({ clip: a, lane }) => {
-                  const m = media.get(a.mediaId);
-                  return (
-                    <Block
-                      key={a.id}
-                      left={x(a.start)}
-                      width={clipLength(a) * zoom}
-                      top={4 + lane * 40}
-                      height={34}
-                      selected={selIds.has(a.id)}
-                      className="border-track-audio-edge bg-track-audio"
-                      onDown={(e, mode) => startAudio(e, a.id, mode)}
-                    >
-                      <Wave />
-                      <span className="relative truncate text-[10px] font-bold text-[#0d6b52]">{m?.origin === 'tts' ? '🗣 ' : '♪ '}{m?.name}</span>
-                    </Block>
-                  );
-                })}
-              </div>
+              {/* 音訊軌：背景音樂、人聲、音效各自獨立一軌，不會因為時間重疊而合併 */}
+              {audioLabelRows.map((row, i) => (
+                <div
+                  key={row.id}
+                  className={`relative border-b border-line/60 ${lockedRow(audioTrackKey(row.id))}`}
+                  style={{ height: row.height + (i === audioLabelRows.length - 1 ? 8 : 0) }}
+                >
+                  {row.clips.map(({ clip: a, lane }) => {
+                    const m = media.get(a.mediaId);
+                    return (
+                      <Block
+                        key={a.id}
+                        left={x(a.start)}
+                        width={clipLength(a) * zoom}
+                        top={4 + lane * 40}
+                        height={34}
+                        selected={selIds.has(a.id)}
+                        className="border-track-audio-edge bg-track-audio"
+                        onDown={(e, mode) => startAudio(e, a.id, mode)}
+                      >
+                        <Wave />
+                        <span className="relative truncate text-[10px] font-bold text-[#0d6b52]">{m?.origin === 'tts' ? '🗣 ' : '♪ '}{m?.name}</span>
+                      </Block>
+                    );
+                  })}
+                </div>
+              ))}
               {marquee && <div className="pointer-events-none absolute z-40 rounded-md border border-brand bg-brand/10" style={marquee} />}
             </div>
             {/* 播放頭 */}
@@ -639,22 +767,54 @@ function CaptionBlock({ c, left, width, selected, onDown }: { c: Caption; left: 
   );
 }
 
-function TrackLabel({ track, locked, icon, label, h, style }: { track: TrackKey; locked: boolean; icon: ReactNode; label: string; h: string; style?: React.CSSProperties }) {
+function TrackLabel({
+  track,
+  locked,
+  icon,
+  label,
+  h,
+  style,
+  muted,
+  onToggleMute,
+}: {
+  track: TrackKey;
+  locked: boolean;
+  icon: ReactNode;
+  label: string;
+  h: string;
+  style?: React.CSSProperties;
+  muted?: boolean;
+  onToggleMute?: () => void;
+}) {
   const name = TRACK_LABELS[track];
   return (
-    <div className={`group/track flex items-center gap-1.5 border-b border-line/60 pr-1.5 pl-3 ${h} ${locked ? 'text-ink-mute' : ''}`} style={style}>
+    <div className={`group/track flex items-center gap-1 border-b border-line/60 pr-1 pl-3 ${h} ${locked ? 'text-ink-mute' : ''}`} style={style}>
       {icon}
-      <span className="whitespace-nowrap">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {onToggleMute && (
+        <button
+          onClick={onToggleMute}
+          disabled={locked}
+          title={muted ? `取消靜音：${name}` : `靜音：${name}`}
+          aria-label={muted ? `取消靜音：${name}` : `靜音：${name}`}
+          aria-pressed={!!muted}
+          className={`grid size-5 shrink-0 place-items-center rounded-md transition ${
+            muted ? 'bg-brand-soft text-brand' : 'text-ink-mute opacity-0 group-hover/track:opacity-100 hover:bg-sunken hover:text-ink focus-visible:opacity-100'
+          } ${locked ? 'pointer-events-none' : ''}`}
+        >
+          {muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+        </button>
+      )}
       <button
         onClick={() => useEditor.getState().toggleLock(track)}
         title={locked ? `解鎖${name}` : `鎖定${name}`}
         aria-label={locked ? `解鎖${name}` : `鎖定${name}`}
         aria-pressed={locked}
-        className={`ml-auto grid size-6 place-items-center rounded-md transition ${
+        className={`grid size-5 shrink-0 place-items-center rounded-md transition ${
           locked ? 'bg-brand-soft text-brand' : 'text-ink-mute opacity-0 group-hover/track:opacity-100 hover:bg-sunken hover:text-ink focus-visible:opacity-100'
         }`}
       >
-        {locked ? <Lock className="size-3.5" /> : <LockOpen className="size-3.5" />}
+        {locked ? <Lock className="size-3" /> : <LockOpen className="size-3" />}
       </button>
     </div>
   );

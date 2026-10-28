@@ -135,8 +135,8 @@ export default function Editor() {
   const seek = useCallback((t: number) => engineRef.current?.seek(t), []);
 
   const split = useCallback(() => {
-    const { selection, time, commit } = useEditor.getState();
-    if (!ensureUnlocked(selection ? trackOf(selection.type) : 'main')) return;
+    const { selection, time, commit, data } = useEditor.getState();
+    if (!ensureUnlocked(selection ? trackOf(selection, data) : 'main')) return;
     if (selection?.type === 'audio') commit((d) => splitAudioAt(d, selection.id, time));
     else if (selection?.type === 'caption') commit((d) => splitCaptionAt(d, selection.id, time));
     else if (selection?.type === 'sticker') commit((d) => splitStickerAt(d, selection.id, time));
@@ -149,8 +149,8 @@ export default function Editor() {
     const { selected, time, data, commit } = useEditor.getState();
     const result = trimAt(data, selected, time, side);
     if (!result.trimmed) {
-      const anyLocked = (selected.length ? selected.map((s) => trackOf(s.type)) : ['main' as const]).some((t) => isLocked(data, t));
-      if (anyLocked) return void ensureUnlocked(...(selected.length ? selected.map((s) => trackOf(s.type)) : ['main' as const]));
+      const anyLocked = (selected.length ? selected.map((s) => trackOf(s, data)) : ['main' as const]).some((t) => isLocked(data, t));
+      if (anyLocked) return void ensureUnlocked(...(selected.length ? selected.map((s) => trackOf(s, data)) : ['main' as const]));
       return notify(selected.length ? '播放頭要在選取的項目中間，而且兩邊都至少留 0.1 秒' : '播放頭要在主軌片段中間，或先點選要裁剪的項目', 'info');
     }
     commit(() => result.data);
@@ -163,7 +163,7 @@ export default function Editor() {
     if (!selected.length) return;
     // 刪主軌片段會波紋移動其他軌；主軌鎖定時整個不動
     if (selected.some((s) => s.type === 'clip') && !ensureUnlocked('main')) return;
-    if (selected.every((s) => isLocked(data, trackOf(s.type)))) return void ensureUnlocked(trackOf(selected[0].type));
+    if (selected.every((s) => isLocked(data, trackOf(s, data)))) return void ensureUnlocked(trackOf(selected[0], data));
     commit((d) => removeItems(d, selected));
     select(null);
   }, []);
@@ -177,7 +177,7 @@ export default function Editor() {
       ...data.clips.map((c) => ({ type: 'clip' as const, id: c.id })),
       ...data.audio.map((a) => ({ type: 'audio' as const, id: a.id })),
     ];
-    setSelected(all.filter((i) => !isLocked(data, trackOf(i.type))));
+    setSelected(all.filter((i) => !isLocked(data, trackOf(i, data))));
   }, []);
 
   useEffect(() => {

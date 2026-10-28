@@ -193,8 +193,8 @@ export interface StickerItem {
   animation: StickerAnimation;
 }
 
-/** 時間軸的四條軌道 */
-export type TrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio';
+/** 時間軸的軌道：音訊依類型（背景音樂／人聲／音效）分成各自獨立的軌道，可各自鎖定、靜音 */
+export type TrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio-music' | 'audio-voice' | 'audio-sfx';
 
 /** 影片封面：從影片挑一格畫面（或用一張圖片），再加上封面標題 */
 export interface VideoCover {

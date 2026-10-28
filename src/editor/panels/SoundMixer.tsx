@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ChevronDown, Volume2, VolumeX } from 'lucide-react';
-import type { AudioClip, MediaItem, ProjectData } from '../../lib/types';
+import type { AudioClip, MediaItem, ProjectData, TrackKey } from '../../lib/types';
+import { audioCategoryOf } from '../../lib/timeline';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 
@@ -17,7 +18,8 @@ const GROUPS: { id: Group; label: string; hint: string }[] = [
   { id: 'voice', label: '朗讀配音', hint: '文字朗讀產生的人聲' },
 ];
 
-const groupOfAudio = (m: MediaItem | undefined): Group => (m?.origin === 'tts' ? 'voice' : m && /\/music\/sfx-/.test(m.url) ? 'sfx' : 'music');
+const groupOfAudio = (m: MediaItem | undefined): Exclude<Group, 'video'> => audioCategoryOf(m);
+const trackKeyOf = (g: Exclude<Group, 'video'>): TrackKey => `audio-${g}`;
 
 function members(d: ProjectData, g: Group) {
   const media = new Map(d.media.map((m) => [m.id, m]));
@@ -111,7 +113,7 @@ export function SoundMixer() {
   const media = new Map(data.media.map((m) => [m.id, m]));
   const tracks = [...data.audio].sort((a, b) => a.start - b.start);
 
-  const unlocked = (g: Group) => (g === 'video' ? ensureUnlocked('main', 'overlay') : ensureUnlocked('audio'));
+  const unlocked = (g: Group) => (g === 'video' ? ensureUnlocked('main', 'overlay') : ensureUnlocked(trackKeyOf(g)));
   const setGroup = (g: Group, v: number) => live((d) => setGroupVolume(d, g, v));
   const toggleGroup = (g: Group, value: number) => {
     if (!unlocked(g)) return;
@@ -124,7 +126,7 @@ export function SoundMixer() {
   };
   const setTrack = (id: string, v: number) => live((d) => ({ ...d, audio: d.audio.map((a) => (a.id === id ? { ...a, volume: v } : a)) }));
   const toggleTrack = (a: AudioClip) => {
-    if (!ensureUnlocked('audio')) return;
+    if (!ensureUnlocked(trackKeyOf(groupOfAudio(media.get(a.mediaId))))) return;
     checkpoint();
     const key = 't:' + a.id;
     if (a.volume > 0) {
@@ -168,7 +170,7 @@ export function SoundMixer() {
                       label={m?.name ?? '聲音'}
                       hint={`${GROUPS.find((g) => g.id === groupOfAudio(m))!.label}・從 ${a.start.toFixed(1)} 秒開始`}
                       value={a.volume}
-                      onStart={() => ensureUnlocked('audio') && checkpoint()}
+                      onStart={() => ensureUnlocked(trackKeyOf(groupOfAudio(m))) && checkpoint()}
                       onChange={(v) => setTrack(a.id, v)}
                       onToggleMute={() => toggleTrack(a)}
                     />

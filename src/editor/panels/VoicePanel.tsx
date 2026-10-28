@@ -130,7 +130,7 @@ export function VoicePanel() {
 
   const addVoice = async () => {
     if (!guard() || !text.trim()) return;
-    if (!ensureUnlocked('audio', ...(withCaptions ? (['caption'] as const) : []))) return;
+    if (!ensureUnlocked('audio-voice', ...(withCaptions ? (['caption'] as const) : []))) return;
     setBusy('add');
     try {
       const sentences = splitSentences(text);
@@ -157,7 +157,7 @@ export function VoicePanel() {
 
   // 所有字幕一次送出合成成一個檔案，再依每句的時間切成片段，各自對齊字幕開頭
   const captionsToVoice = async () => {
-    if (!guard() || !ensureUnlocked('audio')) return;
+    if (!guard() || !ensureUnlocked('audio-voice')) return;
     const captions = [...useEditor.getState().data.captions].filter((c) => c.text.trim()).sort((a, b) => a.start - b.start);
     setBusy('captions');
     try {

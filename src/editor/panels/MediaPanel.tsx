@@ -9,10 +9,10 @@ import { useAuth } from '../../lib/auth';
 import { useAutoEdit } from '../AutoEditDialog';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
-import { DEFAULT_OVERLAY_TRANSFORM, freeOverlayLane } from '../../lib/timeline';
+import { audioCategoryOf, DEFAULT_OVERLAY_TRANSFORM, freeOverlayLane } from '../../lib/timeline';
 
 export function addToTimeline(m: MediaItem) {
-  if (!ensureUnlocked(m.kind === 'audio' ? 'audio' : 'main')) return;
+  if (!ensureUnlocked(m.kind === 'audio' ? `audio-${audioCategoryOf(m)}` : 'main')) return;
   const { commit, time } = useEditor.getState();
   if (m.kind === 'audio') {
     commit((d) => ({ ...d, audio: [...d.audio, { id: uid(), mediaId: m.id, start: time, in: 0, out: m.duration, volume: 1 }] }));

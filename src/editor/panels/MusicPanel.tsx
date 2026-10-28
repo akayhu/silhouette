@@ -28,7 +28,7 @@ function addTrack(track: LibraryTrack) {
 
 /** 從播放頭放到音訊軌；配樂會自動配合影片長度並淡出，音效保持原長 */
 function placeAudio(media: MediaItem, isMusic: boolean) {
-  if (!ensureUnlocked('audio')) return false;
+  if (!ensureUnlocked(isMusic ? 'audio-music' : 'audio-sfx')) return false;
   const { data, time, commit, select } = useEditor.getState();
   const existing = data.media.some((m) => m.id === media.id);
   const remaining = mainDuration(data.clips) - time;

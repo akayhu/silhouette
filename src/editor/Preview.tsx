@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Grid3x3, Loader2, Maximize2, Pause, Play, SeparatorHorizontal, SeparatorVertical, SkipBack } from 'lucide-react';
+import { Grid3x3, Loader2, Maximize2, Pause, Play, SeparatorHorizontal, SeparatorVertical, SkipBack, ZoomIn, ZoomOut } from 'lucide-react';
 import { formatTime } from '../lib/format';
 import { clipAt, layoutMain, overlayEnd, overlayTransform, transformOf } from '../lib/timeline';
 import { CenterLine, GuidesOverlay, usePreviewGuides } from './PreviewGuides';
 import { EraseOverlay } from './EraseOverlay';
 import { captionBox, drawnRect, stickerPose } from '../lib/engine';
 import { useEditor } from './store';
+import { IconBtn } from './Editor';
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
 
 export function Preview({
   width,
@@ -27,6 +32,13 @@ export function Preview({
   const empty = useEditor((s) => s.data.clips.length === 0 && s.data.captions.length === 0);
   const stageRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  // 預覽縮放：只放大／縮小畫面方便檢視，不影響實際匯出
+  const [zoom, setZoom] = useState(1);
+  const onStageWheel = (e: React.WheelEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    setZoom((z) => clampZoom(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+  };
   const { showGuides, setShowGuides, showVertical, setShowVertical, showHorizontal, setShowHorizontal } = usePreviewGuides();
 
   // 讓畫布在可用空間內等比例縮放
@@ -198,32 +210,59 @@ export function Preview({
   };
 
   const [aw, ah] = aspect === '9:16' ? [9, 16] : aspect === '16:9' ? [16, 9] : [1, 1];
-  const scale = Math.min(box.w / aw, box.h / ah);
-  const size = { width: Math.floor(aw * scale), height: Math.floor(ah * scale) };
+  const fit = Math.min(box.w / aw, box.h / ah);
+  const size = { width: Math.floor(aw * fit * zoom), height: Math.floor(ah * fit * zoom) };
 
   return (
     <section className="flex shrink-0 flex-col border-l border-line" style={{ width }}>
-      <div className="flex items-center justify-end gap-1 px-4 pt-3" role="group" aria-label="預覽輔助線">
-        {[
-          { on: showGuides, set: setShowGuides, label: '參考線', title: '顯示短影音安全框', Icon: Grid3x3 },
-          { on: showVertical, set: setShowVertical, label: '垂直線', title: '顯示畫面正中央的垂直線', Icon: SeparatorVertical },
-          { on: showHorizontal, set: setShowHorizontal, label: '水平線', title: '顯示畫面正中央的水平線', Icon: SeparatorHorizontal },
-        ].map(({ on, set, label, title, Icon }) => (
+      <div className="flex items-center justify-between gap-1 px-4 pt-3">
+        <div className="flex items-center gap-0.5" role="group" aria-label="預覽縮放">
+          <IconBtn label="縮小預覽" onClick={() => setZoom((z) => clampZoom(z / 1.2))}>
+            <ZoomOut className="size-4" />
+          </IconBtn>
           <button
-            key={label}
             type="button"
-            onClick={() => set(!on)}
-            aria-pressed={on}
-            title={title}
-            className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-bold transition ${on ? 'bg-ink text-white' : 'text-ink-soft hover:bg-surface hover:text-ink'}`}
+            onClick={() => setZoom(1)}
+            title="還原成符合畫面"
+            className="w-11 rounded-lg py-1 text-center text-[11px] font-bold text-ink-soft tabular-nums hover:bg-sunken hover:text-ink"
           >
-            <Icon className="size-3.5" /> {label}
+            {Math.round(zoom * 100)}%
           </button>
-        ))}
+          <IconBtn label="放大預覽" onClick={() => setZoom((z) => clampZoom(z * 1.2))}>
+            <ZoomIn className="size-4" />
+          </IconBtn>
+        </div>
+        <div className="flex items-center gap-1" role="group" aria-label="預覽輔助線">
+          {[
+            { on: showGuides, set: setShowGuides, label: '參考線', title: '顯示短影音安全框', Icon: Grid3x3 },
+            { on: showVertical, set: setShowVertical, label: '垂直線', title: '顯示畫面正中央的垂直線', Icon: SeparatorVertical },
+            { on: showHorizontal, set: setShowHorizontal, label: '水平線', title: '顯示畫面正中央的水平線', Icon: SeparatorHorizontal },
+          ].map(({ on, set, label, title, Icon }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => set(!on)}
+              aria-pressed={on}
+              title={title}
+              className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-bold transition ${on ? 'bg-ink text-white' : 'text-ink-soft hover:bg-surface hover:text-ink'}`}
+            >
+              <Icon className="size-3.5" /> {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div ref={stageRef} className="relative m-4 mt-2 mb-2 flex-1">
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="relative overflow-hidden rounded-2xl shadow-pop ring-1 ring-line" style={size}>
+      <div ref={stageRef} className="relative m-4 mt-2 mb-2 flex-1 overflow-auto" onWheel={onStageWheel}>
+        <div
+          className="flex items-center justify-center"
+          // 縮放超過容器時，這層要跟著畫面一樣大，置中才不會把超出的部分卡住、滾不到
+          style={{ width: Math.max(box.w, size.width), height: Math.max(box.h, size.height) }}
+        >
+          <div
+            className="relative shrink-0 overflow-hidden rounded-2xl shadow-pop ring-1 ring-line"
+            style={size}
+            onDoubleClick={() => setZoom(1)}
+            title={zoom !== 1 ? '按住 ⌘／Ctrl 滾動可縮放；雙擊還原' : '按住 ⌘／Ctrl 滾動可縮放預覽'}
+          >
             <canvas ref={canvasRef} className="block h-full w-full cursor-move touch-none" onPointerDown={dragFrame} />
             {showGuides && <GuidesOverlay />}
             {showVertical && <CenterLine axis="vertical" />}

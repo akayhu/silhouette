@@ -718,11 +718,11 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: '畫面效果',
     items: [
-      { name: '原創手繪貼紙', qty: '35 款' },
+      { name: '原創手繪貼紙', qty: '50 款' },
       { name: '貼紙動畫', qty: '6 種' },
-      { name: '濾鏡，可調強度', qty: '14 種' },
+      { name: '濾鏡，可調強度', qty: '21 種' },
       { name: '亮度、對比、飽和度、色溫、暗角、顆粒微調' },
-      { name: '轉場', qty: '10 種' },
+      { name: '轉場', qty: '14 種' },
       { name: '片段動態：慢慢放大、縮小、特寫推近、震動', qty: '4 種' },
       { name: '美肌：磨皮、美白、紅潤', note: '4 種預設，可個別微調；主軌和疊加片段都能用。' },
     ],
@@ -730,7 +730,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: 'AI 自動處理',
     items: [
-      { name: '智能剪輯', qty: '5 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
+      { name: '智能剪輯', qty: '8 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
       { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、自動上字幕，讓你選剪輯前或剪輯後的版本。' },
       { name: 'AI 自動剪輯', pro: true, note: '依聲音起伏和字幕內容，加上特寫、運鏡、轉場、字幕動畫和貼紙。' },
       { name: '智能口播：剪掉停頓與「嗯、啊」', pro: true },

@@ -6,5 +6,21 @@
     "gender": "female",
     "audio": "voices/xiaohan.wav",
     "text": "在密碼學中，加密是將明文資訊改變為難以讀取的密文內容，使之不可讀的方法。"
+  },
+  {
+    "id": "breezy-meijia",
+    "name": "美佳",
+    "desc": "台灣腔女聲・活潑親切",
+    "gender": "female",
+    "audio": "voices/meijia.wav",
+    "text": "今天的天氣真不錯，陽光灑在窗邊，讓人忍不住想出門走走，感受這份難得的悠閒時光。"
+  },
+  {
+    "id": "breezy-tingting",
+    "name": "婷婷",
+    "desc": "輕柔女聲・溫和平穩",
+    "gender": "female",
+    "audio": "voices/tingting.wav",
+    "text": "學習一項新技能最重要的，就是願意每天花一點時間練習，久而久之自然就會進步。"
   }
 ]

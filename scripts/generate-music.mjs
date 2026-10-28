@@ -648,6 +648,148 @@ const tracks = [
       return M.render({ wet: 0.55, fadeOut: 5 });
     },
   },
+  {
+    id: 'rise-up', title: '奮起向前', mood: '勵志', bpm: 100,
+    desc: '鋼琴與弦樂逐漸堆疊的勵志節奏，適合運動、里程碑、勵志故事',
+    render() {
+      const S = song(100), bars = 28, key = 60, rng = makeRng(131);
+      const prog = [[0, 'maj'], [9, 'min'], [7, 'maj'], [5, 'maj']];
+      const M = new Mixer(bars * S.bar + 4);
+      const scale = scaleNotes(key, 'major', 67, 91);
+      const A = motif(rng, scale.length), B = motif(rng, scale.length);
+      for (let b = 0; b < bars; b++) {
+        const [iv, q] = prog[b % 4];
+        const root = key + iv, ch = voicing(root, q, 55);
+        const lh = [root - 12, ch[1], ch[2], root, ch[1] + 12, ch[2], root, ch[1]];
+        lh.forEach((n, i) => M.add(piano(mtof(n), S.beat * 0.48), S.at(b, i * 0.5), { gain: 0.22, pan: -0.2, send: 0.3 }));
+        if (b >= 6) ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 1500, attack: 0.6 }), S.at(b, 0), { gain: 0.12 + Math.min(0.1, b / 280), pan: -0.2 + i * 0.2, send: 0.4 }));
+        if (b >= 12) {
+          [0, 1, 2, 3].forEach((p) => M.add(kick(1 + Math.min(0.3, b / 90)), S.at(b, p), { gain: 0.6, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(snare(180), S.at(b, p), { gain: 0.4 + Math.min(0.2, b / 140), bus: 'd', send: 0.4 }));
+          M.add(bass(mtof(root - 24), S.bar * 0.95, 1.3), S.at(b, 0), { gain: 0.4, send: 0 });
+        }
+        if (b >= 12 && b < 28) {
+          const m = (b % 8) < 4 ? A : B;
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mallet(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.32 + Math.min(0.15, b / 200), pan: 0.15, send: 0.3 });
+        }
+      }
+      return M.render({ wet: 0.3, fadeOut: 4 });
+    },
+  },
+  {
+    id: 'quiet-rain', title: '雨後', mood: '感傷', bpm: 66,
+    desc: '簡約鋼琴與細雨般的質感，適合離別、回顧、感傷片段',
+    render() {
+      const S = song(66), bars = 18, key = 57, rng = makeRng(149);
+      const prog = [[0, 'min7'], [8, 'maj7'], [5, 'min7'], [10, 'maj7']];
+      const M = new Mixer(bars * S.bar + 5);
+      const scale = scaleNotes(key, 'minor', 69, 89);
+      const A = motif(rng, scale.length, [[0, 1.5, 3], [0, 2, 2.5], [0.5, 2, 3], [0, 1, 3]]);
+      for (let b = 0; b < bars; b++) {
+        const [iv, q] = prog[b % 4];
+        const root = key + iv, ch = voicing(root, q, 55);
+        ch.forEach((n, i) => M.add(piano(mtof(n - 12), S.beat * 2.2), S.at(b, 0) + i * 0.02, { gain: 0.16, pan: -0.15 + i * 0.1, send: 0.5 }));
+        if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(piano(mtof(n.note), n.len * S.beat * 1.1), S.at(b, n.pos), { gain: 0.3, pan: 0.1, send: 0.5 });
+        if (b >= 6) ch.forEach((n) => M.add(pad(mtof(n - 12), S.bar, { cut: 900, attack: 1.6 }), S.at(b, 0), { gain: 0.08, send: 0.55 }));
+      }
+      const rain = new Float32Array(M.n);
+      const r = makeRng(17);
+      for (let i = 0; i < M.n; i++) { if (r() < 0.002) rain[i] = (r() * 2 - 1) * 0.35; }
+      M.add(biquad(rain, 'hp', 4000), 0, { gain: 0.5, bus: 'd', send: 0.1 });
+      return M.render({ wet: 0.5, fadeOut: 5 });
+    },
+  },
+  {
+    id: 'festival-cheer', title: '節慶歡騰', mood: '歡慶', bpm: 128,
+    desc: '熱鬧的鐘鈴與鼓點，適合節日、慶典、開幕、驚喜揭曉',
+    render() {
+      const S = song(128), bars = 30, key = 62, rng = makeRng(163);
+      const prog = [[0, 'maj'], [5, 'maj'], [7, 'maj'], [0, 'maj']];
+      const M = new Mixer(bars * S.bar + 3);
+      const scale = scaleNotes(key, 'majPent', 74, 96);
+      const A = motif(rng, scale.length), B = motif(rng, scale.length);
+      for (let b = 0; b < bars; b++) {
+        const [iv, q] = prog[b % 4];
+        const root = key + iv, ch = voicing(root, q, 62);
+        for (let i = 0; i < 4; i++) if (rng() < 0.7) M.add(bell(mtof(pick(rng, ch) + 12)), S.at(b, i), { gain: 0.14, pan: rng() * 1.6 - 0.8, send: 0.35 });
+        [0, 1, 2, 3].forEach((p) => M.add(kick(1.1), S.at(b, p), { gain: 0.7, bus: 'd', send: 0 }));
+        [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.5, bus: 'd', send: 0.25 }));
+        for (let i = 0; i < 8; i++) M.add(hat(i % 4 === 3), S.at(b, i * 0.5), { gain: 0.14, pan: 0.3, bus: 'd', send: 0 });
+        M.add(bass(mtof(root - 24), S.beat * 0.9, 1.4), S.at(b, 0), { gain: 0.42, send: 0 });
+        M.add(bass(mtof(root - 24 + 7), S.beat * 0.45), S.at(b, 2), { gain: 0.36, send: 0 });
+        if (b >= 4) {
+          const m = (b % 8) < 4 ? A : B;
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mallet(mtof(n.note + 12), n.len * S.beat * 0.8), S.at(b, n.pos), { gain: 0.3, pan: -0.1, send: 0.3 });
+        }
+      }
+      return M.render({ wet: 0.25, fadeOut: 2 });
+    },
+  },
+  {
+    id: 'mystery-step', title: '懸疑步伐', mood: '懸疑', bpm: 90,
+    desc: '低音脈動與滴答節奏，適合解謎、揭密、緊張鋪陳的片段',
+    render() {
+      const S = song(90), bars = 24, key = 50, rng = makeRng(179);
+      const prog = [[0, 'min'], [1, 'maj'], [0, 'min'], [6, 'maj']];
+      const M = new Mixer(bars * S.bar + 3);
+      const scale = scaleNotes(key, 'minor', 62, 84);
+      const A = motif(rng, scale.length, [[0, 1, 2, 3], [0.5, 1.5, 2.5], [0, 2, 3]]);
+      for (let b = 0; b < bars; b++) {
+        const [iv, q] = prog[b % 4];
+        const root = key + iv, ch = voicing(root, q, 48);
+        for (let i = 0; i < 4; i++) M.add(hat(), S.at(b, i), { gain: 0.1, pan: i % 2 ? 0.3 : -0.3, bus: 'd', send: 0 });
+        M.add(bass(mtof(root - 12), S.bar * 0.9, 1), S.at(b, 0), { gain: 0.32, send: 0.15 });
+        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 700 + 50 * i, attack: 1.2 }), S.at(b, 0), { gain: 0.1, send: 0.45 }));
+        if (b >= 6 && rng() < 0.6) M.add(bell(mtof(pick(rng, scale))), S.at(b, pick(rng, [0, 1, 2, 3])), { gain: 0.08, send: 0.5 });
+        if (b >= 8 && b < 22) for (const n of realize(A, b % 2, scale, ch)) M.add(pulse(mtof(n.note - 12), n.len * S.beat * 0.6, { duty: 0.3, cut: 1800 }), S.at(b, n.pos), { gain: 0.16, send: 0.2 });
+      }
+      return M.render({ wet: 0.35, fadeOut: 3 });
+    },
+  },
+  {
+    id: 'jazz-lounge', title: '爵士慢生活', mood: '爵士', bpm: 90,
+    desc: '搖擺節奏與行走貝斯，適合美食、餐廳、優雅日常',
+    render() {
+      const S = song(90, 0.08), bars = 22, key = 58, rng = makeRng(191);
+      const prog = [[2, 'min7'], [7, 'dom7'], [0, 'maj7'], [9, 'min7']];
+      const M = new Mixer(bars * S.bar + 3);
+      const scale = scaleNotes(key, 'major', 69, 89);
+      const A = motif(rng, scale.length, [[0, 1.5, 2.5], [0.5, 1, 2, 3], [0, 2, 3.5]]);
+      for (let b = 0; b < bars; b++) {
+        const [iv, q] = prog[b % 4];
+        const root = key + iv, ch = voicing(root, q, 58);
+        const walk = [root - 24, root - 24 + 4, root - 24 + 7, root - 24 + 9];
+        walk.forEach((n, i) => M.add(bass(mtof(n), S.beat * 0.85, 1.1), S.at(b, i), { gain: 0.4, send: 0.1 }));
+        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 0.9), S.at(b, 1.5) + i * 0.01, { gain: 0.18, pan: -0.2 + i * 0.12, send: 0.3 }));
+        [1, 3].forEach((p) => M.add(hat(), S.at(b, p), { gain: 0.1, bus: 'd', send: 0.05 }));
+        if (b >= 2 && b < 20) for (const n of realize(A, b % 2, scale, ch)) M.add(sineLead(mtof(n.note), n.len * S.beat * 0.85, 0.015), S.at(b, n.pos), { gain: 0.22, pan: 0.1, send: 0.35 });
+      }
+      return M.render({ wet: 0.3, fadeOut: 3 });
+    },
+  },
+  {
+    id: 'epic-rise', title: '史詩崛起', mood: '史詩', bpm: 86,
+    desc: '大氣鋪底與鼓點堆疊，適合預告片、轉折、重大揭曉時刻',
+    render() {
+      const S = song(86), bars = 20, key = 48, rng = makeRng(211);
+      const prog = [[0, 'min'], [5, 'maj'], [8, 'maj'], [0, 'min']];
+      const M = new Mixer(bars * S.bar + 5);
+      const scale = scaleNotes(key, 'minor', 60, 84);
+      const A = motif(rng, scale.length, [[0, 1, 2, 3], [0, 2, 3]]);
+      for (let b = 0; b < bars; b++) {
+        const [iv, q] = prog[b % 4];
+        const root = key + iv, ch = voicing(root, q, 48);
+        const rise = Math.min(1, b / 14);
+        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 500 + 1800 * rise, attack: 1 }), S.at(b, 0), { gain: 0.14 + 0.1 * rise, pan: -0.2 + i * 0.2, send: 0.5 }));
+        if (b >= 4) M.add(kick(1.3), S.at(b, 0), { gain: 0.5 + 0.3 * rise, bus: 'd', send: 0 });
+        if (b >= 8) [0, 1, 2, 3].forEach((p) => M.add(kick(1.3), S.at(b, p), { gain: 0.65, bus: 'd', send: 0 }));
+        if (b >= 8) M.add(bass(mtof(root - 24), S.bar * 0.9, 1.6), S.at(b, 0), { gain: 0.4, send: 0.1 });
+        if (b >= 10) for (const n of realize(A, b % 2, scale, ch)) M.add(mallet(mtof(n.note + 12), n.len * S.beat), S.at(b, n.pos), { gain: 0.28, pan: 0.15, send: 0.4 });
+        if (b >= 14) [1, 3].forEach((p) => M.add(snare(200), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.3 }));
+      }
+      return M.render({ wet: 0.4, fadeOut: 5 });
+    },
+  },
 ];
 
 // ---------- 音效 ----------
@@ -749,6 +891,151 @@ const effects = [
         out[i] = (0.6 * (2 * ph - 1) + noise() * 0.5) * t * t;
       }
       M.add(biquad(out, 'hp', 300), 0, { gain: 0.5, send: 0.4 });
+    }),
+  },
+  {
+    id: 'sfx-heart', title: '心動', mood: '可愛', desc: '愛心彈出的音效，適合按讚、收藏、喜歡的瞬間',
+    render: () => sfx(0.6, (M) => {
+      [0, 0.09].forEach((t, i) => {
+        const out = new Float32Array(Math.floor(0.14 * SR));
+        let ph = 0;
+        for (let j = 0; j < out.length; j++) {
+          const tt = j / SR;
+          ph += (520 + 420 * Math.exp(-tt * 30)) / SR;
+          out[j] = Math.sin(TAU * ph) * Math.exp(-tt * 20);
+        }
+        M.add(out, t, { gain: i === 0 ? 0.7 : 0.5, send: 0.2 });
+      });
+    }),
+  },
+  {
+    id: 'sfx-swipe', title: '滑動', mood: '轉場', desc: '輕快的滑動音效，適合切換畫面、翻頁',
+    render: () => sfx(0.5, (M) => {
+      const len = Math.floor(0.22 * SR);
+      const out = new Float32Array(len);
+      for (let i = 0; i < len; i++) {
+        const t = i / len;
+        out[i] = noise() * Math.sin(Math.PI * t);
+      }
+      M.add(biquad(out, 'bp', 2600, 1.4), 0, { gain: 0.9, pan: -0.3, send: 0.1 });
+    }),
+  },
+  {
+    id: 'sfx-notify', title: '通知', mood: '提示', desc: '兩聲上揚的提示音，適合彈出訊息、提醒',
+    render: () => sfx(1, (M) => {
+      M.add(bell(988), 0, { gain: 0.4, send: 0.25 });
+      M.add(bell(1480), 0.09, { gain: 0.35, send: 0.25 });
+    }),
+  },
+  {
+    id: 'sfx-countdown', title: '倒數', mood: '提示', desc: '三聲倒數加一聲上揚，適合開場、倒數計時',
+    render: () => sfx(2.6, (M) => {
+      [0, 0.7, 1.4].forEach((t) => M.add(pulse(880, 0.12, { duty: 0.5 }), t, { gain: 0.5, send: 0.1 }));
+      M.add(pulse(1320, 0.3, { duty: 0.5 }), 2.1, { gain: 0.55, send: 0.15 });
+    }),
+  },
+  {
+    id: 'sfx-applause', title: '掌聲', mood: '完成', desc: '一小段鼓掌聲，適合成果揭曉、感謝畫面',
+    render: () => sfx(1.6, (M) => {
+      const r = makeRng(29);
+      let t = 0;
+      while (t < 1.3) {
+        const c = new Float32Array(Math.floor(0.03 * SR));
+        for (let i = 0; i < c.length; i++) c[i] = noise() * Math.exp((-i / SR) * 70);
+        M.add(biquad(c, 'bp', 1800 + r() * 2200, 1.2), t, { gain: 0.3 + r() * 0.2, pan: r() * 2 - 1, send: 0.15 });
+        t += 0.015 + r() * 0.02;
+      }
+    }),
+  },
+  {
+    id: 'sfx-success', title: '完成打勾', mood: '完成', desc: '上揚的三音符鈴聲，適合任務完成、打勾、成功提示',
+    render: () => sfx(1, (M) => {
+      [523, 659, 784].forEach((f, i) => M.add(bell(f), i * 0.08, { gain: 0.35, send: 0.2 }));
+    }),
+  },
+  {
+    id: 'sfx-error', title: '錯誤提示', mood: '提示', desc: '低沉的兩聲警示音，適合錯誤、失敗、禁止動作',
+    render: () => sfx(0.7, (M) => {
+      M.add(pulse(220, 0.16, { duty: 0.5, cut: 1800 }), 0, { gain: 0.5, send: 0.05 });
+      M.add(pulse(165, 0.2, { duty: 0.5, cut: 1800 }), 0.16, { gain: 0.5, send: 0.05 });
+    }),
+  },
+  {
+    id: 'sfx-cash', title: '叮噹進帳', mood: '完成', desc: '金屬鈴響與清脆噪音，適合金額、優惠、成果數字跳動',
+    render: () => sfx(1.2, (M) => {
+      M.add(bell(1760), 0, { gain: 0.35, send: 0.25 });
+      M.add(bell(2640), 0.02, { gain: 0.2, send: 0.25 });
+      const c = new Float32Array(Math.floor(0.08 * SR));
+      for (let i = 0; i < c.length; i++) c[i] = noise() * Math.exp((-i / SR) * 55);
+      M.add(biquad(c, 'bp', 4200, 1.6), 0.01, { gain: 0.5, send: 0.1 });
+    }),
+  },
+  {
+    id: 'sfx-glitch', title: '故障干擾', mood: '轉場', desc: '跳動的數位噪音，適合故障風格轉場、驚嚇、資訊錯亂',
+    render: () => sfx(0.8, (M) => {
+      const r = makeRng(37);
+      let t = 0;
+      while (t < 0.6) {
+        const dur = 0.015 + r() * 0.03;
+        if (r() < 0.5) M.add(chipNoise(dur), t, { gain: 0.5 + r() * 0.3, pan: r() * 2 - 1, send: 0 });
+        else M.add(pulse(200 + r() * 2600, dur, { duty: 0.3 + r() * 0.4 }), t, { gain: 0.3 + r() * 0.2, send: 0 });
+        t += dur + r() * 0.025;
+      }
+    }),
+  },
+  {
+    id: 'sfx-pageturn', title: '翻頁', mood: '轉場', desc: '輕薄的紙張翻動聲，適合條列、步驟切換、翻頁動畫',
+    render: () => sfx(0.5, (M) => {
+      const len = Math.floor(0.26 * SR);
+      const out = new Float32Array(len);
+      const r = makeRng(43);
+      for (let i = 0; i < len; i++) {
+        const t = i / len;
+        out[i] = noise() * Math.sin(Math.PI * t) * (0.7 + 0.3 * (r() < 0.1 ? 1 : 0));
+      }
+      M.add(biquad(out, 'bp', 6200, 1.1), 0, { gain: 0.7, pan: 0.2, send: 0.08 });
+    }),
+  },
+  {
+    id: 'sfx-bubble', title: '泡泡', mood: '可愛', desc: '一串由低到高的泡泡音，適合輕鬆、兒童、氣泡動畫',
+    render: () => sfx(1.1, (M) => {
+      const r = makeRng(59);
+      [0, 0.1, 0.22, 0.36, 0.52].forEach((t, i) => {
+        const out = new Float32Array(Math.floor(0.1 * SR));
+        let ph = 0;
+        const base = 350 + i * 90 + r() * 60;
+        for (let j = 0; j < out.length; j++) {
+          const tt = j / SR;
+          ph += (base + base * 2.4 * Math.exp(-tt * 38)) / SR;
+          out[j] = Math.sin(TAU * ph) * Math.exp(-tt * 32);
+        }
+        M.add(out, t, { gain: 0.5, pan: r() * 1.2 - 0.6, send: 0.15 });
+      });
+    }),
+  },
+  {
+    id: 'sfx-impact', title: '重擊強調', mood: '轉場', desc: '低沉厚實的一擊，適合重點畫面、文字強調、震撼轉折',
+    render: () => sfx(0.8, (M) => {
+      M.add(kick(1.5), 0, { gain: 0.95, bus: 'd', send: 0.15 });
+      const c = new Float32Array(Math.floor(0.1 * SR));
+      for (let i = 0; i < c.length; i++) c[i] = noise() * Math.exp((-i / SR) * 45);
+      M.add(biquad(c, 'bp', 900, 0.8), 0, { gain: 0.6, send: 0.3 });
+    }),
+  },
+  {
+    id: 'sfx-confetti', title: '彩帶慶祝', mood: '完成', desc: '碎紙噴發般的清脆噪音群，適合慶祝、驚喜揭曉、結尾畫面',
+    render: () => sfx(1.4, (M) => {
+      const r = makeRng(61);
+      const burst = new Float32Array(Math.floor(0.05 * SR));
+      for (let i = 0; i < burst.length; i++) burst[i] = noise() * Math.exp((-i / SR) * 90);
+      M.add(biquad(burst, 'hp', 2000), 0, { gain: 0.8, send: 0.15 });
+      let t = 0.03;
+      while (t < 1.1) {
+        const c = new Float32Array(Math.floor(0.025 * SR));
+        for (let i = 0; i < c.length; i++) c[i] = noise() * Math.exp((-i / SR) * 100);
+        M.add(biquad(c, 'bp', 3000 + r() * 4000, 2), t, { gain: 0.18 + r() * 0.12, pan: r() * 2 - 1, send: 0.1 });
+        t += 0.02 + r() * 0.07;
+      }
     }),
   },
 ];

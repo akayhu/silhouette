@@ -68,7 +68,15 @@ export class Engine {
     this.recordDest = this.audioCtx.createMediaStreamDestination();
     // canvas 用到的字型不會自動下載，先載入再重畫
     Promise.all(
-      ['800 40px "Noto Sans TC"', '500 40px "Noto Sans TC"', '800 40px "Noto Serif TC"', '800 40px "Plus Jakarta Sans"'].map((f) =>
+      [
+        '800 40px "Noto Sans TC"',
+        '500 40px "Noto Sans TC"',
+        '800 40px "Noto Serif TC"',
+        '800 40px "Plus Jakarta Sans"',
+        '800 40px "Chiron Hei HK"',
+        '800 40px "Chiron Sung HK"',
+        '800 40px "Noto Sans HK"',
+      ].map((f) =>
         document.fonts.load(f, '片刻剪趣字幕Aa').catch(() => []),
       ),
     ).then(() => !this.destroyed && !this.playing && this.render());
@@ -616,6 +624,45 @@ function composite(ctx: CanvasRenderingContext2D, a: HTMLCanvasElement, b: HTMLC
       ctx.clip();
       ctx.drawImage(b, 0, 0);
       break;
+    case 'slideDown':
+      ctx.drawImage(a, 0, p * H);
+      ctx.drawImage(b, 0, -(1 - p) * H);
+      break;
+    case 'wipeUp':
+      ctx.drawImage(a, 0, 0);
+      ctx.beginPath();
+      ctx.rect(0, H - H * p, W, H * p);
+      ctx.clip();
+      ctx.drawImage(b, 0, 0);
+      break;
+    case 'shutter': {
+      ctx.drawImage(a, 0, 0);
+      const stripes = 8;
+      const sh = H / stripes;
+      for (let i = 0; i < stripes; i++) {
+        const delay = i * 0.06;
+        const local = Math.min(1, Math.max(0, (raw - delay) / (1 - delay)));
+        const eh = sh * ease(local);
+        if (eh <= 0) continue;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, i * sh, W, eh);
+        ctx.clip();
+        ctx.drawImage(b, 0, 0);
+        ctx.restore();
+      }
+      break;
+    }
+    case 'spin': {
+      ctx.drawImage(a, 0, 0);
+      ctx.globalAlpha = p;
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate((1 - p) * 0.6);
+      const s = 0.8 + 0.2 * p;
+      ctx.scale(s, s);
+      ctx.drawImage(b, -W / 2, -H / 2);
+      break;
+    }
   }
   ctx.restore();
 }

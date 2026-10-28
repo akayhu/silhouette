@@ -17,6 +17,10 @@ const TYPES: { id: TransitionType; label: string; anim: string; flash?: 'white' 
   { id: 'blur', label: '模糊', anim: 'tr-blur' },
   { id: 'wipe', label: '擦除', anim: 'tr-wipe' },
   { id: 'circle', label: '圓形展開', anim: 'tr-circle' },
+  { id: 'slideDown', label: '下推', anim: 'tr-slide-down' },
+  { id: 'wipeUp', label: '擦除（下）', anim: 'tr-wipe-up' },
+  { id: 'shutter', label: '百葉窗', anim: 'tr-shutter' },
+  { id: 'spin', label: '旋轉', anim: 'tr-spin' },
 ];
 
 const DEFAULT_DURATION = 0.5;

@@ -6,7 +6,8 @@
 
 export type FilterId =
   | 'none' | 'fresh' | 'warm' | 'japan' | 'vintage' | 'film' | 'mono' | 'punchy'
-  | 'cool' | 'food' | 'night' | 'pastel' | 'summer' | 'autumn' | 'midnight';
+  | 'cool' | 'food' | 'night' | 'pastel' | 'summer' | 'autumn' | 'midnight'
+  | 'noir' | 'teal' | 'golden' | 'sakura' | 'matcha' | 'street';
 
 export interface FilterParams {
   brightness: number; // 1 = 原樣
@@ -63,6 +64,12 @@ export const FILTER_PRESETS: { id: FilterId; name: string; params: Partial<Filte
   { id: 'summer', name: '夏日', params: { saturate: 1.25, brightness: 1.05, hue: -5, temperature: 6 } },
   { id: 'autumn', name: '秋意', params: { sepia: 0.2, temperature: 24, saturate: 1.05 } },
   { id: 'midnight', name: '午夜藍', params: { temperature: -40, contrast: 1.05, saturate: 0.8, vignette: 0.2 } },
+  { id: 'noir', name: '黑色電影', params: { grayscale: 0.92, contrast: 1.3, vignette: 0.4, grain: 0.25 } },
+  { id: 'teal', name: '藍調', params: { temperature: -35, contrast: 1.12, saturate: 1.15 } },
+  { id: 'golden', name: '黃金時刻', params: { temperature: 45, brightness: 1.08, fade: 0.1, vignette: 0.1 } },
+  { id: 'sakura', name: '櫻花', params: { tint: 45, brightness: 1.1, saturate: 0.95 } },
+  { id: 'matcha', name: '抹茶', params: { hue: -22, saturate: 0.85, temperature: 8, brightness: 1.02 } },
+  { id: 'street', name: '街拍', params: { contrast: 1.2, saturate: 0.85, grain: 0.35, vignette: 0.25 } },
 ];
 
 const presetById = new Map(FILTER_PRESETS.map((p) => [p.id, p]));

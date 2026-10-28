@@ -252,8 +252,8 @@ export async function planAutoEffects(input: ProjectData, opts: AutoEffectOption
   if (opts.transitions && mainOpen) {
     onProgress?.('挑選轉場');
     const layout = layoutMain(clips);
-    const calm: TransitionType[] = ['fade', 'blur', 'dip'];
-    const lively: TransitionType[] = ['zoom', 'slideLeft', 'wipe', 'slideUp', 'circle'];
+    const calm: TransitionType[] = ['fade', 'blur', 'dip', 'wipeUp'];
+    const lively: TransitionType[] = ['zoom', 'slideLeft', 'wipe', 'slideUp', 'circle', 'slideDown', 'shutter', 'spin'];
     let ci = 0;
     let li = 0;
     clips = clips.map((c, i) => {

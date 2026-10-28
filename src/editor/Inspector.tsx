@@ -24,6 +24,9 @@ export const CAPTION_COLORS = ['#ffffff', '#ffe14a', '#ff7a59', '#7cf0c4', '#a9a
 const FONTS = [
   { id: 'Noto Sans TC', label: '思源黑體' },
   { id: 'Noto Serif TC', label: '思源宋體' },
+  { id: 'Chiron Hei HK', label: '港風黑體' },
+  { id: 'Chiron Sung HK', label: '港風宋體' },
+  { id: 'Noto Sans HK', label: '思源黑體（港）' },
   { id: 'Plus Jakarta Sans', label: 'Jakarta（英文）' },
 ];
 const ANIMS: { id: CaptionAnimation; label: string }[] = [

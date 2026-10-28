@@ -62,7 +62,9 @@ export interface ClipTransform {
   fit: 'contain' | 'cover';
 }
 
-export type TransitionType = 'fade' | 'flash' | 'dip' | 'slideLeft' | 'slideRight' | 'slideUp' | 'zoom' | 'blur' | 'wipe' | 'circle';
+export type TransitionType =
+  | 'fade' | 'flash' | 'dip' | 'slideLeft' | 'slideRight' | 'slideUp' | 'zoom' | 'blur' | 'wipe' | 'circle'
+  | 'slideDown' | 'wipeUp' | 'shutter' | 'spin';
 
 /** 從前一個片段轉到這個片段的轉場；兩段會重疊 duration 秒 */
 export interface Transition {

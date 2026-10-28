@@ -84,6 +84,30 @@ const faces: StickerDef[] = [
       <path d="M66 128h68" stroke="${INK}" stroke-width="8" stroke-linecap="round"/>
       <path d="M156 38q14 20 4 30q-10 8-18-2q-6-10 14-28z" fill="#5cc8ff" stroke="${INK}" stroke-width="5"/>`),
   },
+  {
+    id: 'face-shy', name: '害羞', category: 'face',
+    svg: face(Y, `<path d="M56 86q10 10 20 0M124 86q10 10 20 0" fill="none" stroke="${INK}" stroke-width="8" stroke-linecap="round"/>
+      <ellipse cx="54" cy="116" rx="18" ry="11" fill="#ff8a7a" opacity=".8"/><ellipse cx="146" cy="116" rx="18" ry="11" fill="#ff8a7a" opacity=".8"/>
+      <path d="M86 132q14 10 28 0" fill="none" stroke="${INK}" stroke-width="7" stroke-linecap="round"/>`),
+  },
+  {
+    id: 'face-sleepy', name: '想睡', category: 'face',
+    svg: face(Y, `<path d="M56 90h28M116 90h28" stroke="${INK}" stroke-width="8" stroke-linecap="round"/>
+      <ellipse cx="100" cy="134" rx="14" ry="10" fill="${INK}"/>
+      <text x="150" y="50" font-family="${FONT}" font-weight="900" font-size="30" fill="${INK}">z</text>
+      <text x="168" y="30" font-family="${FONT}" font-weight="900" font-size="22" fill="${INK}">z</text>`),
+  },
+  {
+    id: 'face-starstruck', name: '星星眼', category: 'face',
+    svg: face(Y, `<path d="M72 70l6 16 16 2-12 12 4 16-14-8-14 8 4-16-12-12 16-2z" fill="#ffd54a" stroke="${INK}" stroke-width="4"/>
+      <path d="M128 70l6 16 16 2-12 12 4 16-14-8-14 8 4-16-12-12 16-2z" fill="#ffd54a" stroke="${INK}" stroke-width="4"/>
+      <path d="M70 130q30 24 60 0" fill="none" stroke="${INK}" stroke-width="8" stroke-linecap="round"/>`),
+  },
+  {
+    id: 'face-dizzy', name: '暈', category: 'face',
+    svg: face(Y, `<path d="M58 76l24 24M82 76l-24 24M118 76l24 24M142 76l-24 24" stroke="${INK}" stroke-width="7" stroke-linecap="round"/>
+      <path d="M66 134q8-10 16 0t16 0 16 0t16 0" fill="none" stroke="${INK}" stroke-width="7" stroke-linecap="round"/>`),
+  },
 ];
 
 // ---------- 標籤：有字的徽章 ----------
@@ -135,6 +159,17 @@ const badges: StickerDef[] = [
       <path d="M24 116h28M30 116v-18a8 8 0 0 1 16 0v18M38 120v4" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>${text('記得訂閱', 30, '#fff', 111, '#ff4d4d').replace('x="100"', 'x="122"')}`),
   },
   { id: 'badge-cp', name: 'CP值高', category: 'badge', svg: svg(`${burst('#7cf0c4', 12, 90, 74)}${text('CP值', 40, INK, 96, '#fff')}${text('超高', 40, '#ff4d4d', 140, '#fff')}`) },
+  { id: 'badge-sale', name: '特價', category: 'badge', svg: svg(`${burst('#ff9d2f')}${text('特價', 46, '#fff', 116)}`) },
+  {
+    id: 'badge-free', name: '免費', category: 'badge',
+    svg: svg(`<rect x="18" y="62" width="164" height="76" rx="38" fill="#19b38a" stroke="${INK}" stroke-width="8"/>${text('免費', 44, '#fff', 116)}`),
+  },
+  {
+    id: 'badge-share', name: '分享出去', category: 'badge',
+    svg: svg(`<rect x="8" y="64" width="184" height="72" rx="36" fill="#5b4cf5" stroke="${INK}" stroke-width="8"/>
+      <path d="M30 100h26M48 88l10 12-10 12" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>${text('分享出去', 28, '#fff', 110, '#5b4cf5').replace('x="100"', 'x="124"')}`),
+  },
+  { id: 'badge-firstcome', name: '先搶先贏', category: 'badge', svg: svg(`${burst('#ffd54a', 14, 92, 72)}${text('先搶', 38, INK, 92, '#fff')}${text('先贏', 38, '#ff4d4d', 140, '#fff')}`) },
 ];
 
 // ---------- 指示：箭頭、圈選、底線 ----------
@@ -168,6 +203,21 @@ const pointers: StickerDef[] = [
     id: 'question', name: '問號', category: 'pointer',
     svg: svg(`<circle cx="100" cy="96" r="80" fill="#5b4cf5" stroke="${INK}" stroke-width="8"/>
       <path d="M72 76a28 28 0 1 1 40 26c-8 4-12 10-12 18v6" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/><circle cx="100" cy="150" r="10" fill="#fff"/>`),
+  },
+  {
+    id: 'arrow-left', name: '箭頭（左）', category: 'pointer',
+    svg: svg(`<path d="M176 120c-40-60-90-70-130-48" fill="none" stroke="${INK}" stroke-width="22" stroke-linecap="round"/>
+      <path d="M176 120c-40-60-90-70-130-48" fill="none" stroke="#ff4d4d" stroke-width="12" stroke-linecap="round"/>
+      <path d="M72 44l-40 32 46 18z" fill="#ff4d4d" stroke="${INK}" stroke-width="7" stroke-linejoin="round"/>`),
+  },
+  {
+    id: 'arrow-up', name: '箭頭（上）', category: 'pointer',
+    svg: svg(`<path d="M100 184V74" stroke="${INK}" stroke-width="30" stroke-linecap="round"/><path d="M100 184V74" stroke="#ffd54a" stroke-width="18" stroke-linecap="round"/>
+      <path d="M52 90h96l-48-70z" fill="#ffd54a" stroke="${INK}" stroke-width="8" stroke-linejoin="round"/>`),
+  },
+  {
+    id: 'highlight-box', name: '方框圈選', category: 'pointer',
+    svg: svg(`<path d="M20 36q80-14 160 2q10 64-4 126q-78 12-156-4Q10 100 20 36z" fill="none" stroke="#ff4d4d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>`),
   },
 ];
 
@@ -217,6 +267,36 @@ const decos: StickerDef[] = [
     id: 'bubble', name: '對話框', category: 'deco',
     svg: svg(`<path d="M30 30h140a20 20 0 0 1 20 20v76a20 20 0 0 1-20 20h-74l-44 36 8-36H30a20 20 0 0 1-20-20V50a20 20 0 0 1 20-20z" fill="#fff" stroke="${INK}" stroke-width="8" stroke-linejoin="round"/>
       <circle cx="62" cy="88" r="11" fill="${INK}"/><circle cx="100" cy="88" r="11" fill="${INK}"/><circle cx="138" cy="88" r="11" fill="${INK}"/>`),
+  },
+  {
+    id: 'balloon', name: '氣球', category: 'deco',
+    svg: svg(`<ellipse cx="100" cy="84" rx="56" ry="64" fill="#ff7aa8" stroke="${INK}" stroke-width="8"/>
+      <path d="M86 146q14 8 28 0l-6 14h-16z" fill="${INK}"/>
+      <path d="M100 160q-10 20 6 34" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>
+      <ellipse cx="78" cy="56" rx="14" ry="20" fill="#fff" opacity=".4" transform="rotate(-20 78 56)"/>`),
+  },
+  {
+    id: 'gift', name: '禮物', category: 'deco',
+    svg: svg(`<rect x="30" y="90" width="140" height="92" rx="8" fill="#ff4d6d" stroke="${INK}" stroke-width="8"/>
+      <rect x="30" y="90" width="140" height="28" fill="#ffd54a" stroke="${INK}" stroke-width="8"/>
+      <rect x="90" y="90" width="20" height="92" fill="#ffd54a"/>
+      <path d="M100 90c-30-50-70-16-40 0zM100 90c30-50 70-16 40 0z" fill="#ffd54a" stroke="${INK}" stroke-width="6" stroke-linejoin="round"/>`),
+  },
+  {
+    id: 'camera', name: '相機', category: 'deco',
+    svg: svg(`<rect x="22" y="58" width="156" height="108" rx="16" fill="#1f1d2b" stroke="${INK}" stroke-width="6"/>
+      <rect x="70" y="36" width="60" height="26" rx="8" fill="#1f1d2b"/>
+      <circle cx="100" cy="112" r="38" fill="#fff" stroke="#5b4cf5" stroke-width="10"/><circle cx="100" cy="112" r="16" fill="#5b4cf5"/>
+      <circle cx="150" cy="80" r="6" fill="#ff4d4d"/>`),
+  },
+  {
+    id: 'confetti', name: '彩紙', category: 'deco',
+    svg: svg(`<rect x="30" y="24" width="20" height="20" rx="4" fill="#ff4d6d" stroke="${INK}" stroke-width="4" transform="rotate(20 40 34)"/>
+      <circle cx="150" cy="40" r="12" fill="#5b4cf5" stroke="${INK}" stroke-width="4"/>
+      <rect x="140" y="130" width="20" height="20" rx="4" fill="#19b38a" stroke="${INK}" stroke-width="4" transform="rotate(-15 150 140)"/>
+      <polygon points="${starPath(60, 150, 20, 9)}" fill="#ffd54a" stroke="${INK}" stroke-width="4"/>
+      <circle cx="100" cy="90" r="9" fill="#ff9d2f" stroke="${INK}" stroke-width="3"/>
+      <rect x="80" y="20" width="14" height="14" rx="3" fill="#7cd7ff" stroke="${INK}" stroke-width="3" transform="rotate(35 87 27)"/>`),
   },
 ];
 

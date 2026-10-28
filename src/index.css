@@ -122,6 +122,10 @@ input[type='range'] {
 @keyframes tr-blur { 0%, 15% { filter: blur(6px); opacity: 0 } 70%, 100% { filter: none; opacity: 1 } }
 @keyframes tr-wipe { 0%, 15% { clip-path: inset(0 100% 0 0) } 70%, 100% { clip-path: inset(0 0 0 0) } }
 @keyframes tr-circle { 0%, 15% { clip-path: circle(0% at 50% 50%) } 70%, 100% { clip-path: circle(75% at 50% 50%) } }
+@keyframes tr-slide-down { 0%, 15% { transform: translateY(-100%) } 70%, 100% { transform: none } }
+@keyframes tr-wipe-up { 0%, 15% { clip-path: inset(100% 0 0 0) } 70%, 100% { clip-path: inset(0 0 0 0) } }
+@keyframes tr-shutter { 0%, 15% { clip-path: inset(0 0 100% 0) } 70%, 100% { clip-path: inset(0 0 0% 0) } }
+@keyframes tr-spin { 0%, 15% { transform: scale(0.7) rotate(-18deg); opacity: 0 } 70%, 100% { transform: none; opacity: 1 } }
 
 /* ---------- 行銷頁：明亮的創作者軟體官網 ---------- */
 .mk {

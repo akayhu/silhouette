@@ -5,12 +5,14 @@ import type { DecodedFrame, FrameDecoder } from './frameDecoder';
 import { drawFilterOverlays, filterCss, resolveFilter } from './filters';
 import { applyErase } from './erase';
 import { applyBeauty, isBeautyOn } from './beauty';
+import { createDenoiseChain, type DenoiseChain } from './denoise';
 import { captionWords } from './captions';
 import { activeClips, clipLength, layoutMain, overlayEnd, overlayTransform, totalDuration, transformOf, type PlacedClip } from './timeline';
 
 interface MediaNode {
   el: HTMLMediaElement;
   gain: GainNode;
+  denoise?: DenoiseChain;
 }
 
 export interface EngineOptions {
@@ -118,7 +120,7 @@ export class Engine {
     for (const c of this.placed) {
       const m = byId.get(c.mediaId);
       const key = slotKey(c);
-      if (m?.kind === 'video' && m.url && !this.videos.has(key)) this.videos.set(key, this.mediaNode('video', m.url));
+      if (m?.kind === 'video' && m.url && !this.videos.has(key)) this.videos.set(key, this.mediaNode('video', m.url, true));
     }
     for (const m of data.media) {
       if (m.kind === 'image' && m.url && !this.images.has(m.id)) {
@@ -156,7 +158,8 @@ export class Engine {
     if (!this.playing) this.seek(this.time);
   }
 
-  private mediaNode(kind: 'video' | 'audio', url: string): MediaNode {
+  /** withDenoise：主軌片段用，插一條可即時調整強度的降噪鏈在聲音來源和音量之間（見 denoise.ts） */
+  private mediaNode(kind: 'video' | 'audio', url: string, withDenoise = false): MediaNode {
     const el = document.createElement(kind);
     el.crossOrigin = 'anonymous';
     el.preload = 'auto';
@@ -169,10 +172,23 @@ export class Engine {
       el.addEventListener('loadeddata', () => !this.destroyed && !this.playing && !this.offline && this.render());
     }
     const gain = this.audioCtx.createGain();
-    this.audioCtx.createMediaElementSource(el).connect(gain);
+    const source = this.audioCtx.createMediaElementSource(el);
+    source.connect(gain);
     gain.connect(this.recordDest);
     if (this.opts.speakers) gain.connect(this.audioCtx.destination);
-    return { el, gain };
+    const node: MediaNode = { el, gain };
+    if (withDenoise) {
+      createDenoiseChain(this.audioCtx)
+        .then((chain) => {
+          if (this.destroyed) return;
+          source.disconnect(gain);
+          source.connect(chain.input);
+          chain.output.connect(gain);
+          node.denoise = chain;
+        })
+        .catch(() => {});
+    }
+    return node;
   }
 
   async play() {
@@ -256,9 +272,10 @@ export class Engine {
     this.onError(error);
   }
 
-  private syncNode(node: MediaNode, target: number, rate: number, volume: number) {
+  private syncNode(node: MediaNode, target: number, rate: number, volume: number, denoise = 0) {
     const { el } = node;
     node.gain.gain.value = volume;
+    node.denoise?.setStrength(denoise);
     if (el.playbackRate !== rate) el.playbackRate = rate;
     const drift = Math.abs(el.currentTime - target);
     if (this.playing) {
@@ -289,7 +306,7 @@ export class Engine {
       if (!node) return;
       // 轉場中聲音交叉淡化
       const fade = active.length === 2 ? (i === 0 ? 1 - p : p) : 1;
-      this.syncNode(node, c.in + (t - c.start) * c.speed, c.speed, c.volume * fade);
+      this.syncNode(node, c.in + (t - c.start) * c.speed, c.speed, c.volume * fade, c.denoise?.strength ?? 0);
       used.add(slotKey(c));
     });
     // 預先把下一段跳到開頭，接續時不會卡

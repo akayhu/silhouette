@@ -4,10 +4,63 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 type ToolTab<T extends string> = { id: T; label: string; icon: ComponentType<{ className?: string }> };
 
 /**
- * 素材區上方的工具列：工具多的時候可以左右捲動。
- * 底部有細捲軸，滑鼠滾輪也能橫向捲動，兩側有箭頭按鈕；切到的工具會自動捲進畫面。
+ * 素材區上方的工具列：預設是一排可以左右捲動的圖示；也可以切換成 rail 模式，
+ * 改成最左邊一條固定的直式圖示欄（跟剪映那類軟體一樣），旁邊的工具內容可以整個收合，
+ * 適合預覽畫面要留大一點的時候。rail 用另一個元件 ToolRail，在左邊單獨佔一欄。
  */
 export function ToolTabs<T extends string>({ tabs, value, onChange }: { tabs: readonly ToolTab<T>[]; value: T; onChange: (id: T) => void }) {
+  return <FullToolTabs tabs={tabs} value={value} onChange={onChange} />;
+}
+
+/** 直式圖示欄：固定在最左邊，點圖示切換工具；上方有收合整個工具內容區的按鈕 */
+export function ToolRail<T extends string>({
+  tabs,
+  value,
+  onChange,
+  expanded,
+  onToggleExpanded,
+}: {
+  tabs: readonly ToolTab<T>[];
+  value: T;
+  onChange: (id: T) => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+}) {
+  return (
+    <nav className="flex w-16 shrink-0 flex-col border-r border-line bg-surface" aria-label="編輯工具">
+      <button
+        onClick={onToggleExpanded}
+        aria-expanded={expanded}
+        title={expanded ? '收合工具面板' : '展開工具面板'}
+        className="flex h-9 shrink-0 items-center justify-center border-b border-line text-ink-soft hover:bg-sunken hover:text-ink"
+      >
+        {expanded ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+      </button>
+      <div className="min-h-0 flex-1 overflow-y-auto py-1" role="tablist">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={value === t.id}
+            onClick={() => {
+              onChange(t.id);
+              if (!expanded) onToggleExpanded();
+            }}
+            className={`flex w-full flex-col items-center gap-1 px-1 py-2.5 text-center text-[10px] leading-tight font-bold whitespace-nowrap transition ${
+              value === t.id && expanded ? 'bg-brand-soft/60 text-brand' : 'text-ink-soft hover:bg-sunken hover:text-ink'
+            }`}
+          >
+            <t.icon className="size-5" />
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+/** 原本的樣式：工具多的時候可以左右捲動。底部有細捲軸，滑鼠滾輪也能橫向捲動，兩側有箭頭按鈕；切到的工具會自動捲進畫面。 */
+function FullToolTabs<T extends string>({ tabs, value, onChange }: { tabs: readonly ToolTab<T>[]; value: T; onChange: (id: T) => void }) {
   const nav = useRef<HTMLElement>(null);
   const [edge, setEdge] = useState({ left: false, right: false });
 

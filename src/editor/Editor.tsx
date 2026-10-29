@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Download, Eraser, Compass, Film, Keyboard, Loader2, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Clapperboard, Download, Eraser, Compass, Film, Keyboard, ListCollapse, Loader2, Mic, Moon, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, Sun, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
@@ -9,7 +9,7 @@ import type { Aspect } from '../lib/types';
 import { Button, Logo, notify } from '../components/ui';
 import { useEditor } from './store';
 import { Preview } from './Preview';
-import { ToolTabs } from './ToolTabs';
+import { ToolRail, ToolTabs } from './ToolTabs';
 import { Timeline } from './Timeline';
 import { Inspector } from './Inspector';
 import { MediaPanel } from './panels/MediaPanel';
@@ -23,7 +23,9 @@ import { TransitionPanel } from './panels/TransitionPanel';
 import { StickerPanel } from './panels/StickerPanel';
 import { FilterPanel } from './panels/FilterPanel';
 import { BeautyPanel } from './panels/BeautyPanel';
+import { DenoisePanel } from './panels/DenoisePanel';
 import { SmartEditPanel } from './panels/SmartEditPanel';
+import { MixPanel } from './panels/MixPanel';
 import { ExportDialog } from './ExportDialog';
 import { setCaptionEdge, ShortcutsDialog } from './Shortcuts';
 import { LAYOUT_DEFAULT, Splitter, useEditorLayout } from './Splitter';
@@ -38,16 +40,18 @@ const PREVIEW_SHORT_SIDE = 540;
 const tabs = [
   { id: 'media', label: '素材', icon: Film },
   { id: 'smart', label: '智能剪輯', icon: WandSparkles },
+  { id: 'mix', label: '智能混剪', icon: Clapperboard },
   { id: 'music', label: '音樂', icon: Music },
   { id: 'text', label: '字幕', icon: Type },
   { id: 'transcript', label: '文字剪輯', icon: TextCursorInput },
   { id: 'sticker', label: '貼紙', icon: Smile },
   { id: 'filter', label: '濾鏡', icon: Palette },
   { id: 'beauty', label: '美肌', icon: ScanFace },
+  { id: 'denoise', label: '降噪', icon: Mic },
   { id: 'transition', label: '轉場', icon: ArrowRightLeft },
   { id: 'voice', label: '朗讀', icon: AudioLines },
   { id: 'ai', label: 'AI 工具', icon: Sparkles },
-  { id: 'erase', label: '去水印', icon: Eraser },
+  { id: 'erase', label: '智能全消', icon: Eraser },
 ] as const;
 type Tab = (typeof tabs)[number]['id'];
 
@@ -240,31 +244,45 @@ export default function Editor() {
   if (!loaded) return <PersistenceLoading persistence={persistence} />;
 
   // 編輯器各區塊；依版面模式（預覽在右側／上方）排列
-  const toolsPanel = (
+  // 工具列改成固定在左邊的直式圖示欄（rail）模式時，收合只收工具內容，圖示欄本身一直都在
+  const toolsCollapsed = layout.compactTools && !layout.toolsExpanded;
+  const changeTab = (id: Tab) => {
+    setTab(id);
+    if (id !== 'erase') useEditor.getState().setEraseEdit(null);
+  };
+  const toolsContent = (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      {tab === 'media' && <MediaPanel />}
+      {tab === 'smart' && <SmartEditPanel />}
+      {tab === 'mix' && <MixPanel />}
+      {tab === 'music' && <MusicPanel />}
+      {tab === 'text' && <TextPanel seek={seek} />}
+      {tab === 'transcript' && <TranscriptPanel seek={seek} />}
+      {tab === 'voice' && <VoicePanel />}
+      {tab === 'sticker' && <StickerPanel />}
+      {tab === 'filter' && <FilterPanel />}
+      {tab === 'beauty' && <BeautyPanel />}
+      {tab === 'denoise' && <DenoisePanel />}
+      {tab === 'transition' && <TransitionPanel />}
+      {tab === 'ai' && <AIPanel />}
+      {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}
+    </div>
+  );
+  const toolsPanel = layout.compactTools ? (
+    <section className="flex shrink-0">
+      {/* 直式圖示欄：固定在最左邊，旁邊是目前工具的內容，可以整個收合 */}
+      <ToolRail tabs={tabs} value={tab} onChange={changeTab} expanded={layout.toolsExpanded} onToggleExpanded={() => setLayout({ toolsExpanded: !layout.toolsExpanded })} />
+      {!toolsCollapsed && (
+        <div className="flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: layout.tools }}>
+          {toolsContent}
+        </div>
+      )}
+    </section>
+  ) : (
     <section className="flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: layout.tools }}>
       {/* 工具列：放在素材區上方，橫向排列 */}
-      <ToolTabs
-        tabs={tabs}
-        value={tab}
-        onChange={(id) => {
-          setTab(id);
-          if (id !== 'erase') useEditor.getState().setEraseEdit(null);
-        }}
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {tab === 'media' && <MediaPanel />}
-        {tab === 'smart' && <SmartEditPanel />}
-        {tab === 'music' && <MusicPanel />}
-        {tab === 'text' && <TextPanel seek={seek} />}
-        {tab === 'transcript' && <TranscriptPanel seek={seek} />}
-        {tab === 'voice' && <VoicePanel />}
-        {tab === 'sticker' && <StickerPanel />}
-        {tab === 'filter' && <FilterPanel />}
-        {tab === 'beauty' && <BeautyPanel />}
-        {tab === 'transition' && <TransitionPanel />}
-        {tab === 'ai' && <AIPanel />}
-        {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}
-      </div>
+      <ToolTabs tabs={tabs} value={tab} onChange={changeTab} />
+      {toolsContent}
     </section>
   );
   const guidePanel = (
@@ -323,7 +341,7 @@ export default function Editor() {
   const timelinePanel = <Timeline height={guide ? Math.min(layout.timeline, 190) : layout.timeline} seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} onCover={() => setCoverOpen(true)} />;
 
   return (
-    <div className="flex h-screen min-w-[1024px] flex-col overflow-hidden bg-[#f4f2ee]">
+    <div data-theme={layout.theme} className="flex h-screen min-w-[1024px] flex-col overflow-hidden bg-canvas">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
         <Link to="/dashboard" className="rounded-lg p-2 text-ink-soft hover:bg-sunken hover:text-ink" aria-label="回到我的專案">
           <ArrowLeft className="size-5" />
@@ -360,6 +378,20 @@ export default function Editor() {
           >
             {layout.mode === 'top' ? <PanelRight className="size-4" /> : <PanelTop className="size-4" />}
           </IconBtn>
+          <IconBtn
+            label={layout.compactTools ? '改回一排工具圖示' : '工具列改成直式圖示欄（可收合）'}
+            onClick={() => setLayout({ compactTools: !layout.compactTools })}
+            aria-pressed={layout.compactTools}
+          >
+            <ListCollapse className="size-4" />
+          </IconBtn>
+          <IconBtn
+            label={layout.theme === 'dark' ? '改回淺色介面' : '改成深色介面'}
+            onClick={() => setLayout({ theme: layout.theme === 'dark' ? 'light' : 'dark' })}
+            aria-pressed={layout.theme === 'dark'}
+          >
+            {layout.theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </IconBtn>
           <IconBtn label="快捷鍵 (?)" onClick={() => setShortcuts(true)}>
             <Keyboard className="size-4" />
           </IconBtn>
@@ -378,7 +410,7 @@ export default function Editor() {
             {guide ? guidePanel : (
               <>
                 {toolsPanel}
-                {toolsSplit}
+                {!toolsCollapsed && toolsSplit}
                 {inspectorPanel}
               </>
             )}
@@ -396,7 +428,7 @@ export default function Editor() {
               {guide ? guidePanel : (
                 <>
                   {toolsPanel}
-                  {toolsSplit}
+                  {!toolsCollapsed && toolsSplit}
                   {inspectorPanel}
                 </>
               )}

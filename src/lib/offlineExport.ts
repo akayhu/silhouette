@@ -1,5 +1,6 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
 import { COVER_IN_VIDEO_SECONDS } from './cover';
+import { createDenoiseChain } from './denoise';
 import type { Engine } from './engine';
 import { decodeAudio } from './media';
 import { clipLength, layoutMain } from './timeline';
@@ -148,14 +149,21 @@ export async function mixAudio(data: ProjectData, duration: number, signal: Abor
   limiter.attack.value = 0.003;
   limiter.release.value = 0.12;
   limiter.connect(ctx.destination);
-  const play = (buffer: AudioBuffer, at: number, offset: number, length: number, rate: number, shape: (g: AudioParam) => void) => {
+  const play = async (buffer: AudioBuffer, at: number, offset: number, length: number, rate: number, shape: (g: AudioParam) => void, denoiseStrength = 0) => {
     if (length <= 0 || at >= duration) return;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.playbackRate.value = rate;
     const gain = ctx.createGain();
     shape(gain.gain);
-    src.connect(gain).connect(limiter);
+    if (denoiseStrength > 0) {
+      const chain = await createDenoiseChain(ctx);
+      chain.setStrength(denoiseStrength);
+      src.connect(chain.input);
+      chain.output.connect(gain).connect(limiter);
+    } else {
+      src.connect(gain).connect(limiter);
+    }
     src.start(at, offset, length);
   };
 
@@ -168,21 +176,29 @@ export async function mixAudio(data: ProjectData, duration: number, signal: Abor
     if (!buffer) continue;
     const fadeIn = c.overlap;
     const fadeOut = placed[i + 1]?.overlap ?? 0;
-    play(buffer, c.start, c.in, (c.end - c.start) * c.speed, c.speed, (g) => {
-      g.setValueAtTime(fadeIn > 0 ? 0 : c.volume, c.start);
-      if (fadeIn > 0) g.linearRampToValueAtTime(c.volume, c.start + fadeIn);
-      if (fadeOut > 0) {
-        g.setValueAtTime(c.volume, c.end - fadeOut);
-        g.linearRampToValueAtTime(0, c.end);
-      }
-    });
+    await play(
+      buffer,
+      c.start,
+      c.in,
+      (c.end - c.start) * c.speed,
+      c.speed,
+      (g) => {
+        g.setValueAtTime(fadeIn > 0 ? 0 : c.volume, c.start);
+        if (fadeIn > 0) g.linearRampToValueAtTime(c.volume, c.start + fadeIn);
+        if (fadeOut > 0) {
+          g.setValueAtTime(c.volume, c.end - fadeOut);
+          g.linearRampToValueAtTime(0, c.end);
+        }
+      },
+      c.denoise?.strength ?? 0,
+    );
   }
   for (const o of data.overlays) {
     signal.throwIfAborted();
     const m = media.get(o.mediaId);
     if (m?.kind !== 'video' || o.volume <= 0) continue;
     const buffer = await audioOf(m.url, false, m.name);
-    if (buffer) play(buffer, o.start, o.in, o.out - o.in, o.speed, (g) => g.setValueAtTime(o.volume, o.start));
+    if (buffer) await play(buffer, o.start, o.in, o.out - o.in, o.speed, (g) => g.setValueAtTime(o.volume, o.start));
   }
   for (const a of data.audio) {
     signal.throwIfAborted();
@@ -191,7 +207,7 @@ export async function mixAudio(data: ProjectData, duration: number, signal: Abor
     const buffer = await audioOf(m.url, true, m.name);
     if (!buffer) continue;
     const len = clipLength(a);
-    play(buffer, a.start, a.in, a.out - a.in, 1, (g) => {
+    await play(buffer, a.start, a.in, a.out - a.in, 1, (g) => {
       g.setValueAtTime(a.fadeIn ? 0 : a.volume, a.start);
       if (a.fadeIn) g.linearRampToValueAtTime(a.volume, a.start + Math.min(a.fadeIn, len));
       if (a.fadeOut) {

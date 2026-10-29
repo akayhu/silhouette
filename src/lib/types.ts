@@ -79,6 +79,11 @@ export interface ClipBeauty {
   rosy: number;
 }
 
+/** 降噪：0–100，0 代表不處理（見 lib/denoise.ts） */
+export interface ClipDenoise {
+  strength: number;
+}
+
 /** 片段播放時的動態效果（運鏡） */
 export type ClipMotion = 'none' | 'zoomIn' | 'zoomOut' | 'punch' | 'shake';
 
@@ -94,6 +99,7 @@ export interface VideoClip {
   filter?: ClipFilter;
   motion?: ClipMotion;
   beauty?: ClipBeauty;
+  denoise?: ClipDenoise;
 }
 
 /** 音訊軌可自由擺放 */

@@ -58,6 +58,47 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * 編輯器深色主題：只在編輯器頁面套用（包在 data-theme="dark" 的容器裡），
+ * 行銷頁、我的專案等其他頁面維持原本的淺色，不受影響。
+ * 用一般 CSS 變數覆寫，跟 @theme 裡宣告的是同一組名稱，Tailwind 產生的
+ * bg-surface／text-ink 這類 class 會自動吃到這裡覆寫後的值。
+ */
+[data-theme='dark'] {
+  --color-canvas: #101217;
+  --color-surface: #1b1e24;
+  --color-sunken: #14161b;
+  --color-line: #2c2f37;
+  --color-ink: #f2f3f5;
+  --color-ink-soft: #b6bac2;
+  --color-ink-mute: #888c96;
+
+  --color-brand: #ff6354;
+  --color-brand-hover: #ff8679;
+  --color-brand-soft: #3a211e;
+  --color-coral: #ff6354;
+  --color-coral-soft: #3a211e;
+  --color-mint: #35d6a8;
+  --color-mint-soft: #11352c;
+  --color-sun: #ffcf5c;
+
+  --color-track-video: #2c3038;
+  --color-track-video-edge: #b6bac2;
+  --color-track-caption: #4a2b23;
+  --color-track-caption-edge: #ff8a68;
+  --color-track-overlay: #1c3450;
+  --color-track-overlay-edge: #5ea3ff;
+  --color-track-sticker: #473b14;
+  --color-track-sticker-edge: #ffcf4d;
+  --color-track-audio: #11352c;
+  --color-track-audio-edge: #35d6a8;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 12px 40px -12px rgb(0 0 0 / 0.6);
+
+  color-scheme: dark;
+}
+
 ::selection {
   background: var(--color-brand-soft);
 }

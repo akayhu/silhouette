@@ -7,6 +7,12 @@ export interface EditorLayout {
   timeline: number;
   /** side：預覽在右側從上到下；top：預覽在上方，時間軸橫跨整個寬度 */
   mode: 'side' | 'top';
+  /** 工具列改用下拉選單挑工具（取代一排圖示），可以收合整個工具面板 */
+  compactTools: boolean;
+  /** compactTools 開啟時，工具面板內容是否展開；關閉時只留下拉選單那一條 */
+  toolsExpanded: boolean;
+  /** 編輯器介面主題：淺色（原本）或深色 */
+  theme: 'light' | 'dark';
 }
 
 const KEY = 'pianke:editor-layout';
@@ -15,6 +21,9 @@ export const LAYOUT_DEFAULT = (): EditorLayout => ({
   preview: Math.round(Math.min(520, Math.max(320, window.innerWidth * 0.32))),
   timeline: 300,
   mode: 'side',
+  compactTools: false,
+  toolsExpanded: true,
+  theme: 'light',
 });
 
 /** 每個區塊的最小／最大；最大值依視窗大小計算，中間的屬性區至少保留 240px，上方至少保留 200px */
@@ -24,7 +33,15 @@ export function clampLayout(l: EditorLayout): EditorLayout {
   const tools = Math.min(Math.max(l.tools, 280), Math.min(640, w - 300 - 240));
   const preview = Math.min(Math.max(l.preview, 280), Math.max(280, w - tools - 240));
   const timeline = Math.min(Math.max(l.timeline, 180), Math.max(180, h - 56 - 200));
-  return { tools, preview, timeline, mode: l.mode === 'top' ? 'top' : 'side' };
+  return {
+    tools,
+    preview,
+    timeline,
+    mode: l.mode === 'top' ? 'top' : 'side',
+    compactTools: !!l.compactTools,
+    toolsExpanded: l.toolsExpanded ?? true,
+    theme: l.theme === 'dark' ? 'dark' : 'light',
+  };
 }
 
 export function useEditorLayout() {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, FolderOpen, HardDrive, Laptop, Music2, Pause, Play, Plus, RotateCcw, Scissors, WandSparkles } from 'lucide-react';
+import { Activity, ArrowRight, Check, FolderOpen, HardDrive, Laptop, Mic, Music2, Pause, Play, Plus, RotateCcw, Scissors, WandSparkles } from 'lucide-react';
 import { MarketingLayout } from '../components/Layout';
 import { PlanCards } from '../components/Plans';
 import { mkButton, SectionTitle } from '../components/marketing';
@@ -105,6 +105,13 @@ function Chip({ className, icon, text, num }: { className: string; icon: React.R
 
 const AI_TABS = [
   {
+    id: 'mix',
+    label: '智能混剪',
+    title: '一次丟多支素材，AI 幫你接好',
+    body: '把拍好的好幾支素材一次丟進來，AI 自動幫每一支挑一段：有講話的留講話段，沒講話的留畫面動態最多的一段，接成一支影片，順便帶字幕。接完還能再到「智能剪輯」套模板、調整順序。',
+    points: ['一次選多支素材', '自動判斷講話／動態', '接好自動帶字幕'],
+  },
+  {
     id: 'auto',
     label: '上傳後自動剪輯',
     title: '加入影片，空拍和字幕自動處理好',
@@ -183,6 +190,7 @@ function AiTabs() {
             </Link>
           </div>
           <div className="min-w-0">
+            {tab === 'mix' && <MixMock />}
             {tab === 'auto' && <EditDemo />}
             {tab === 'subs' && <SubsMock />}
             {tab === 'text' && <TranscriptMock />}
@@ -417,6 +425,89 @@ function DualMock() {
         <div className="mt-1 text-[clamp(13px,1.4vw,17px)] leading-snug">What do you want to know most?</div>
       </div>
       <span className="absolute top-4 left-4 rounded-full bg-site-ink/70 px-2 py-0.5 text-[11px] text-white">示範</span>
+    </div>
+  );
+}
+
+/** 智能混剪示範：多支素材個別分析（講話／動態）→ 接成一支影片的時間軸 */
+type MixMode = 'speech' | 'motion';
+const MIX_SOURCES: { clip: number; mode: MixMode; seconds: number; desc: string }[] = [
+  { clip: 0, mode: 'motion', seconds: 3, desc: '沒有人說話，AI 抓了畫面動態最多的一段' },
+  { clip: 1, mode: 'speech', seconds: 3, desc: '偵測到老闆在說話，留下講話的段落，字幕也一起帶出來' },
+  { clip: 2, mode: 'motion', seconds: 4, desc: '沒有人說話，抓了翻烤最有畫面感的幾秒' },
+];
+const MIX_TOTAL = MIX_SOURCES.reduce((n, s) => n + s.seconds, 0);
+
+function MixMock() {
+  const reduced = usePrefersReducedMotion();
+  const [active, setActive] = useState(0);
+  const [playing, setPlaying] = useState(true);
+  useEffect(() => {
+    if (reduced) setPlaying(false);
+  }, [reduced]);
+  useEffect(() => {
+    if (!playing) return;
+    const t = setTimeout(() => setActive((a) => (a + 1) % MIX_SOURCES.length), 2600);
+    return () => clearTimeout(t);
+  }, [playing, active]);
+  const pick = (i: number) => {
+    setActive(i);
+    setPlaying(false);
+  };
+
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-3" role="group" aria-label="三支原始素材，點一支看 AI 怎麼挑這一段">
+        {MIX_SOURCES.map((s, i) => {
+          const c = CLIPS[s.clip];
+          const on = i === active;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => pick(i)}
+              aria-pressed={on}
+              className={`relative overflow-hidden rounded-2xl text-left ring-2 transition ${on ? 'ring-site-red' : 'ring-transparent hover:ring-site-line'}`}
+            >
+              <div className="relative aspect-[3/4]">
+                <img src={c.src} alt={c.alt} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-site-ink/75 via-transparent to-transparent" />
+                <span className={`absolute top-2 left-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold text-white ${s.mode === 'speech' ? 'bg-site-red' : 'bg-site-ink/75'}`}>
+                  {s.mode === 'speech' ? <Mic className="size-3" /> : <Activity className="size-3" />}
+                  {s.mode === 'speech' ? '有講話' : '動態最多'}
+                </span>
+                <span className="absolute inset-x-2 bottom-2 truncate text-[11px] font-bold text-white">素材 {i + 1}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-site-line bg-white p-4">
+        <p className="min-h-[2.7em] text-[14px] leading-snug font-bold text-site-ink">{MIX_SOURCES[active].desc}</p>
+        <div className="mt-3 flex h-6 gap-[3px] overflow-hidden rounded-md" aria-hidden>
+          {MIX_SOURCES.map((s, i) => (
+            <span
+              key={i}
+              className={`h-full transition-opacity duration-300 ${i === active ? 'opacity-100' : 'opacity-35'} ${s.mode === 'speech' ? 'bg-site-red' : 'bg-site-ink'}`}
+              style={{ flexGrow: s.seconds, flexBasis: 0 }}
+            />
+          ))}
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[12px] text-site-mute">
+          <span className="num">3 支素材・共 {MIX_TOTAL} 秒</span>
+          <span>點上面的縮圖看每一支怎麼挑</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-center gap-1">
+        <button type="button" onClick={() => setPlaying(!playing)} className="grid size-8 place-items-center rounded-full hover:bg-site-band" aria-label={playing ? '暫停示範' : '繼續播放示範'}>
+          {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+        </button>
+        <button type="button" onClick={() => (setActive(0), setPlaying(true))} className="grid size-8 place-items-center rounded-full hover:bg-site-band" aria-label="從頭重播示範">
+          <RotateCcw className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -731,6 +822,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: 'AI 自動處理',
     items: [
+      { name: '智能混剪', pro: true, note: '一次選多支素材，AI 自動幫每支挑一段接起來：有講話的留講話段，沒講話的留畫面動態最多的一段。' },
       { name: '智能剪輯', qty: '8 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
       { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、自動上字幕，讓你選剪輯前或剪輯後的版本。' },
       { name: 'AI 自動剪輯', pro: true, note: '依聲音起伏和字幕內容，加上特寫、運鏡、轉場、字幕動畫和貼紙。' },

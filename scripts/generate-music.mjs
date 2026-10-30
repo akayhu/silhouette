@@ -530,8 +530,11 @@ class MusicMixer {
 }
 
 // ---------- 樂理 ----------
-const QUAL = { maj: [0, 4, 7], min: [0, 3, 7], maj7: [0, 4, 7, 11], min7: [0, 3, 7, 10], dom7: [0, 4, 7, 10], sus2: [0, 2, 7] };
-const SCALE = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], majPent: [0, 2, 4, 7, 9], minPent: [0, 3, 5, 7, 10] };
+const QUAL = { maj: [0, 4, 7], min: [0, 3, 7], maj7: [0, 4, 7, 11], min7: [0, 3, 7, 10], dom7: [0, 4, 7, 10], sus2: [0, 2, 7], maj6: [0, 4, 7, 9], min6: [0, 3, 7, 9], dim: [0, 3, 6] };
+const SCALE = {
+  major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], majPent: [0, 2, 4, 7, 9], minPent: [0, 3, 5, 7, 10],
+  dorian: [0, 2, 3, 5, 7, 9, 10], mixolydian: [0, 2, 4, 5, 7, 9, 10],
+};
 
 function voicing(root, q, low) {
   return QUAL[q]
@@ -964,34 +967,59 @@ const tracks = [
   },
 ];
 
-// ---------- 第二批曲目：共用「輕快琶音」骨架，差異在調性、速度、和弦走向與配器 ----------
-// 許多 Vlog／輕快系的曲子用這個骨架省去重複程式碼；還是各自不同調性、速度、配器，聽起來不會一樣
-function popArpTrack({ id, title, mood, bpm, bars = 28, key, scaleName, prog, seed, inst, lead, bassDrive = 1.3, drumsFrom = 4, leadFrom = 8, leadTo, wet = 0.28, fadeOut = 3, desc }) {
+// ---------- 第二批曲目：流行音樂創作方向，每首都有主歌／副歌動態對比與反覆出現的鉤子旋律 ----------
+// popSong 共用的是「主歌安靜、副歌滿編＋鉤子」這個流行歌的編曲骨架，
+// 和弦走向、調性、速度、鼓組風格、主奏／伴奏樂器每首都不同，聽起來不會像同一首歌。
+function drumHit(M, S, b, style, chorus) {
+  const kg = chorus ? 0.72 : 0.45;
+  const og = chorus ? 0.46 : 0.26;
+  if (style === '4floor') {
+    [0, 1, 2, 3].forEach((p) => M.add(mKick(0.9), S.at(b, p), { gain: kg, bus: 'd', send: 0 }));
+    [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: og, bus: 'd', send: 0.2 }));
+    if (chorus) for (let i = 0; i < 8; i++) M.add(mHat(i % 4 === 2), S.at(b, i * 0.5), { gain: 0.1, bus: 'd', send: 0 });
+  } else if (style === 'backbeat') {
+    [0, 2].forEach((p) => M.add(mKick(1), S.at(b, p), { gain: kg, bus: 'd', send: 0 }));
+    [1, 3].forEach((p) => M.add(mSnare(190), S.at(b, p), { gain: og, bus: 'd', send: 0.25 }));
+    if (chorus) for (let i = 0; i < 8; i++) M.add(mHat(), S.at(b, i * 0.5), { gain: 0.08, bus: 'd', send: 0 });
+  } else if (style === 'half') {
+    M.add(mKick(1), S.at(b, 0), { gain: kg, bus: 'd', send: 0 });
+    M.add(mSnare(180), S.at(b, 2), { gain: og, bus: 'd', send: 0.2 });
+    if (chorus) [0.5, 1.5, 2.5, 3.5].forEach((p) => M.add(mHat(), S.at(b, p), { gain: 0.07, bus: 'd', send: 0 }));
+  } else if (style === 'light') {
+    [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: og * 0.8, bus: 'd', send: 0.2 }));
+    if (chorus) for (let i = 0; i < 4; i++) M.add(mShaker(), S.at(b, i), { gain: 0.09, bus: 'd', send: 0 });
+  }
+}
+
+function popSong({ id, title, mood, bpm, swing = 0, key, scaleName, prog, seed, compInst, bassInst, hookInst, drumStyle, wet = 0.28, fadeOut = 3, desc }) {
+  const plan = [['intro', 4], ['verse', 6], ['chorus', 8], ['verse', 4], ['chorus', 8]];
+  const bars = plan.reduce((s, [, n]) => s + n, 0);
   return {
     id, title, mood, bpm, desc,
     render() {
-      const S = song(bpm);
+      const S = song(bpm, swing);
       const rng = makeRng(seed);
-      const M = new MusicMixer(bars * S.bar + 3);
-      const scale = scaleNotes(key, scaleName, 69, 93);
-      const A = motif(rng, scale.length);
-      const B = motif(rng, scale.length);
-      const toEnd = leadTo ?? bars - 2;
+      const M = new MusicMixer(bars * S.bar + 4);
+      const scale = scaleNotes(key, scaleName, 69, 91);
+      const hookA = motif(rng, scale.length);
+      const hookB = motif(rng, scale.length);
+      const sections = [];
+      let pos = 0;
+      for (const [type, len] of plan) { sections.push({ type, start: pos, len }); pos += len; }
       for (let b = 0; b < bars; b++) {
+        const sec = sections.find((s) => b >= s.start && b < s.start + s.len);
+        const chorus = sec.type === 'chorus';
         const [iv, q] = prog[b % prog.length];
-        const root = key + iv;
-        const ch = voicing(root, q, 60);
-        const arp = [ch[0], ch[1], ch[2], ch[0] + 12, ch[2], ch[1], ch[0] + 12, ch[1]];
-        arp.forEach((n, i) => M.add(inst(mtof(n), S.beat * 0.5), S.at(b, i * 0.5), { gain: 0.28 * (i % 2 ? 0.75 : 1), pan: i % 2 ? 0.3 : -0.3, send: 0.25 }));
-        if (b >= drumsFrom) {
-          [0, 2].forEach((p) => M.add(mKick(0.8), S.at(b, p), { gain: 0.65, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.25 }));
-          for (let i = 0; i < 8; i++) M.add(mShaker(), S.at(b, i * 0.5), { gain: 0.1, pan: -0.3, bus: 'd', send: 0 });
-          M.add(mBass(mtof(root - 24), S.beat * 0.42, bassDrive), S.at(b, 0), { gain: 0.4, send: 0 });
+        const root = key + iv, ch = voicing(root, q, 60);
+        ch.forEach((n, i) => M.add(compInst(mtof(n), S.beat * (chorus ? 0.9 : 1.8)), S.at(b, chorus ? i * 0.02 : 0), { gain: chorus ? 0.2 : 0.14, pan: -0.2 + i * 0.15, send: 0.25 }));
+        if (sec.type !== 'intro') {
+          M.add(bassInst(mtof(root - 24), S.beat * (chorus ? 0.42 : 0.85)), S.at(b, 0), { gain: chorus ? 0.38 : 0.28, send: 0 });
+          if (chorus) M.add(bassInst(mtof(root - 24), S.beat * 0.4), S.at(b, 2), { gain: 0.3, send: 0 });
+          drumHit(M, S, b, drumStyle, chorus);
         }
-        if (b >= leadFrom && b < toEnd) {
-          const m = (b % 8) < 4 ? A : B;
-          for (const n of realize(m, b % 2, scale, ch)) M.add(lead(mtof(n.note), n.len * S.beat * 0.85), S.at(b, n.pos), { gain: 0.26, pan: 0.1, send: 0.3 });
+        if (chorus) {
+          const m = (b - sec.start) % 4 < 2 ? hookA : hookB;
+          for (const n of realize(m, (b - sec.start) % 2, scale, ch)) M.add(hookInst(mtof(n.note + 12), n.len * S.beat * 0.85), S.at(b, n.pos), { gain: 0.3, pan: 0.1, send: 0.3 });
         }
       }
       return M.render({ wet, fadeOut });
@@ -999,34 +1027,26 @@ function popArpTrack({ id, title, mood, bpm, bars = 28, key, scaleName, prog, se
   };
 }
 
-const PROG_I_IV_vi_V = [[0, 'maj'], [5, 'maj'], [9, 'min'], [7, 'maj']];
-const PROG_vi_IV_I_V = [[9, 'min'], [5, 'maj'], [0, 'maj'], [7, 'maj']];
-const PROG_I_V_vi_IV = [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']];
-const PROG_ii_V_I = [[2, 'min'], [7, 'maj'], [0, 'maj'], [5, 'maj']];
-
 const tracks2 = [
-  // ---- Vlog：烏克麗麗／木吉他感的撥弦，速度不快不慢，生活感的日常配樂 ----
-  popArpTrack({ id: 'ukulele-cafe', title: '咖啡廳烏克麗麗', mood: 'Vlog', bpm: 100, key: 60, scaleName: 'majPent', prog: PROG_I_IV_vi_V, seed: 211, inst: (f, d) => mPluck(f, d, { bright: 0.55 }), lead: mSineLead, desc: '輕鬆的烏克麗麗撥弦，適合咖啡廳、小店探訪' }),
-  popArpTrack({ id: 'morning-walk', title: '晨間散步', mood: 'Vlog', bpm: 92, key: 62, scaleName: 'major', prog: PROG_I_V_vi_IV, seed: 223, inst: (f, d) => mPluck(f, d, { bright: 0.45 }), lead: mMallet, desc: '悠閒的早晨節奏，適合散步、晨間日常' }),
-  popArpTrack({ id: 'city-stroll', title: '城市漫步', mood: 'Vlog', bpm: 104, key: 57, scaleName: 'majPent', prog: PROG_vi_IV_I_V, seed: 229, inst: (f, d) => mPluck(f, d, { bright: 0.6 }), lead: mSineLead, desc: '輕快但不搶戲，適合城市街拍、逛街紀錄' }),
-  popArpTrack({ id: 'cozy-home', title: '居家日常', mood: 'Vlog', bpm: 88, key: 65, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 233, inst: mEpiano, lead: mEpiano, bassDrive: 1.1, desc: '溫暖的電鋼琴，適合居家整理、下廚日常' }),
-  popArpTrack({ id: 'gentle-breeze', title: '微風', mood: 'Vlog', bpm: 96, key: 59, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 241, inst: (f, d) => mPluck(f, d, { bright: 0.5, decay: 0.994 }), lead: mSineLead, desc: '清爽不膩的配樂，萬用的 Vlog 背景音樂' }),
-  popArpTrack({ id: 'simple-life', title: '簡單生活', mood: 'Vlog', bpm: 90, key: 64, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 251, inst: mMallet, lead: mMallet, bassDrive: 1.2, desc: '明亮的木琴質感，適合生活紀錄、開箱' }),
-  popArpTrack({ id: 'soft-piano-vlog', title: '輕鋼琴手記', mood: 'Vlog', bpm: 84, key: 60, scaleName: 'major', prog: PROG_ii_V_I, seed: 257, bars: 24, inst: (f, d) => mPiano(f, d * 0.6), lead: mPiano, bassDrive: 1, desc: '簡單的鋼琴小品，適合日記式的生活影片' }),
-  popArpTrack({ id: 'acoustic-friends', title: '朋友聚會', mood: 'Vlog', bpm: 108, key: 67, scaleName: 'majPent', prog: PROG_I_IV_vi_V, seed: 263, inst: (f, d) => mPluck(f, d, { bright: 0.65 }), lead: mMallet, desc: '熱鬧但不吵，適合聚會、朋友出遊' }),
-  popArpTrack({ id: 'first-love', title: '初戀心動', mood: 'Vlog', bpm: 94, key: 62, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 269, inst: mEpiano, lead: mSineLead, bassDrive: 1.1, desc: '帶點少女感的小調配樂，適合情侶、紀念日' }),
-  popArpTrack({ id: 'family-time', title: '家庭時光', mood: 'Vlog', bpm: 86, key: 65, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 277, inst: mMallet, lead: mEpiano, bassDrive: 1.1, desc: '溫馨的家庭感配樂，適合親子、寵物日常' }),
-
-  // ---- 其餘補滿不同情緒：輕快、溫馨、可愛、歡慶，跟 Vlog 系互相呼應 ----
-  popArpTrack({ id: 'summer-pool', title: '夏日泳池', mood: '輕快', bpm: 118, key: 60, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 281, inst: (f, d) => mPluck(f, d, { bright: 0.7 }), lead: mSineLead, desc: '活力滿滿，適合夏天、戶外運動' }),
-  popArpTrack({ id: 'spring-bloom', title: '春天綻放', mood: '輕快', bpm: 112, key: 62, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 283, inst: mMallet, lead: mMallet, desc: '明亮清新，適合賞花、戶外踏青' }),
-  popArpTrack({ id: 'autumn-walk', title: '秋日散步', mood: '溫馨', bpm: 82, key: 57, scaleName: 'major', prog: PROG_ii_V_I, seed: 293, bars: 22, inst: mEpiano, lead: mEpiano, bassDrive: 1, desc: '微涼而溫暖，適合秋天、戶外步道' }),
-  popArpTrack({ id: 'winter-light', title: '冬日暖陽', mood: '溫馨', bpm: 78, key: 60, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 307, bars: 22, inst: (f, d) => mPiano(f, d * 0.7), lead: mPiano, bassDrive: 1, desc: '柔和的鋼琴聲，適合冬天室內、節日氣氛' }),
-  popArpTrack({ id: 'elegant-piano', title: '優雅鋼琴', mood: '溫馨', bpm: 80, key: 65, scaleName: 'major', prog: PROG_ii_V_I, seed: 311, bars: 20, inst: (f, d) => mPiano(f, d * 0.65), lead: mPiano, bassDrive: 0.9, desc: '優雅內斂，適合質感開箱、生活美學' }),
-  popArpTrack({ id: 'playful-puppy', title: '調皮小狗', mood: '可愛', bpm: 128, key: 62, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 317, inst: (f, d) => mPulse(f, d, { duty: 0.4 }), lead: mPulse, bassDrive: 1.6, desc: '俏皮彈跳感，適合寵物、萌寵日常' }),
-  popArpTrack({ id: 'kids-playground', title: '兒童樂園', mood: '可愛', bpm: 124, key: 64, scaleName: 'major', prog: PROG_I_V_vi_IV, seed: 331, inst: mMallet, lead: mMallet, bassDrive: 1.3, desc: '歡樂的兒童感配樂，適合親子、遊樂園' }),
-  popArpTrack({ id: 'beach-sunset', title: '海邊夕陽', mood: '輕快', bpm: 100, key: 57, scaleName: 'majPent', prog: PROG_vi_IV_I_V, seed: 337, inst: (f, d) => mPluck(f, d, { bright: 0.55 }), lead: mSineLead, desc: '帶點慵懶的海邊氣氛，適合夕陽、旅遊收尾' }),
-  popArpTrack({ id: 'graduation-day', title: '畢業時刻', mood: '勵志', bpm: 96, key: 60, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 347, inst: mMallet, lead: mMallet, bassDrive: 1.2, desc: '感動又有朝氣，適合畢業、里程碑影片' }),
+  popSong({ id: 'ukulele-cafe', title: '咖啡廳烏克麗麗', mood: 'Vlog', bpm: 100, key: 62, scaleName: 'majPent', prog: [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']], seed: 211, compInst: mPluck, bassInst: mBass, hookInst: mSineLead, drumStyle: 'light', wet: 0.26, desc: '流行小品，主歌吉他分解和弦、副歌輕快鉤子旋律，適合咖啡廳、小店探訪' }),
+  popSong({ id: 'morning-walk', title: '晨間散步', mood: 'Vlog', bpm: 96, key: 64, scaleName: 'major', prog: [[0, 'maj'], [5, 'maj'], [9, 'min'], [7, 'maj']], seed: 223, compInst: mPluck, bassInst: mBass, hookInst: mMallet, drumStyle: 'light', wet: 0.28, desc: '流行小品，主歌吉他、副歌木琴鉤子旋律，悠閒有朝氣，適合散步、晨間日常' }),
+  popSong({ id: 'city-stroll', title: '城市漫步', mood: 'Vlog', bpm: 108, key: 57, scaleName: 'dorian', prog: [[0, 'min7'], [5, 'min7'], [7, 'min7'], [10, 'maj7']], seed: 229, compInst: mEpiano, bassInst: mBass, hookInst: mSineLead, drumStyle: 'backbeat', wet: 0.22, desc: 'Funk-pop，主歌切分電鋼琴、副歌滿編節奏與鉤子，適合城市街拍、逛街紀錄' }),
+  popSong({ id: 'cozy-home', title: '居家日常', mood: 'Vlog', bpm: 92, key: 65, scaleName: 'major', prog: [[9, 'min'], [5, 'maj'], [0, 'maj'], [7, 'maj']], seed: 233, compInst: mEpiano, bassInst: mBass, hookInst: mEpiano, drumStyle: 'half', wet: 0.3, desc: '鋼琴流行曲，主歌柔和、副歌飽滿的電鋼琴鉤子，適合居家整理、下廚日常' }),
+  popSong({ id: 'gentle-breeze', title: '微風', mood: 'Vlog', bpm: 84, key: 59, scaleName: 'majPent', prog: [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']], seed: 241, compInst: mPad, bassInst: mBass, hookInst: mSineLead, drumStyle: 'light', wet: 0.35, desc: '夢幻流行（dream pop），主歌弦樂鋪底、副歌飄浮鉤子旋律，萬用的 Vlog 背景音樂' }),
+  popSong({ id: 'simple-life', title: '簡單生活', mood: 'Vlog', bpm: 118, key: 64, scaleName: 'major', prog: [[0, 'maj'], [5, 'maj'], [7, 'maj'], [9, 'min']], seed: 251, compInst: mEpiano, bassInst: mSawBass, hookInst: mPulse, drumStyle: '4floor', wet: 0.22, desc: '合成器流行曲（synth-pop），主歌電鋼琴、副歌合成器鉤子與四拍底鼓，適合生活紀錄、開箱' }),
+  popSong({ id: 'soft-piano-vlog', title: '輕鋼琴手記', mood: 'Vlog', bpm: 76, key: 60, scaleName: 'major', prog: [[0, 'maj'], [9, 'min'], [5, 'maj'], [7, 'maj']], seed: 257, compInst: mPiano, bassInst: mBass, hookInst: mPiano, drumStyle: 'light', wet: 0.32, desc: '鋼琴流行抒情曲，主歌獨奏、副歌加重和聲與節奏，適合日記式的生活影片' }),
+  popSong({ id: 'acoustic-friends', title: '朋友聚會', mood: 'Vlog', bpm: 112, key: 67, scaleName: 'majPent', prog: [[0, 'maj'], [5, 'maj'], [9, 'min'], [7, 'maj']], seed: 263, compInst: mPluck, bassInst: mBass, hookInst: mMallet, drumStyle: 'backbeat', wet: 0.24, desc: '民謠流行（folk-pop），主歌木吉他、副歌齊奏鉤子與拍手節奏，適合聚會、朋友出遊' }),
+  popSong({ id: 'first-love', title: '初戀心動', mood: 'Vlog', bpm: 80, key: 62, scaleName: 'major', prog: [[9, 'min'], [5, 'maj'], [0, 'maj'], [7, 'maj']], seed: 269, compInst: mEpiano, bassInst: mBass, hookInst: mSineLead, drumStyle: 'half', wet: 0.32, desc: '流行抒情歌（pop ballad），主歌細膩、副歌情感堆疊的鉤子旋律，適合情侶、紀念日' }),
+  popSong({ id: 'family-time', title: '家庭時光', mood: 'Vlog', bpm: 100, key: 65, scaleName: 'majPent', prog: [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']], seed: 277, compInst: mMallet, bassInst: mBass, hookInst: mMallet, drumStyle: 'light', wet: 0.28, desc: '溫馨流行小品，主歌木琴分解和弦、副歌明亮鉤子，適合親子、寵物日常' }),
+  popSong({ id: 'summer-pool', title: '夏日泳池', mood: '輕快', bpm: 104, key: 60, scaleName: 'mixolydian', prog: [[0, 'maj'], [5, 'maj'], [0, 'maj'], [7, 'maj']], seed: 281, compInst: mPluck, bassInst: mBass, hookInst: mMallet, drumStyle: '4floor', wet: 0.24, desc: '熱帶流行曲（tropical pop），主歌吉他、副歌四拍節奏與明亮鉤子，活力滿滿，適合夏天、戶外運動' }),
+  popSong({ id: 'spring-bloom', title: '春天綻放', mood: '輕快', bpm: 122, key: 62, scaleName: 'major', prog: [[0, 'maj'], [7, 'maj'], [2, 'min'], [5, 'maj']], seed: 283, compInst: mPad, bassInst: mSawBass, hookInst: mMallet, drumStyle: '4floor', wet: 0.2, desc: '舞曲流行（dance-pop），主歌弦樂鋪底、副歌四拍底鼓與鉤子，明亮清新，適合賞花、戶外踏青' }),
+  popSong({ id: 'autumn-walk', title: '秋日散步', mood: '溫馨', bpm: 90, key: 57, scaleName: 'minor', prog: [[0, 'min'], [8, 'maj'], [10, 'maj'], [0, 'min']], seed: 293, compInst: mEpiano, bassInst: mBass, hookInst: mSineLead, drumStyle: 'half', wet: 0.3, desc: '靈魂流行（soul-pop），主歌電鋼琴、副歌溫暖鉤子旋律，微涼而溫暖，適合秋天、戶外步道' }),
+  popSong({ id: 'winter-light', title: '冬日暖陽', mood: '溫馨', bpm: 70, key: 60, scaleName: 'major', prog: [[0, 'maj'], [9, 'min'], [5, 'maj'], [7, 'maj']], seed: 307, compInst: mPiano, bassInst: mBass, hookInst: mPiano, drumStyle: 'light', wet: 0.34, desc: '慢板鋼琴流行抒情曲，主歌獨奏、副歌加重和聲，柔和溫暖，適合冬天室內、節日氣氛' }),
+  popSong({ id: 'elegant-piano', title: '優雅鋼琴', mood: '溫馨', bpm: 100, key: 65, scaleName: 'major', prog: [[0, 'maj'], [5, 'maj'], [0, 'maj'], [7, 'maj']], seed: 311, compInst: mPiano, bassInst: mBass, hookInst: mMallet, drumStyle: 'half', wet: 0.26, desc: '鋼琴流行曲，主歌優雅分解和弦、副歌明亮鉤子，適合質感開箱、生活美學' }),
+  popSong({ id: 'playful-puppy', title: '調皮小狗', mood: '可愛', bpm: 128, key: 62, scaleName: 'majPent', prog: [[0, 'maj'], [5, 'maj'], [7, 'maj'], [0, 'maj']], seed: 317, compInst: mMallet, bassInst: mSawBass, hookInst: mPulse, drumStyle: '4floor', wet: 0.2, desc: '泡泡糖流行曲（bubblegum pop），主歌木琴、副歌合成器鉤子與四拍節奏，俏皮感，適合寵物、萌寵日常' }),
+  popSong({ id: 'kids-playground', title: '兒童樂園', mood: '可愛', bpm: 112, key: 64, scaleName: 'major', prog: [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']], seed: 331, compInst: mMallet, bassInst: mBass, hookInst: mSineLead, drumStyle: 'backbeat', wet: 0.22, desc: '歡樂流行曲，主歌木琴、副歌清亮鉤子與節奏，適合親子、遊樂園' }),
+  popSong({ id: 'beach-sunset', title: '海邊夕陽', mood: '輕快', bpm: 96, key: 57, scaleName: 'majPent', prog: [[9, 'min'], [5, 'maj'], [0, 'maj'], [7, 'maj']], seed: 337, compInst: mPluck, bassInst: mBass, hookInst: mMallet, drumStyle: 'light', wet: 0.3, desc: '慵懶流行曲（chill pop），主歌吉他、副歌木琴鉤子旋律，帶點海邊氣氛，適合夕陽、旅遊收尾' }),
+  popSong({ id: 'graduation-day', title: '畢業時刻', mood: '勵志', bpm: 108, key: 60, scaleName: 'major', prog: [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']], seed: 347, compInst: mPad, bassInst: mBass, hookInst: mMallet, drumStyle: 'backbeat', wet: 0.28, desc: '勵志流行anthem，主歌弦樂鋪底、副歌堆疊到最高點的鉤子旋律，感動又有朝氣，適合畢業、里程碑影片' }),
 ];
 tracks.push(...tracks2);
 

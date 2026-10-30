@@ -294,4 +294,6 @@ export interface LibraryTrack {
   duration: number;
   url: string;
   peaks: number[];
+  /** 封面圖（只有配樂有，音效用漸層占位） */
+  cover?: string;
 }

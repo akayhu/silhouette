@@ -131,6 +131,8 @@ node scripts/generate-music.mjs
 
 第一次執行會自動下載 soundfont 到 `scripts/.cache/`（約 38MB，不進版控）。
 
+每首配樂在音樂庫面板都有一張 AI 繪製的插畫封面（存在 `server/music/covers/`，統一的中世紀風插畫風格），`library.json` 裡每筆配樂資料的 `cover` 欄位指到對應圖檔；音效沒有封面，面板會改用依 id 固定雜湊出的漸層色塊。重新執行產生腳本時，只要 `server/music/covers/<id>.png` 存在就會自動帶上 `cover` 欄位，不會覆蓋掉封面圖本身。
+
 要加入自己找的音樂（請確認授權允許商用與放進工具裡使用，例如 CC0）：把 `.m4a`／`.mp3` 放進 `server/music/`，再在 `library.json` 的 `items` 加一筆（`id`、`title`、`category` 填 `music` 或 `sfx`、`mood`、`duration`、`url`、`peaks`）。重新執行產生腳本會覆蓋 `library.json`。
 
 ## 專案結構

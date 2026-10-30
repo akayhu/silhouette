@@ -59,7 +59,8 @@
         0.24,
         0.02,
         0
-      ]
+      ],
+      "cover": "/music/covers/sunny-morning.png"
     },
     {
       "id": "afternoon-coffee",
@@ -119,7 +120,8 @@
         0.89,
         0.02,
         0
-      ]
+      ],
+      "cover": "/music/covers/afternoon-coffee.png"
     },
     {
       "id": "warm-memories",
@@ -179,7 +181,8 @@
         0.33,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/warm-memories.png"
     },
     {
       "id": "city-rhythm",
@@ -239,7 +242,8 @@
         0.12,
         0.03,
         0
-      ]
+      ],
+      "cover": "/music/covers/city-rhythm.png"
     },
     {
       "id": "road-trip",
@@ -299,7 +303,8 @@
         0.15,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/road-trip.png"
     },
     {
       "id": "neon-night",
@@ -359,7 +364,8 @@
         0.11,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/neon-night.png"
     },
     {
       "id": "cute-daily",
@@ -419,7 +425,8 @@
         0.26,
         0.28,
         0
-      ]
+      ],
+      "cover": "/music/covers/cute-daily.png"
     },
     {
       "id": "quiet-thoughts",
@@ -479,7 +486,8 @@
         0.01,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/quiet-thoughts.png"
     },
     {
       "id": "rise-up",
@@ -539,7 +547,8 @@
         0.32,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/rise-up.png"
     },
     {
       "id": "quiet-rain",
@@ -599,7 +608,8 @@
         0.01,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/quiet-rain.png"
     },
     {
       "id": "festival-cheer",
@@ -659,7 +669,8 @@
         0.89,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/festival-cheer.png"
     },
     {
       "id": "mystery-step",
@@ -719,7 +730,8 @@
         0.17,
         0.02,
         0
-      ]
+      ],
+      "cover": "/music/covers/mystery-step.png"
     },
     {
       "id": "jazz-lounge",
@@ -779,7 +791,8 @@
         0.72,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/jazz-lounge.png"
     },
     {
       "id": "epic-rise",
@@ -839,7 +852,8 @@
         0,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/epic-rise.png"
     },
     {
       "id": "ukulele-cafe",
@@ -899,7 +913,8 @@
         0.67,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/ukulele-cafe.png"
     },
     {
       "id": "morning-walk",
@@ -959,7 +974,8 @@
         0.72,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/morning-walk.png"
     },
     {
       "id": "city-stroll",
@@ -1019,7 +1035,8 @@
         0.07,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/city-stroll.png"
     },
     {
       "id": "cozy-home",
@@ -1079,7 +1096,8 @@
         0.27,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/cozy-home.png"
     },
     {
       "id": "gentle-breeze",
@@ -1139,7 +1157,8 @@
         0.68,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/gentle-breeze.png"
     },
     {
       "id": "simple-life",
@@ -1199,7 +1218,8 @@
         0.12,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/simple-life.png"
     },
     {
       "id": "soft-piano-vlog",
@@ -1259,7 +1279,8 @@
         0.71,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/soft-piano-vlog.png"
     },
     {
       "id": "acoustic-friends",
@@ -1319,7 +1340,8 @@
         0.05,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/acoustic-friends.png"
     },
     {
       "id": "first-love",
@@ -1379,7 +1401,8 @@
         0.63,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/first-love.png"
     },
     {
       "id": "family-time",
@@ -1439,7 +1462,8 @@
         0.66,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/family-time.png"
     },
     {
       "id": "summer-pool",
@@ -1499,7 +1523,8 @@
         0.89,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/summer-pool.png"
     },
     {
       "id": "spring-bloom",
@@ -1559,7 +1584,8 @@
         0.03,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/spring-bloom.png"
     },
     {
       "id": "autumn-walk",
@@ -1619,7 +1645,8 @@
         0.52,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/autumn-walk.png"
     },
     {
       "id": "winter-light",
@@ -1679,7 +1706,8 @@
         0.78,
         0.04,
         0
-      ]
+      ],
+      "cover": "/music/covers/winter-light.png"
     },
     {
       "id": "elegant-piano",
@@ -1739,7 +1767,8 @@
         0.22,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/elegant-piano.png"
     },
     {
       "id": "playful-puppy",
@@ -1799,7 +1828,8 @@
         0.02,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/playful-puppy.png"
     },
     {
       "id": "kids-playground",
@@ -1859,7 +1889,8 @@
         0.06,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/kids-playground.png"
     },
     {
       "id": "beach-sunset",
@@ -1919,7 +1950,8 @@
         0.7,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/beach-sunset.png"
     },
     {
       "id": "graduation-day",
@@ -1979,7 +2011,8 @@
         0.07,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/graduation-day.png"
     },
     {
       "id": "dreamy-clouds",
@@ -2039,7 +2072,8 @@
         0,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/dreamy-clouds.png"
     },
     {
       "id": "night-drive",
@@ -2099,7 +2133,8 @@
         0.35,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/night-drive.png"
     },
     {
       "id": "midnight-city",
@@ -2159,7 +2194,8 @@
         0.2,
         0.02,
         0
-      ]
+      ],
+      "cover": "/music/covers/midnight-city.png"
     },
     {
       "id": "road-less-traveled",
@@ -2219,7 +2255,8 @@
         0,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/road-less-traveled.png"
     },
     {
       "id": "coffee-shop-jazz",
@@ -2279,7 +2316,8 @@
         0.21,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/coffee-shop-jazz.png"
     },
     {
       "id": "soulful-blues",
@@ -2339,7 +2377,8 @@
         0.16,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/soulful-blues.png"
     },
     {
       "id": "tech-startup",
@@ -2399,7 +2438,8 @@
         0.89,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/tech-startup.png"
     },
     {
       "id": "clean-minimal",
@@ -2459,7 +2499,8 @@
         0.01,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/clean-minimal.png"
     },
     {
       "id": "urban-groove",
@@ -2519,7 +2560,8 @@
         0.62,
         0.01,
         0
-      ]
+      ],
+      "cover": "/music/covers/urban-groove.png"
     },
     {
       "id": "late-night-study",
@@ -2579,7 +2621,8 @@
         0,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/late-night-study.png"
     },
     {
       "id": "new-beginnings",
@@ -2639,7 +2682,8 @@
         0.01,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/new-beginnings.png"
     },
     {
       "id": "gentle-rain-piano",
@@ -2699,7 +2743,8 @@
         0,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/gentle-rain-piano.png"
     },
     {
       "id": "tropical-escape",
@@ -2759,7 +2804,8 @@
         0.02,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/tropical-escape.png"
     },
     {
       "id": "zen-garden",
@@ -2819,7 +2865,8 @@
         0,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/zen-garden.png"
     },
     {
       "id": "campfire-stories",
@@ -2879,7 +2926,8 @@
         0.01,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/campfire-stories.png"
     },
     {
       "id": "countdown-hype",
@@ -2939,7 +2987,8 @@
         0.01,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/countdown-hype.png"
     },
     {
       "id": "sunday-brunch",
@@ -2999,7 +3048,8 @@
         0.02,
         0,
         0
-      ]
+      ],
+      "cover": "/music/covers/sunday-brunch.png"
     },
     {
       "id": "sfx-ding",

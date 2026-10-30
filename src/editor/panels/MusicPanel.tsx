@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveLocalFile } from '../../lib/localMedia';
-import { Check, Loader2, Music, Pause, Play, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
+import { Check, Loader2, Music2, Pause, Play, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatTime, uid } from '../../lib/format';
 import { audioPeaks, probe } from '../../lib/media';
@@ -11,6 +11,21 @@ import { Chips } from '../Inspector';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 import { SoundMixer } from './SoundMixer';
+
+// 卡片封面：沒有真實封面圖，用調色盤裡的既有顏色依 id 雜湊出固定的漸層，同一首歌永遠同一張「封面」
+const COVERS = [
+  'linear-gradient(135deg, var(--color-brand), var(--color-coral))',
+  'linear-gradient(135deg, var(--color-mint), var(--color-track-overlay-edge))',
+  'linear-gradient(135deg, var(--color-sun), var(--color-coral))',
+  'linear-gradient(135deg, var(--color-track-sticker-edge), var(--color-brand))',
+  'linear-gradient(135deg, var(--color-mint), var(--color-sun))',
+  'linear-gradient(135deg, var(--color-track-overlay-edge), var(--color-track-sticker-edge))',
+];
+function coverFor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return COVERS[h % COVERS.length];
+}
 
 type Tab = 'music' | 'sfx' | 'mine';
 const TABS: { id: Tab; label: string }[] = [
@@ -182,7 +197,7 @@ export function MusicPanel() {
             ))}
             {mine.length === 0 && uploading.length === 0 && (
               <li className="flex flex-col items-center gap-2 py-6 text-center text-xs text-ink-mute">
-                <Music className="size-6 text-ink-mute/60" />
+                <Music2 className="size-6 text-ink-mute/60" />
                 還沒有上傳的音樂
               </li>
             )}
@@ -240,46 +255,68 @@ export function MusicPanel() {
             <Chips options={moods.map((m) => ({ id: m, label: m }))} value={mood} onChange={setMood} />
           </div>
 
-          <ul className="mt-4 space-y-2">
-            {items === null && (
-              <li className="flex items-center justify-center gap-2 py-8 text-xs text-ink-mute">
-                <Loader2 className="size-4 animate-spin" /> 載入中…
-              </li>
-            )}
-            {items !== null && list.length === 0 && <li className="py-8 text-center text-xs text-ink-mute">找不到符合的{tab === 'music' ? '配樂' : '音效'}</li>}
+          {items === null && (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-ink-mute">
+              <Loader2 className="size-4 animate-spin" /> 載入中…
+            </div>
+          )}
+          {items !== null && list.length === 0 && <p className="py-8 text-center text-xs text-ink-mute">找不到符合的{tab === 'music' ? '配樂' : '音效'}</p>}
+          <div className="mt-4 grid grid-cols-2 gap-3">
             {list.map((t) => {
               const active = playing === t.id;
               return (
-                <li key={t.id} className={`rounded-2xl border p-2.5 transition ${active ? 'border-brand/50 bg-brand-soft/30' : 'border-line bg-surface hover:border-brand/30'}`}>
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      onClick={() => toggle(t)}
-                      className={`grid size-9 shrink-0 place-items-center rounded-full transition ${active ? 'bg-brand text-white' : 'bg-sunken text-ink hover:bg-brand-soft hover:text-brand'}`}
-                      aria-label={active ? `暫停 ${t.title}` : `試聽 ${t.title}`}
-                    >
-                      {active ? <Pause className="size-4" fill="currentColor" /> : <Play className="ml-0.5 size-4" fill="currentColor" />}
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold">{t.title}</div>
-                      <div className="text-[11px] text-ink-mute">
+                <div key={t.id} className="group">
+                  <button
+                    onClick={() => toggle(t)}
+                    aria-label={active ? `暫停 ${t.title}` : `試聽 ${t.title}`}
+                    className={`relative block aspect-square w-full overflow-hidden rounded-2xl text-left shadow-card transition ${active ? 'ring-2 ring-brand ring-offset-2 ring-offset-surface' : ''}`}
+                    style={t.cover ? undefined : { background: coverFor(t.id) }}
+                  >
+                    {t.cover ? (
+                      <img src={t.cover} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                    ) : (
+                      <>
+                        <div
+                          className="absolute inset-0 opacity-20"
+                          style={{ backgroundImage: 'repeating-linear-gradient(135deg, #fff 0 2px, transparent 2px 14px)' }}
+                        />
+                        <Music2 className="absolute top-1/2 left-1/2 size-9 -translate-x-1/2 -translate-y-1/2 text-white/55" strokeWidth={1.5} />
+                      </>
+                    )}
+                    <div className={`absolute inset-0 grid place-items-center bg-black/35 opacity-0 transition group-hover:opacity-100 ${active ? '!opacity-100' : ''}`}>
+                      <span className="grid size-10 place-items-center rounded-full bg-white/95 text-ink shadow-card">
+                        {active ? <Pause className="size-5" fill="currentColor" /> : <Play className="ml-0.5 size-5" fill="currentColor" />}
+                      </span>
+                    </div>
+                    {active && (
+                      <div className="absolute inset-x-0 bottom-0 h-[3px] bg-black/25">
+                        <div className="h-full bg-white" style={{ width: `${Math.round(progress * 100)}%` }} />
+                      </div>
+                    )}
+                  </button>
+
+                  <div className="mt-1.5 flex items-start justify-between gap-1.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-bold" title={tab === 'music' ? t.desc : t.title}>
+                        {t.title}
+                      </div>
+                      <div className="truncate text-[11px] text-ink-mute">
                         {t.mood}
                         {t.bpm ? ` · ${t.bpm} BPM` : ''} · {formatTime(t.duration)}
                       </div>
                     </div>
                     <button
                       onClick={() => add(t)}
-                      className={`grid size-8 shrink-0 place-items-center rounded-lg text-white transition ${added === t.id ? 'bg-mint' : 'bg-brand hover:bg-brand-hover'}`}
+                      className={`grid size-6 shrink-0 place-items-center rounded-full text-white transition ${added === t.id ? 'bg-mint' : 'bg-brand hover:bg-brand-hover'}`}
                       aria-label={`把 ${t.title} 加到音訊軌`}
                     >
-                      {added === t.id ? <Check className="size-4" /> : <Plus className="size-4" />}
+                      {added === t.id ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
                     </button>
                   </div>
-                  <Waveform peaks={t.peaks} progress={active ? progress : 0} />
-                  {tab === 'music' && <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">{t.desc}</p>}
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
           <p className="mt-4 text-[11px] leading-relaxed text-ink-mute">
             {license} 配樂加入時會從播放頭開始，自動配合影片長度並淡出。
           </p>

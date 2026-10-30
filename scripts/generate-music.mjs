@@ -509,46 +509,17 @@ class MusicMixer {
     this.n = Math.ceil(seconds * SR);
     this.events = [];
     this.duck = null; // MIDI 渲染不支援 sidechain，忽略
-    for (const k of ['mL', 'mR', 'sL', 'sR']) this[k] = new Float32Array(this.n);
-    this.hasTexture = false;
   }
-  add(src, time, { gain = 1, pan = 0, send = 0.15 } = {}) {
-    if (src && src.__midi) {
-      this.events.push({ time, dur: src.dur, note: src.note, program: src.program, isDrum: src.isDrum, gain, pan, send });
-      return;
-    }
-    // 原始波形（Float32Array）：質地層，直接疊加進 PCM bus，渲染時跟 MIDI 音軌混合
-    this.hasTexture = true;
-    const start = Math.floor(time * SR);
-    const gl = gain * Math.cos(((pan + 1) * Math.PI) / 4);
-    const gr = gain * Math.sin(((pan + 1) * Math.PI) / 4);
-    for (let i = 0; i < src.length; i++) {
-      const j = start + i;
-      if (j < 0) continue;
-      if (j >= this.n) break;
-      this.mL[j] += src[i] * gl;
-      this.mR[j] += src[i] * gr;
-      if (send) {
-        this.sL[j] += src[i] * gl * send;
-        this.sR[j] += src[i] * gr * send;
-      }
-    }
+  add(desc, time, { gain = 1, pan = 0, send = 0.15 } = {}) {
+    this.events.push({ time, dur: desc.dur, note: desc.note, program: desc.program, isDrum: desc.isDrum, gain, pan, send });
   }
   render({ wet = 0.3, lowpass = 0, fadeOut = 3 } = {}) {
     const { L: midiL, R: midiR } = this.events.length ? renderMidiEvents(this.events, { wet }) : { L: new Float32Array(0), R: new Float32Array(0) };
     const L = new Float32Array(this.n);
     const R = new Float32Array(this.n);
     for (let i = 0; i < this.n; i++) {
-      L[i] = (midiL[i] || 0) + this.mL[i];
-      R[i] = (midiR[i] || 0) + this.mR[i];
-    }
-    if (this.hasTexture) {
-      const revL = reverb(this.sL, 0);
-      const revR = reverb(this.sR, 23);
-      for (let i = 0; i < this.n; i++) {
-        L[i] += revL[i] * wet;
-        R[i] += revR[i] * wet;
-      }
+      L[i] = midiL[i] || 0;
+      R[i] = midiR[i] || 0;
     }
     if (lowpass) {
       biquad(L, 'lp', lowpass);
@@ -685,18 +656,11 @@ const tracks = [
           M.add(mBass(mtof(root - 24), S.beat * 1.8, 1.1), S.at(b, 0), { gain: 0.5, send: 0 });
           M.add(mBass(mtof(root - 24 + 7), S.beat * 0.9, 1.1), S.at(b, 2.5), { gain: 0.4, send: 0 });
           [0, 2.5].forEach((p) => M.add(mKick(0.6), S.at(b, p), { gain: 0.7, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(biquad(snare(170), 'lp', 3500), S.at(b, p), { gain: 0.45, bus: 'd', send: 0.15 }));
+          [1, 3].forEach((p) => M.add(mSnare(170), S.at(b, p), { gain: 0.45, bus: 'd', send: 0.15 }));
           for (let i = 0; i < 8; i++) M.add(mHat(), S.at(b, i * 0.5), { gain: i % 2 ? 0.08 : 0.13, pan: 0.3, bus: 'd', send: 0 });
         }
         if (b >= 8 && b < 20) for (const n of realize(A, b % 2, scale, ch)) M.add(mEpiano(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.24, pan: 0.15, send: 0.35 });
       }
-      const crackle = new Float32Array(M.n);
-      const r = makeRng(5);
-      for (let i = 0; i < M.n; i++) {
-        if (r() < 0.0004) crackle[i] = (r() * 2 - 1) * 0.5;
-        crackle[i] += (r() * 2 - 1) * 0.006;
-      }
-      M.add(biquad(crackle, 'bp', 2500, 0.5), 0, { gain: 0.6, bus: 'd', send: 0 });
       return M.render({ wet: 0.25, lowpass: 6500 });
     },
   },
@@ -749,9 +713,8 @@ const tracks = [
           for (const n of realize(A, b % 2, scale, ch)) M.add(mPluck(mtof(n.note), n.len * S.beat * 0.8, { bright: 0.8 }), S.at(b, n.pos), { gain: 0.38, pan: -0.1, send: 0.35 });
         }
         if (b >= 16 && b < 20) {
-          const rise = new Float32Array(Math.floor(S.bar * SR));
-          for (let i = 0; i < rise.length; i++) rise[i] = noise() * ((b - 16) * S.bar + i / SR) / (4 * S.bar);
-          M.add(biquad(rise, 'hp', 2000 + (b - 16) * 1500), S.at(b, 0), { gain: 0.12, send: 0.3, bus: 'd' });
+          const steps = 6;
+          for (let i = 0; i < steps; i++) M.add(mPulse(mtof(key + 60 + i * 2), S.bar / steps, { duty: 0.3 }), S.at(b, 0) + (i * S.bar) / steps, { gain: 0.1 + i * 0.02, send: 0.3 });
         }
       }
       return M.render({ wet: 0.22 });
@@ -905,10 +868,6 @@ const tracks = [
         if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPiano(mtof(n.note), n.len * S.beat * 1.1), S.at(b, n.pos), { gain: 0.3, pan: 0.1, send: 0.5 });
         if (b >= 6) ch.forEach((n) => M.add(mPad(mtof(n - 12), S.bar, { cut: 900, attack: 1.6 }), S.at(b, 0), { gain: 0.08, send: 0.55 }));
       }
-      const rain = new Float32Array(M.n);
-      const r = makeRng(17);
-      for (let i = 0; i < M.n; i++) { if (r() < 0.002) rain[i] = (r() * 2 - 1) * 0.35; }
-      M.add(biquad(rain, 'hp', 4000), 0, { gain: 0.5, bus: 'd', send: 0.1 });
       return M.render({ wet: 0.5, fadeOut: 5 });
     },
   },
@@ -1316,10 +1275,6 @@ const tracks3 = [
         ch.forEach((n, i) => M.add(mPiano(mtof(n - 12), S.beat * 2.2), S.at(b, 0) + i * 0.02, { gain: 0.15, pan: -0.15 + i * 0.1, send: 0.5 }));
         if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPiano(mtof(n.note), n.len * S.beat * 1.1), S.at(b, n.pos), { gain: 0.28, pan: 0.1, send: 0.5 });
       }
-      const rain = new Float32Array(M.n);
-      const r = makeRng(31);
-      for (let i = 0; i < M.n; i++) if (r() < 0.0015) rain[i] = (r() * 2 - 1) * 0.3;
-      M.add(biquad(rain, 'hp', 4000), 0, { gain: 0.4, bus: 'd', send: 0.1 });
       return M.render({ wet: 0.5, fadeOut: 5 });
     },
   },

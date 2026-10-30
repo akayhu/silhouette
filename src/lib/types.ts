@@ -62,9 +62,14 @@ export interface ClipTransform {
   fit: 'contain' | 'cover';
 }
 
-export type TransitionType =
-  | 'fade' | 'flash' | 'dip' | 'slideLeft' | 'slideRight' | 'slideUp' | 'zoom' | 'blur' | 'wipe' | 'circle'
-  | 'slideDown' | 'wipeUp' | 'shutter' | 'spin';
+/** 轉場種類清單（唯一來源）：型別和首頁數字帶都從這裡算數量，不用手動對帳 */
+export const TRANSITION_TYPES = [
+  'fade', 'flash', 'dip', 'slideLeft', 'slideRight', 'slideUp', 'zoom', 'blur', 'wipe', 'circle',
+  'slideDown', 'wipeUp', 'shutter', 'spin',
+  'diagonal', 'iris', 'pixelate', 'mirrorSplit', 'flipCard', 'ripple', 'glitch', 'stretch', 'bounceUp', 'doubleWipe', 'rotate3d',
+] as const;
+
+export type TransitionType = (typeof TRANSITION_TYPES)[number];
 
 /** 從前一個片段轉到這個片段的轉場；兩段會重疊 duration 秒 */
 export interface Transition {

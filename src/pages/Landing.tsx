@@ -4,10 +4,11 @@ import { Activity, ArrowRight, Check, FolderOpen, HardDrive, Laptop, Mic, Music2
 import { MarketingLayout } from '../components/Layout';
 import { PlanCards } from '../components/Plans';
 import { mkButton, SectionTitle } from '../components/marketing';
-import { stickerDef, stickerUrl } from '../lib/stickers';
+import { stickerDef, stickerUrl, STICKERS } from '../lib/stickers';
 import { OG_IMAGE, PUBLIC_ROUTES, SITE_NAME, SITE_URL } from '../lib/seo';
 import { SMART_TEMPLATES } from '../lib/templates';
 import { FILTER_PRESETS } from '../lib/filters';
+import { TRANSITION_TYPES } from '../lib/types';
 import { StylePreview } from '../components/StylePreview';
 import musicLibrary from '../../server/music/library.json';
 
@@ -515,12 +516,14 @@ function MixMock() {
 // ---------- 數字帶 ----------
 
 function Numbers() {
+  const musicCount = musicLibrary.items.filter((i) => !i.id.startsWith('sfx-')).length;
+  const sfxCount = musicLibrary.items.filter((i) => i.id.startsWith('sfx-')).length;
   const items: [string, string][] = [
     [`${SMART_TEMPLATES.length}`, '智能剪輯模板'],
-    ['35', '原創手繪貼紙'],
-    ['14', '濾鏡'],
-    ['10', '轉場'],
-    ['8＋8', '原創配樂與音效'],
+    [`${STICKERS.length}`, '原創手繪貼紙'],
+    [`${FILTER_PRESETS.length}`, '濾鏡'],
+    [`${TRANSITION_TYPES.length}`, '轉場'],
+    [`${musicCount}＋${sfxCount}`, '原創配樂與音效'],
   ];
   return (
     <section className="px-4 py-20 sm:px-8">
@@ -798,8 +801,8 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: '聲音與配音',
     items: [
-      { name: '原創無版權配樂', qty: '8 首' },
-      { name: '原創音效', qty: '8 個' },
+      { name: '原創無版權配樂', qty: '50 首' },
+      { name: '原創音效', qty: '50 個' },
       { name: '上傳自己的音樂，自動配合影片長度' },
       { name: '音量、淡入淡出；轉場時聲音交叉淡化' },
       { name: '文字朗讀：台灣腔 AI 人聲與系統語音', pro: true, note: '配音會依句子自動加上對齊的字幕。' },
@@ -809,11 +812,11 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: '畫面效果',
     items: [
-      { name: '原創手繪貼紙', qty: '50 款' },
+      { name: '原創手繪貼紙', qty: '60 款' },
       { name: '貼紙動畫', qty: '6 種' },
-      { name: '濾鏡，可調強度', qty: '21 種' },
+      { name: '濾鏡，可調強度', qty: '30 種' },
       { name: '亮度、對比、飽和度、色溫、暗角、顆粒微調' },
-      { name: '轉場', qty: '14 種' },
+      { name: '轉場', qty: '25 種' },
       { name: '片段動態：慢慢放大、縮小、特寫推近、震動', qty: '4 種' },
       { name: '美肌：磨皮、美白、紅潤', note: '4 種預設，可個別微調；主軌和疊加片段都能用。' },
       { name: '降噪：人聲更接近錄音室效果', note: '濾低頻悶響、講話停頓時壓低背景雜訊、人聲增豔，強度可調。' },
@@ -823,7 +826,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: 'AI 自動處理',
     items: [
       { name: '智能混剪', pro: true, note: '一次選多支素材，AI 自動幫每支挑一段接起來：有講話的留講話段，沒講話的留畫面動態最多的一段。' },
-      { name: '智能剪輯', qty: '8 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
+      { name: '智能剪輯', qty: '20 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
       { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、自動上字幕，讓你選剪輯前或剪輯後的版本。' },
       { name: 'AI 自動剪輯', pro: true, note: '依聲音起伏和字幕內容，加上特寫、運鏡、轉場、字幕動畫和貼紙。' },
       { name: '智能口播：剪掉停頓與「嗯、啊」', pro: true },

@@ -21,6 +21,17 @@ const TYPES: { id: TransitionType; label: string; anim: string; flash?: 'white' 
   { id: 'wipeUp', label: '擦除（下）', anim: 'tr-wipe-up' },
   { id: 'shutter', label: '百葉窗', anim: 'tr-shutter' },
   { id: 'spin', label: '旋轉', anim: 'tr-spin' },
+  { id: 'diagonal', label: '斜角擦除', anim: 'tr-diagonal' },
+  { id: 'iris', label: '方形展開', anim: 'tr-iris' },
+  { id: 'pixelate', label: '像素化', anim: 'tr-pixelate' },
+  { id: 'mirrorSplit', label: '左右分屏', anim: 'tr-mirror-split' },
+  { id: 'flipCard', label: '翻牌', anim: 'tr-flip-card' },
+  { id: 'ripple', label: '波紋', anim: 'tr-ripple' },
+  { id: 'glitch', label: '故障感', anim: 'tr-glitch' },
+  { id: 'stretch', label: '擠壓', anim: 'tr-stretch' },
+  { id: 'bounceUp', label: '彈跳上推', anim: 'tr-bounce-up' },
+  { id: 'doubleWipe', label: '上下擦除', anim: 'tr-double-wipe' },
+  { id: 'rotate3d', label: '立體翻轉', anim: 'tr-rotate3d' },
 ];
 
 const DEFAULT_DURATION = 0.5;

@@ -580,6 +580,12 @@ function transitionProgress(active: PlacedClip[], t: number) {
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
 
+let pixelateTile: HTMLCanvasElement | null = null;
+function pixelateScratch() {
+  if (!pixelateTile) pixelateTile = document.createElement('canvas');
+  return pixelateTile;
+}
+
 /** 依轉場效果把前一段（a）與下一段（b）合成到畫布上 */
 function composite(ctx: CanvasRenderingContext2D, a: HTMLCanvasElement, b: HTMLCanvasElement, type: TransitionType, raw: number, W: number, H: number) {
   const p = ease(raw);
@@ -676,6 +682,127 @@ function composite(ctx: CanvasRenderingContext2D, a: HTMLCanvasElement, b: HTMLC
       ctx.translate(W / 2, H / 2);
       ctx.rotate((1 - p) * 0.6);
       const s = 0.8 + 0.2 * p;
+      ctx.scale(s, s);
+      ctx.drawImage(b, -W / 2, -H / 2);
+      break;
+    }
+    case 'diagonal': {
+      ctx.drawImage(a, 0, 0);
+      ctx.beginPath();
+      const diag = Math.hypot(W, H) * p;
+      ctx.moveTo(0, 0);
+      ctx.lineTo(diag, 0);
+      ctx.lineTo(0, diag);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(b, 0, 0);
+      break;
+    }
+    case 'iris': {
+      ctx.drawImage(a, 0, 0);
+      const iw = W * p, ih = H * p;
+      ctx.beginPath();
+      ctx.rect((W - iw) / 2, (H - ih) / 2, iw, ih);
+      ctx.clip();
+      ctx.drawImage(b, 0, 0);
+      break;
+    }
+    case 'pixelate': {
+      const amount = Math.sin(Math.PI * raw);
+      const px = Math.max(1, Math.round(amount * (Math.min(W, H) / 16)));
+      ctx.drawImage(a, 0, 0);
+      ctx.globalAlpha = p;
+      if (px > 1) {
+        const sw = Math.max(1, Math.round(W / px));
+        const sh = Math.max(1, Math.round(H / px));
+        const tmp = pixelateScratch();
+        tmp.width = sw;
+        tmp.height = sh;
+        const tctx = tmp.getContext('2d')!;
+        tctx.drawImage(b, 0, 0, sw, sh);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tmp, 0, 0, sw, sh, 0, 0, W, H);
+        ctx.imageSmoothingEnabled = true;
+      } else {
+        ctx.drawImage(b, 0, 0);
+      }
+      break;
+    }
+    case 'mirrorSplit':
+      ctx.drawImage(a, 0, 0);
+      ctx.beginPath();
+      ctx.rect(0, 0, W / 2, H);
+      ctx.clip();
+      ctx.drawImage(b, -(1 - p) * (W / 2), 0);
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(W / 2, 0, W / 2, H);
+      ctx.clip();
+      ctx.drawImage(b, (1 - p) * (W / 2), 0);
+      break;
+    case 'flipCard': {
+      const target = raw < 0.5 ? a : b;
+      const half = raw < 0.5 ? raw * 2 : (raw - 0.5) * 2;
+      const scaleX = raw < 0.5 ? 1 - half : half;
+      ctx.translate(W / 2, 0);
+      ctx.scale(Math.max(0.01, scaleX), 1);
+      ctx.drawImage(target, -W / 2, 0);
+      break;
+    }
+    case 'ripple': {
+      ctx.drawImage(a, 0, 0);
+      ctx.globalAlpha = p;
+      const strips = 20;
+      const sh = H / strips;
+      for (let i = 0; i < strips; i++) {
+        const offset = Math.sin(raw * Math.PI * 4 + i * 0.5) * (1 - p) * W * 0.08;
+        ctx.drawImage(b, 0, i * sh, W, sh + 1, offset, i * sh, W, sh + 1);
+      }
+      break;
+    }
+    case 'glitch': {
+      ctx.drawImage(raw < 0.5 ? a : b, 0, 0);
+      const strips = 10;
+      const sh = H / strips;
+      const amp = Math.sin(Math.PI * raw) * W * 0.06;
+      for (let i = 0; i < strips; i++) {
+        const dx = (i % 2 === 0 ? 1 : -1) * amp * Math.random();
+        ctx.drawImage(raw < 0.5 ? a : b, 0, i * sh, W, sh + 1, dx, i * sh, W, sh + 1);
+      }
+      ctx.globalAlpha = p;
+      ctx.drawImage(b, 0, 0);
+      break;
+    }
+    case 'stretch': {
+      const sa = Math.max(0.01, 1 - p);
+      ctx.globalAlpha = 1 - p;
+      ctx.drawImage(a, (W - W * sa) / 2, 0, W * sa, H);
+      const sb = Math.max(0.01, p);
+      ctx.globalAlpha = p;
+      ctx.drawImage(b, (W - W * sb) / 2, 0, W * sb, H);
+      break;
+    }
+    case 'bounceUp': {
+      ctx.drawImage(a, 0, 0);
+      const bounce = p < 0.8 ? p / 0.8 : 1 - ((p - 0.8) / 0.2) * 0.06;
+      ctx.drawImage(b, 0, (1 - bounce) * H);
+      break;
+    }
+    case 'doubleWipe':
+      ctx.drawImage(a, 0, 0);
+      ctx.beginPath();
+      ctx.rect(0, (H / 2) * (1 - p), W, H * p);
+      ctx.clip();
+      ctx.drawImage(b, 0, 0);
+      break;
+    case 'rotate3d': {
+      ctx.drawImage(a, 0, 0);
+      ctx.globalAlpha = p;
+      ctx.translate(W / 2, H / 2);
+      const skew = (1 - p) * 0.5;
+      ctx.transform(1, 0, skew, 1, 0, 0);
+      const s = 0.85 + 0.15 * p;
       ctx.scale(s, s);
       ctx.drawImage(b, -W / 2, -H / 2);
       break;

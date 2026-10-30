@@ -7,7 +7,8 @@
 export type FilterId =
   | 'none' | 'fresh' | 'warm' | 'japan' | 'vintage' | 'film' | 'mono' | 'punchy'
   | 'cool' | 'food' | 'night' | 'pastel' | 'summer' | 'autumn' | 'midnight'
-  | 'noir' | 'teal' | 'golden' | 'sakura' | 'matcha' | 'street';
+  | 'noir' | 'teal' | 'golden' | 'sakura' | 'matcha' | 'street'
+  | 'cream' | 'cyber' | 'forest' | 'dusk' | 'polaroid' | 'arctic' | 'mocha' | 'neon' | 'clear';
 
 export interface FilterParams {
   brightness: number; // 1 = 原樣
@@ -70,6 +71,15 @@ export const FILTER_PRESETS: { id: FilterId; name: string; params: Partial<Filte
   { id: 'sakura', name: '櫻花', params: { tint: 45, brightness: 1.1, saturate: 0.95 } },
   { id: 'matcha', name: '抹茶', params: { hue: -22, saturate: 0.85, temperature: 8, brightness: 1.02 } },
   { id: 'street', name: '街拍', params: { contrast: 1.2, saturate: 0.85, grain: 0.35, vignette: 0.25 } },
+  { id: 'cream', name: '奶油', params: { brightness: 1.1, contrast: 0.92, saturate: 0.88, tint: 18, fade: 0.14 } },
+  { id: 'cyber', name: '賽博', params: { temperature: -45, saturate: 1.35, contrast: 1.2, hue: 6 } },
+  { id: 'forest', name: '森林', params: { hue: -14, saturate: 1.1, contrast: 1.08, temperature: -4 } },
+  { id: 'dusk', name: '黃昏', params: { temperature: 38, saturate: 1.15, contrast: 0.95, vignette: 0.2, fade: 0.06 } },
+  { id: 'polaroid', name: '拍立得', params: { sepia: 0.18, contrast: 0.9, saturate: 0.8, fade: 0.2, vignette: 0.35, grain: 0.3 } },
+  { id: 'arctic', name: '極地', params: { temperature: -55, brightness: 1.05, saturate: 0.75, contrast: 1.05 } },
+  { id: 'mocha', name: '摩卡', params: { sepia: 0.25, temperature: 20, contrast: 1.1, saturate: 0.9 } },
+  { id: 'neon', name: '霓虹夜', params: { saturate: 1.4, contrast: 1.25, temperature: -20, vignette: 0.3 } },
+  { id: 'clear', name: '透徹', params: { contrast: 1.12, saturate: 1.08 } },
 ];
 
 const presetById = new Map(FILTER_PRESETS.map((p) => [p.id, p]));

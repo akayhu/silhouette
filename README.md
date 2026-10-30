@@ -122,11 +122,14 @@ npm run create-admin -- --email admin@example.com --name 管理者
 
 ## 音樂庫
 
-曲目由 `scripts/generate-music.mjs` 用程式合成（原創、無版權），輸出到 `server/music/`，清單在 `server/music/library.json`：
+配樂（music）由 `scripts/generate-music.mjs` 寫原創編曲（和弦走向、節奏、鼓點都是程式產生），再用開源的 [fluidsynth](https://www.fluidsynth.org/)（GPL 授權）＋ [MuseScore_General](https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/MuseScore_General.sf3) soundfont（MIT 授權，免費商用、不需標註來源）渲染成真樂器取樣音色（真吉他、真鋼琴、真貝斯、弦樂、木琴等），電子曲風則保留合成器音色。音效（sfx）維持原本的程式波形合成。全部輸出到 `server/music/`，清單在 `server/music/library.json`：
 
 ```bash
+# 需要先安裝 fluidsynth：brew install fluid-synth
 node scripts/generate-music.mjs
 ```
+
+第一次執行會自動下載 soundfont 到 `scripts/.cache/`（約 38MB，不進版控）。
 
 要加入自己找的音樂（請確認授權允許商用與放進工具裡使用，例如 CC0）：把 `.m4a`／`.mp3` 放進 `server/music/`，再在 `library.json` 的 `items` 加一筆（`id`、`title`、`category` 填 `music` 或 `sfx`、`mood`、`duration`、`url`、`peaks`）。重新執行產生腳本會覆蓋 `library.json`。
 

@@ -14,6 +14,9 @@ tts/models/
 tts/BreezyVoice/
 tts/**/__pycache__/
 
+# 音樂產生用的開源 soundfont（約 40MB，用 scripts/generate-music.mjs 列印的網址重新下載）
+scripts/.cache/
+
 # 環境變數（之後串金流的金鑰會放這裡）
 .env
 .env.*

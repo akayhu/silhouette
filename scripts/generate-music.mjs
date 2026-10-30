@@ -1,6 +1,7 @@
 // 產生音樂庫：用程式合成原創配樂與音效（無版權問題），輸出 AAC 到 server/music/
 // 用法：node scripts/generate-music.mjs
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'server', 'music');
 const SR = 44100;
 const TAU = Math.PI * 2;
+
+// 配樂改用開源 fluidsynth + MIT 授權的 MuseScore_General soundfont（真樂器取樣音色），
+// 音效（sfx）維持原本的程式合成。soundfont 不進版控，第一次執行會自動下載。
+const SOUNDFONT_URL = 'https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/MuseScore_General.sf3';
+const SOUNDFONT = path.join(ROOT, 'scripts', '.cache', 'MuseScore_General.sf3');
 
 // ---------- 基本工具 ----------
 function makeRng(seed) {
@@ -345,6 +351,213 @@ function master(L, R, fadeOut) {
   return [L, R];
 }
 
+// ---------- 配樂用 MIDI 樂器（真實樂器取樣音色，透過 fluidsynth 渲染） ----------
+// 原本的手刻波形樂器函式（pluck/piano/bass…）只給音效（sfx）用；配樂改成產生「音符描述」，
+// 交給 MusicMixer 收集成 MIDI 事件，最後一次用 fluidsynth + soundfont 渲染成音訊。
+const ftom = (f) => 69 + 12 * Math.log2(f / 440);
+const noteDesc = (program, f, dur) => ({ __midi: true, isDrum: false, program, note: Math.round(ftom(f)), dur: Math.max(0.05, dur) });
+const drumDesc = (drumNote, dur) => ({ __midi: true, isDrum: true, program: 0, note: drumNote, dur });
+
+// General MIDI 樂器編號：https://www.midi.org/specifications-old/item/gm-level-1-sound-set
+const mPiano = (f, dur) => noteDesc(0, f, dur); // Acoustic Grand Piano
+const mEpiano = (f, dur) => noteDesc(4, f, dur); // Electric Piano 1
+const mPluck = (f, dur) => noteDesc(24, f, dur); // Acoustic Guitar (nylon)
+const mMallet = (f, dur) => noteDesc(12, f, dur); // Marimba
+const mBell = (f, dur = 1.2) => noteDesc(14, f, dur); // Tubular Bells
+const mPad = (f, dur) => noteDesc(48, f, dur); // String Ensemble 1（比合成器 pad 更像真樂器）
+const mBass = (f, dur) => noteDesc(32, f, dur); // Acoustic Bass
+const mSawBass = (f, dur) => noteDesc(38, f, dur); // Synth Bass 1（電子曲風保留合成器音色）
+const mPulse = (f, dur) => noteDesc(81, f, dur); // Lead 2 (sawtooth)
+const mSineLead = (f, dur) => noteDesc(73, f, dur); // Flute
+const mKick = () => drumDesc(36, 0.3);
+const mSnare = () => drumDesc(38, 0.22);
+const mHat = (open = false) => drumDesc(open ? 46 : 42, open ? 0.3 : 0.12);
+const mClap = () => drumDesc(39, 0.2);
+const mShaker = () => drumDesc(70, 0.12);
+const mChipKick = () => drumDesc(36, 0.15);
+const mChipNoise = () => drumDesc(42, 0.1);
+
+// ---------- MIDI 檔案寫出（Standard MIDI File，type 1） ----------
+const MIDI_PPQ = 480;
+const MIDI_TICKS_PER_SEC = MIDI_PPQ * 2; // 固定用 120bpm 當參考時間軸，事件時間已經是秒數換算
+
+function vlq(n) {
+  const bytes = [n & 0x7f];
+  n >>= 7;
+  while (n > 0) {
+    bytes.unshift((n & 0x7f) | 0x80);
+    n >>= 7;
+  }
+  return Buffer.from(bytes);
+}
+const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32BE(n >>> 0, 0); return b; };
+const u16 = (n) => { const b = Buffer.alloc(2); b.writeUInt16BE(n, 0); return b; };
+const mtrk = (data) => Buffer.concat([Buffer.from('MTrk'), u32(data.length), data]);
+
+function buildTempoTrack() {
+  const data = Buffer.concat([
+    vlq(0), Buffer.from([0xff, 0x51, 0x03, 0x07, 0xa1, 0x20]), // tempo 500000us = 120bpm
+    vlq(0), Buffer.from([0xff, 0x2f, 0x00]),
+  ]);
+  return mtrk(data);
+}
+
+function buildChannelTrack(channel, program, events, { wet = 0.3, isDrum = false } = {}) {
+  const toTicks = (s) => Math.max(0, Math.round(s * MIDI_TICKS_PER_SEC));
+  let avgPan = 0;
+  for (const e of events) avgPan += e.pan ?? 0;
+  avgPan = events.length ? avgPan / events.length : 0;
+  const panCC = Math.max(0, Math.min(127, Math.round(((avgPan + 1) / 2) * 127)));
+  const reverbCC = Math.max(0, Math.min(127, Math.round(wet * 200)));
+
+  const msgs = [];
+  if (!isDrum) msgs.push({ tick: 0, bytes: [0xc0 | channel, program] });
+  msgs.push({ tick: 0, bytes: [0xb0 | channel, 10, panCC] });
+  msgs.push({ tick: 0, bytes: [0xb0 | channel, 91, reverbCC] });
+
+  for (const e of events) {
+    const vel = Math.max(10, Math.min(127, Math.round(e.gain * 300)));
+    const onTick = toTicks(e.time);
+    const offTick = Math.max(onTick + 1, toTicks(e.time + e.dur));
+    msgs.push({ tick: onTick, bytes: [0x90 | channel, e.note, vel] });
+    msgs.push({ tick: offTick, bytes: [0x80 | channel, e.note, 0] });
+  }
+  msgs.sort((a, b) => a.tick - b.tick);
+
+  const parts = [];
+  let last = 0;
+  for (const m of msgs) {
+    parts.push(vlq(m.tick - last));
+    parts.push(Buffer.from(m.bytes));
+    last = m.tick;
+  }
+  parts.push(vlq(0), Buffer.from([0xff, 0x2f, 0x00]));
+  return mtrk(Buffer.concat(parts));
+}
+
+function buildSMF(channelGroups, { wet }) {
+  const tracks = [buildTempoTrack()];
+  for (const g of channelGroups) tracks.push(buildChannelTrack(g.channel, g.program, g.events, { wet, isDrum: g.isDrum }));
+  const header = Buffer.concat([Buffer.from('MThd'), u32(6), u16(1), u16(tracks.length), u16(MIDI_PPQ)]);
+  return Buffer.concat([header, ...tracks]);
+}
+
+function readWavPCM16(file) {
+  const buf = fs.readFileSync(file);
+  let offset = 12; // 跳過 RIFF header
+  let dataOffset = -1, dataLen = 0, channels = 2;
+  while (offset < buf.length - 8) {
+    const id = buf.toString('ascii', offset, offset + 4);
+    const len = buf.readUInt32LE(offset + 4);
+    if (id === 'fmt ') channels = buf.readUInt16LE(offset + 10);
+    if (id === 'data') { dataOffset = offset + 8; dataLen = len; }
+    offset += 8 + len + (len % 2);
+  }
+  const n = Math.floor(dataLen / 2 / channels);
+  const L = new Float32Array(n);
+  const R = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    L[i] = buf.readInt16LE(dataOffset + i * channels * 2) / 32768;
+    R[i] = buf.readInt16LE(dataOffset + i * channels * 2 + (channels > 1 ? 2 : 0)) / 32768;
+  }
+  return { L, R };
+}
+
+function ensureSoundfont() {
+  if (fs.existsSync(SOUNDFONT)) return;
+  console.log('下載開源 soundfont（MuseScore_General.sf3，MIT 授權，約 38MB）...');
+  fs.mkdirSync(path.dirname(SOUNDFONT), { recursive: true });
+  execFileSync('curl', ['-L', '-o', SOUNDFONT, SOUNDFONT_URL], { stdio: 'inherit' });
+}
+
+/** 把收集到的 MIDI 事件渲染成 PCM：寫 .mid → fluidsynth 渲染 → 讀回 WAV */
+function renderMidiEvents(events, { wet = 0.3 } = {}) {
+  ensureSoundfont();
+  const progGroups = new Map();
+  const drumEvents = [];
+  for (const e of events) {
+    if (e.isDrum) drumEvents.push(e);
+    else {
+      if (!progGroups.has(e.program)) progGroups.set(e.program, []);
+      progGroups.get(e.program).push(e);
+    }
+  }
+  const groups = [];
+  let ch = 0;
+  for (const [program, evs] of progGroups) {
+    if (ch === 9) ch++;
+    groups.push({ channel: ch, program, events: evs, isDrum: false });
+    ch++;
+  }
+  if (drumEvents.length) groups.push({ channel: 9, program: 0, events: drumEvents, isDrum: true });
+  if (!groups.length) return { L: new Float32Array(0), R: new Float32Array(0) };
+
+  const midi = buildSMF(groups, { wet });
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pianke-midi-'));
+  const midPath = path.join(tmpDir, 'song.mid');
+  const wavPath = path.join(tmpDir, 'song.wav');
+  fs.writeFileSync(midPath, midi);
+  execFileSync('fluidsynth', ['-ni', '-F', wavPath, '-r', String(SR), '-g', '1.1', '-R', '1', SOUNDFONT, midPath], { stdio: 'ignore' });
+  const pcm = readWavPCM16(wavPath);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  return pcm;
+}
+
+/** 配樂用混音器：收集 MIDI 音符事件，也相容少數直接疊加原始波形的質地層（雨聲、雜訊等） */
+class MusicMixer {
+  constructor(seconds) {
+    this.n = Math.ceil(seconds * SR);
+    this.events = [];
+    this.duck = null; // MIDI 渲染不支援 sidechain，忽略
+    for (const k of ['mL', 'mR', 'sL', 'sR']) this[k] = new Float32Array(this.n);
+    this.hasTexture = false;
+  }
+  add(src, time, { gain = 1, pan = 0, send = 0.15 } = {}) {
+    if (src && src.__midi) {
+      this.events.push({ time, dur: src.dur, note: src.note, program: src.program, isDrum: src.isDrum, gain, pan, send });
+      return;
+    }
+    // 原始波形（Float32Array）：質地層，直接疊加進 PCM bus，渲染時跟 MIDI 音軌混合
+    this.hasTexture = true;
+    const start = Math.floor(time * SR);
+    const gl = gain * Math.cos(((pan + 1) * Math.PI) / 4);
+    const gr = gain * Math.sin(((pan + 1) * Math.PI) / 4);
+    for (let i = 0; i < src.length; i++) {
+      const j = start + i;
+      if (j < 0) continue;
+      if (j >= this.n) break;
+      this.mL[j] += src[i] * gl;
+      this.mR[j] += src[i] * gr;
+      if (send) {
+        this.sL[j] += src[i] * gl * send;
+        this.sR[j] += src[i] * gr * send;
+      }
+    }
+  }
+  render({ wet = 0.3, lowpass = 0, fadeOut = 3 } = {}) {
+    const { L: midiL, R: midiR } = this.events.length ? renderMidiEvents(this.events, { wet }) : { L: new Float32Array(0), R: new Float32Array(0) };
+    const L = new Float32Array(this.n);
+    const R = new Float32Array(this.n);
+    for (let i = 0; i < this.n; i++) {
+      L[i] = (midiL[i] || 0) + this.mL[i];
+      R[i] = (midiR[i] || 0) + this.mR[i];
+    }
+    if (this.hasTexture) {
+      const revL = reverb(this.sL, 0);
+      const revR = reverb(this.sR, 23);
+      for (let i = 0; i < this.n; i++) {
+        L[i] += revL[i] * wet;
+        R[i] += revR[i] * wet;
+      }
+    }
+    if (lowpass) {
+      biquad(L, 'lp', lowpass);
+      biquad(R, 'lp', lowpass);
+    }
+    return master(L, R, fadeOut);
+  }
+}
+
 // ---------- 樂理 ----------
 const QUAL = { maj: [0, 4, 7], min: [0, 3, 7], maj7: [0, 4, 7, 11], min7: [0, 3, 7, 10], dom7: [0, 4, 7, 10], sus2: [0, 2, 7] };
 const SCALE = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], majPent: [0, 2, 4, 7, 9], minPent: [0, 3, 5, 7, 10] };
@@ -427,7 +640,7 @@ const tracks = [
     render() {
       const S = song(120), bars = 32, key = 60, rng = makeRng(11);
       const prog = [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'majPent', 69, 93);
       const A = motif(rng, scale.length), B = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
@@ -435,21 +648,21 @@ const tracks = [
         const root = key + iv, ch = voicing(root, q, 60);
         const sec = b < 4 ? 'intro' : b < 12 ? 'verse' : b < 20 ? 'chorus' : b < 28 ? 'verse2' : 'outro';
         const arp = [ch[0], ch[1], ch[2], ch[0] + 12, ch[2], ch[1], ch[0] + 12, ch[1]];
-        arp.forEach((n, i) => M.add(pluck(mtof(n), S.beat * 0.5), S.at(b, i * 0.5), { gain: 0.3 * (i % 2 ? 0.75 : 1), pan: i % 2 ? 0.35 : -0.35, send: 0.25 }));
-        for (let i = 0; i < 8; i++) M.add(shaker(), S.at(b, i * 0.5), { gain: 0.12, pan: 0.5, bus: 'd', send: 0 });
+        arp.forEach((n, i) => M.add(mPluck(mtof(n), S.beat * 0.5), S.at(b, i * 0.5), { gain: 0.3 * (i % 2 ? 0.75 : 1), pan: i % 2 ? 0.35 : -0.35, send: 0.25 }));
+        for (let i = 0; i < 8; i++) M.add(mShaker(), S.at(b, i * 0.5), { gain: 0.12, pan: 0.5, bus: 'd', send: 0 });
         if (sec !== 'intro' && sec !== 'outro') {
-          [0, 2, 2.5].forEach((p) => M.add(kick(), S.at(b, p), { gain: 0.75, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.5, bus: 'd', send: 0.3 }));
-          for (let i = 0; i < 8; i++) M.add(bass(mtof(root - 24 + (i === 6 ? 7 : 0)), S.beat * 0.42), S.at(b, i * 0.5), { gain: 0.42, send: 0 });
+          [0, 2, 2.5].forEach((p) => M.add(mKick(), S.at(b, p), { gain: 0.75, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.5, bus: 'd', send: 0.3 }));
+          for (let i = 0; i < 8; i++) M.add(mBass(mtof(root - 24 + (i === 6 ? 7 : 0)), S.beat * 0.42), S.at(b, i * 0.5), { gain: 0.42, send: 0 });
         }
         if (sec === 'chorus' || sec === 'verse2') {
           const m = (b % 8) < 4 ? A : B;
           for (const n of realize(m, b % 2, scale, ch)) {
-            const voice = sec === 'chorus' ? mallet(mtof(n.note), n.len * S.beat) : sineLead(mtof(n.note - 12), n.len * S.beat * 0.9);
+            const voice = sec === 'chorus' ? mMallet(mtof(n.note), n.len * S.beat) : mSineLead(mtof(n.note - 12), n.len * S.beat * 0.9);
             M.add(voice, S.at(b, n.pos), { gain: sec === 'chorus' ? 0.42 : 0.28, pan: 0.1, send: 0.3 });
           }
         }
-        if (sec === 'outro') ch.forEach((n) => M.add(pad(mtof(n), S.bar), S.at(b, 0), { gain: 0.12, send: 0.4 }));
+        if (sec === 'outro') ch.forEach((n) => M.add(mPad(mtof(n), S.bar), S.at(b, 0), { gain: 0.12, send: 0.4 }));
       }
       return M.render({ wet: 0.3 });
     },
@@ -460,22 +673,22 @@ const tracks = [
     render() {
       const S = song(78, 0.12), bars = 24, key = 53, rng = makeRng(23);
       const prog = [[2, 'min7'], [7, 'dom7'], [0, 'maj7'], [9, 'min7']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'majPent', 72, 91);
       const A = motif(rng, scale.length, [[0, 1.5, 3], [0.5, 2, 2.5], [0, 2], [1, 1.5, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 60);
-        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 2.8), S.at(b, 0) + i * 0.012, { gain: 0.2, pan: -0.2 + i * 0.13, send: 0.25 }));
-        ch.slice(1).forEach((n) => M.add(epiano(mtof(n), S.beat * 0.8), S.at(b, 2.5), { gain: 0.11, pan: 0.2, send: 0.25 }));
+        ch.forEach((n, i) => M.add(mEpiano(mtof(n), S.beat * 2.8), S.at(b, 0) + i * 0.012, { gain: 0.2, pan: -0.2 + i * 0.13, send: 0.25 }));
+        ch.slice(1).forEach((n) => M.add(mEpiano(mtof(n), S.beat * 0.8), S.at(b, 2.5), { gain: 0.11, pan: 0.2, send: 0.25 }));
         if (b >= 2) {
-          M.add(bass(mtof(root - 24), S.beat * 1.8, 1.1), S.at(b, 0), { gain: 0.5, send: 0 });
-          M.add(bass(mtof(root - 24 + 7), S.beat * 0.9, 1.1), S.at(b, 2.5), { gain: 0.4, send: 0 });
-          [0, 2.5].forEach((p) => M.add(kick(0.6), S.at(b, p), { gain: 0.7, bus: 'd', send: 0 }));
+          M.add(mBass(mtof(root - 24), S.beat * 1.8, 1.1), S.at(b, 0), { gain: 0.5, send: 0 });
+          M.add(mBass(mtof(root - 24 + 7), S.beat * 0.9, 1.1), S.at(b, 2.5), { gain: 0.4, send: 0 });
+          [0, 2.5].forEach((p) => M.add(mKick(0.6), S.at(b, p), { gain: 0.7, bus: 'd', send: 0 }));
           [1, 3].forEach((p) => M.add(biquad(snare(170), 'lp', 3500), S.at(b, p), { gain: 0.45, bus: 'd', send: 0.15 }));
-          for (let i = 0; i < 8; i++) M.add(hat(), S.at(b, i * 0.5), { gain: i % 2 ? 0.08 : 0.13, pan: 0.3, bus: 'd', send: 0 });
+          for (let i = 0; i < 8; i++) M.add(mHat(), S.at(b, i * 0.5), { gain: i % 2 ? 0.08 : 0.13, pan: 0.3, bus: 'd', send: 0 });
         }
-        if (b >= 8 && b < 20) for (const n of realize(A, b % 2, scale, ch)) M.add(epiano(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.24, pan: 0.15, send: 0.35 });
+        if (b >= 8 && b < 20) for (const n of realize(A, b % 2, scale, ch)) M.add(mEpiano(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.24, pan: 0.15, send: 0.35 });
       }
       const crackle = new Float32Array(M.n);
       const r = makeRng(5);
@@ -493,7 +706,7 @@ const tracks = [
     render() {
       const S = song(72), bars = 20, key = 55, rng = makeRng(37);
       const prog = [[5, 'maj'], [0, 'maj'], [7, 'maj'], [9, 'min']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'major', 67, 88);
       const A = motif(rng, scale.length, [[0, 1, 2, 3], [0, 1.5, 2], [0, 2, 3], [0, 0.5, 1, 2]]);
       const B = motif(rng, scale.length, [[0, 1, 2, 3], [0, 1.5, 2], [0, 2, 3], [0, 0.5, 1, 2]]);
@@ -501,12 +714,12 @@ const tracks = [
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 55);
         const lh = [root - 12, ch[1] - 12 + 12, ch[2], root, ch[1] + 12, ch[2], root, ch[1]];
-        lh.forEach((n, i) => M.add(piano(mtof(n), S.beat * 0.9), S.at(b, i * 0.5), { gain: 0.2 * (i === 0 ? 1.3 : 1), pan: -0.25, send: 0.4 }));
+        lh.forEach((n, i) => M.add(mPiano(mtof(n), S.beat * 0.9), S.at(b, i * 0.5), { gain: 0.2 * (i === 0 ? 1.3 : 1), pan: -0.25, send: 0.4 }));
         if (b >= 4 && b < 18) {
           const m = b < 12 ? A : B;
-          for (const n of realize(m, b % 2, scale, ch)) M.add(piano(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.32, pan: 0.2, send: 0.45 });
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mPiano(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.32, pan: 0.2, send: 0.45 });
         }
-        if (b >= 8) ch.forEach((n) => M.add(pad(mtof(n), S.bar, { cut: 1100, attack: 1 }), S.at(b, 0), { gain: 0.1, send: 0.5 }));
+        if (b >= 8) ch.forEach((n) => M.add(mPad(mtof(n), S.bar, { cut: 1100, attack: 1 }), S.at(b, 0), { gain: 0.1, send: 0.5 }));
       }
       return M.render({ wet: 0.45, fadeOut: 4 });
     },
@@ -517,7 +730,7 @@ const tracks = [
     render() {
       const S = song(124), bars = 36, key = 57, rng = makeRng(41);
       const prog = [[0, 'min'], [8, 'maj'], [3, 'maj'], [10, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'minPent', 69, 88);
       const A = motif(rng, scale.length, [[0, 0.75, 1.5, 2.5, 3], [0, 0.5, 1.5, 2, 3], [0.5, 1, 2, 3.5]]);
       const kicking = (b) => b >= 4 && !(b >= 16 && b < 20) && b < 34;
@@ -525,15 +738,15 @@ const tracks = [
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 60);
-        [0.5, 1.75, 3].forEach((p) => ch.forEach((n) => M.add(pad(mtof(n), S.beat * 0.35, { cut: 2600, attack: 0.005 }), S.at(b, p), { gain: 0.16, send: 0.35 })));
-        for (let i = 0; i < 4; i++) M.add(hat(true), S.at(b, i + 0.5), { gain: 0.16, pan: 0.25, bus: 'd', send: 0.05 });
+        [0.5, 1.75, 3].forEach((p) => ch.forEach((n) => M.add(mPad(mtof(n), S.beat * 0.35, { cut: 2600, attack: 0.005 }), S.at(b, p), { gain: 0.16, send: 0.35 })));
+        for (let i = 0; i < 4; i++) M.add(mHat(true), S.at(b, i + 0.5), { gain: 0.16, pan: 0.25, bus: 'd', send: 0.05 });
         if (kicking(b)) {
-          for (let i = 0; i < 4; i++) M.add(kick(1.2), S.at(b, i), { gain: 0.85, bus: 'd', send: 0 });
-          [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.45, bus: 'd', send: 0.2 }));
-          for (let i = 0; i < 4; i++) M.add(sawBass(mtof(root - 24), S.beat * 0.4), S.at(b, i + 0.5), { gain: 0.42, send: 0 });
+          for (let i = 0; i < 4; i++) M.add(mKick(1.2), S.at(b, i), { gain: 0.85, bus: 'd', send: 0 });
+          [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.45, bus: 'd', send: 0.2 }));
+          for (let i = 0; i < 4; i++) M.add(mSawBass(mtof(root - 24), S.beat * 0.4), S.at(b, i + 0.5), { gain: 0.42, send: 0 });
         }
         if ((b >= 8 && b < 16) || (b >= 20 && b < 32)) {
-          for (const n of realize(A, b % 2, scale, ch)) M.add(pluck(mtof(n.note), n.len * S.beat * 0.8, { bright: 0.8 }), S.at(b, n.pos), { gain: 0.38, pan: -0.1, send: 0.35 });
+          for (const n of realize(A, b % 2, scale, ch)) M.add(mPluck(mtof(n.note), n.len * S.beat * 0.8, { bright: 0.8 }), S.at(b, n.pos), { gain: 0.38, pan: -0.1, send: 0.35 });
         }
         if (b >= 16 && b < 20) {
           const rise = new Float32Array(Math.floor(S.bar * SR));
@@ -550,7 +763,7 @@ const tracks = [
     render() {
       const S = song(108), bars = 32, key = 55, rng = makeRng(53);
       const prog = [[0, 'maj'], [5, 'maj'], [9, 'min'], [7, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'majPent', 74, 96);
       const A = motif(rng, scale.length), B = motif(rng, scale.length);
       const strum = [[0, 1], [1, 1], [1.5, -1], [2.5, -1], [3, 1], [3.5, -1]];
@@ -560,18 +773,18 @@ const tracks = [
         const notes = [ch[0], ch[1], ch[2], ch[0] + 12];
         for (const [p, dir] of strum) {
           (dir > 0 ? notes : [...notes].reverse()).forEach((n, i) =>
-            M.add(pluck(mtof(n), S.beat * 0.6, { decay: 0.993, bright: 0.5 }), S.at(b, p) + i * 0.011, { gain: dir > 0 ? 0.16 : 0.1, pan: 0.2, send: 0.2 }),
+            M.add(mPluck(mtof(n), S.beat * 0.6, { decay: 0.993, bright: 0.5 }), S.at(b, p) + i * 0.011, { gain: dir > 0 ? 0.16 : 0.1, pan: 0.2, send: 0.2 }),
           );
         }
         if (b >= 4 && b < 30) {
-          [0, 2].forEach((p) => M.add(kick(0.8), S.at(b, p), { gain: 0.6, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.38, bus: 'd', send: 0.25 }));
-          [0, 1.5, 2, 3.5].forEach((p, i) => M.add(bass(mtof(root - 24 + (i === 3 ? 7 : 0)), S.beat * 0.45), S.at(b, p), { gain: 0.45, send: 0 }));
-          for (let i = 0; i < 8; i++) M.add(shaker(), S.at(b, i * 0.5), { gain: 0.1, pan: -0.4, bus: 'd', send: 0 });
+          [0, 2].forEach((p) => M.add(mKick(0.8), S.at(b, p), { gain: 0.6, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.38, bus: 'd', send: 0.25 }));
+          [0, 1.5, 2, 3.5].forEach((p, i) => M.add(mBass(mtof(root - 24 + (i === 3 ? 7 : 0)), S.beat * 0.45), S.at(b, p), { gain: 0.45, send: 0 }));
+          for (let i = 0; i < 8; i++) M.add(mShaker(), S.at(b, i * 0.5), { gain: 0.1, pan: -0.4, bus: 'd', send: 0 });
         }
         if ((b >= 12 && b < 20) || (b >= 24 && b < 30)) {
           const m = (b % 8) < 4 ? A : B;
-          for (const n of realize(m, b % 2, scale, ch)) M.add(sineLead(mtof(n.note), n.len * S.beat * 0.85, 0.02), S.at(b, n.pos), { gain: 0.26, pan: -0.15, send: 0.35 });
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mSineLead(mtof(n.note), n.len * S.beat * 0.85, 0.02), S.at(b, n.pos), { gain: 0.26, pan: -0.15, send: 0.35 });
         }
       }
       return M.render({ wet: 0.28 });
@@ -583,22 +796,22 @@ const tracks = [
     render() {
       const S = song(96), bars = 28, key = 52, rng = makeRng(67);
       const prog = [[0, 'min'], [8, 'maj'], [3, 'maj'], [10, 'maj']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'minor', 71, 88);
       const A = motif(rng, scale.length, [[0, 1.5, 2], [0, 1, 2, 3], [0, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 64);
         const arp = [ch[0], ch[1], ch[2], ch[1] + 12];
-        for (let i = 0; i < 16; i++) M.add(pad(mtof(arp[i % 4] + (i >= 8 ? 12 : 0)), S.beat * 0.2, { cut: 2200 + 800 * Math.sin(b / 3), attack: 0.003 }), S.at(b, i * 0.25), { gain: 0.15, pan: i % 2 ? 0.4 : -0.4, send: 0.3 });
-        ch.forEach((n) => M.add(pad(mtof(n - 12), S.bar, { cut: 900, attack: 0.8 }), S.at(b, 0), { gain: 0.12, send: 0.4 }));
+        for (let i = 0; i < 16; i++) M.add(mPad(mtof(arp[i % 4] + (i >= 8 ? 12 : 0)), S.beat * 0.2, { cut: 2200 + 800 * Math.sin(b / 3), attack: 0.003 }), S.at(b, i * 0.25), { gain: 0.15, pan: i % 2 ? 0.4 : -0.4, send: 0.3 });
+        ch.forEach((n) => M.add(mPad(mtof(n - 12), S.bar, { cut: 900, attack: 0.8 }), S.at(b, 0), { gain: 0.12, send: 0.4 }));
         if (b >= 4 && b < 26) {
-          for (let i = 0; i < 8; i++) M.add(bass(mtof(root - 24 + (i % 2 ? 12 : 0)), S.beat * 0.4, 2.2), S.at(b, i * 0.5), { gain: 0.36, send: 0 });
-          [0, 2].forEach((p) => M.add(kick(1.1), S.at(b, p), { gain: 0.8, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(snare(200), S.at(b, p), { gain: 0.55, bus: 'd', send: 0.8 }));
-          for (let i = 0; i < 8; i++) M.add(hat(), S.at(b, i * 0.5), { gain: 0.09, pan: 0.3, bus: 'd', send: 0 });
+          for (let i = 0; i < 8; i++) M.add(mBass(mtof(root - 24 + (i % 2 ? 12 : 0)), S.beat * 0.4, 2.2), S.at(b, i * 0.5), { gain: 0.36, send: 0 });
+          [0, 2].forEach((p) => M.add(mKick(1.1), S.at(b, p), { gain: 0.8, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mSnare(200), S.at(b, p), { gain: 0.55, bus: 'd', send: 0.8 }));
+          for (let i = 0; i < 8; i++) M.add(mHat(), S.at(b, i * 0.5), { gain: 0.09, pan: 0.3, bus: 'd', send: 0 });
         }
-        if (b >= 12 && b < 26) for (const n of realize(A, b % 2, scale, ch)) M.add(pulse(mtof(n.note), n.len * S.beat * 0.9, { duty: 0.5, vib: 0.008, cut: 3000 }), S.at(b, n.pos), { gain: 0.22, send: 0.45 });
+        if (b >= 12 && b < 26) for (const n of realize(A, b % 2, scale, ch)) M.add(mPulse(mtof(n.note), n.len * S.beat * 0.9, { duty: 0.5, vib: 0.008, cut: 3000 }), S.at(b, n.pos), { gain: 0.22, send: 0.45 });
       }
       return M.render({ wet: 0.35, fadeOut: 4 });
     },
@@ -609,22 +822,22 @@ const tracks = [
     render() {
       const S = song(132), bars = 36, key = 60, rng = makeRng(71);
       const prog = [[0, 'maj'], [9, 'min'], [5, 'maj'], [7, 'maj']];
-      const M = new Mixer(bars * S.bar + 2);
+      const M = new MusicMixer(bars * S.bar + 2);
       const scale = scaleNotes(key, 'major', 72, 91);
       const A = motif(rng, scale.length), B = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 60);
-        for (let i = 0; i < 8; i++) M.add(pulse(mtof(root - 24 + (i % 2 ? 12 : 0)), S.beat * 0.4, { duty: 0.5, cut: 1500 }), S.at(b, i * 0.5), { gain: 0.3, send: 0 });
-        if (b >= 2) for (let i = 0; i < 16; i++) M.add(pulse(mtof(ch[i % 3] + 12), S.beat * 0.2, { duty: 0.125 }), S.at(b, i * 0.25), { gain: 0.06, pan: 0.35, send: 0.1 });
+        for (let i = 0; i < 8; i++) M.add(mPulse(mtof(root - 24 + (i % 2 ? 12 : 0)), S.beat * 0.4, { duty: 0.5, cut: 1500 }), S.at(b, i * 0.5), { gain: 0.3, send: 0 });
+        if (b >= 2) for (let i = 0; i < 16; i++) M.add(mPulse(mtof(ch[i % 3] + 12), S.beat * 0.2, { duty: 0.125 }), S.at(b, i * 0.25), { gain: 0.06, pan: 0.35, send: 0.1 });
         if (b >= 4 && b < 34) {
-          [0, 1.5, 2].forEach((p) => M.add(chipKick(), S.at(b, p), { gain: 0.5, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(chipNoise(0.12), S.at(b, p), { gain: 0.3, bus: 'd', send: 0.1 }));
-          for (let i = 0; i < 8; i++) M.add(chipNoise(0.03), S.at(b, i * 0.5), { gain: 0.1, pan: -0.3, bus: 'd', send: 0 });
+          [0, 1.5, 2].forEach((p) => M.add(mChipKick(), S.at(b, p), { gain: 0.5, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mChipNoise(0.12), S.at(b, p), { gain: 0.3, bus: 'd', send: 0.1 }));
+          for (let i = 0; i < 8; i++) M.add(mChipNoise(0.03), S.at(b, i * 0.5), { gain: 0.1, pan: -0.3, bus: 'd', send: 0 });
         }
         if (b >= 4 && b < 34) {
           const m = (b % 8) < 4 ? A : B;
-          for (const n of realize(m, b % 2, scale, ch)) M.add(pulse(mtof(n.note), n.len * S.beat * 0.8, { duty: 0.25, vib: 0.01 }), S.at(b, n.pos), { gain: 0.2, send: 0.15 });
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mPulse(mtof(n.note), n.len * S.beat * 0.8, { duty: 0.25, vib: 0.01 }), S.at(b, n.pos), { gain: 0.2, send: 0.15 });
         }
       }
       return M.render({ wet: 0.15, fadeOut: 2 });
@@ -636,14 +849,14 @@ const tracks = [
     render() {
       const S = song(64), bars = 16, key = 50, rng = makeRng(83);
       const prog = [[0, 'maj7'], [9, 'min7'], [5, 'maj7'], [7, 'sus2']];
-      const M = new Mixer(bars * S.bar + 5);
+      const M = new MusicMixer(bars * S.bar + 5);
       const scale = scaleNotes(key, 'majPent', 74, 93);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 57);
-        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar * 1.05, { cut: 1300, attack: 1.4 }), S.at(b, 0), { gain: 0.15, pan: -0.3 + i * 0.2, send: 0.6 }));
-        M.add(bass(mtof(root - 12), S.bar, 0.8), S.at(b, 0), { gain: 0.22, send: 0.1 });
-        for (let i = 0; i < 4; i++) if (rng() < 0.55) M.add(bell(mtof(pick(rng, scale))), S.at(b, i + (rng() < 0.3 ? 0.5 : 0)), { gain: 0.1, pan: rng() * 1.2 - 0.6, send: 0.7 });
+        ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar * 1.05, { cut: 1300, attack: 1.4 }), S.at(b, 0), { gain: 0.15, pan: -0.3 + i * 0.2, send: 0.6 }));
+        M.add(mBass(mtof(root - 12), S.bar, 0.8), S.at(b, 0), { gain: 0.22, send: 0.1 });
+        for (let i = 0; i < 4; i++) if (rng() < 0.55) M.add(mBell(mtof(pick(rng, scale))), S.at(b, i + (rng() < 0.3 ? 0.5 : 0)), { gain: 0.1, pan: rng() * 1.2 - 0.6, send: 0.7 });
       }
       return M.render({ wet: 0.55, fadeOut: 5 });
     },
@@ -654,23 +867,23 @@ const tracks = [
     render() {
       const S = song(100), bars = 28, key = 60, rng = makeRng(131);
       const prog = [[0, 'maj'], [9, 'min'], [7, 'maj'], [5, 'maj']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'major', 67, 91);
       const A = motif(rng, scale.length), B = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 55);
         const lh = [root - 12, ch[1], ch[2], root, ch[1] + 12, ch[2], root, ch[1]];
-        lh.forEach((n, i) => M.add(piano(mtof(n), S.beat * 0.48), S.at(b, i * 0.5), { gain: 0.22, pan: -0.2, send: 0.3 }));
-        if (b >= 6) ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 1500, attack: 0.6 }), S.at(b, 0), { gain: 0.12 + Math.min(0.1, b / 280), pan: -0.2 + i * 0.2, send: 0.4 }));
+        lh.forEach((n, i) => M.add(mPiano(mtof(n), S.beat * 0.48), S.at(b, i * 0.5), { gain: 0.22, pan: -0.2, send: 0.3 }));
+        if (b >= 6) ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar, { cut: 1500, attack: 0.6 }), S.at(b, 0), { gain: 0.12 + Math.min(0.1, b / 280), pan: -0.2 + i * 0.2, send: 0.4 }));
         if (b >= 12) {
-          [0, 1, 2, 3].forEach((p) => M.add(kick(1 + Math.min(0.3, b / 90)), S.at(b, p), { gain: 0.6, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(snare(180), S.at(b, p), { gain: 0.4 + Math.min(0.2, b / 140), bus: 'd', send: 0.4 }));
-          M.add(bass(mtof(root - 24), S.bar * 0.95, 1.3), S.at(b, 0), { gain: 0.4, send: 0 });
+          [0, 1, 2, 3].forEach((p) => M.add(mKick(1 + Math.min(0.3, b / 90)), S.at(b, p), { gain: 0.6, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mSnare(180), S.at(b, p), { gain: 0.4 + Math.min(0.2, b / 140), bus: 'd', send: 0.4 }));
+          M.add(mBass(mtof(root - 24), S.bar * 0.95, 1.3), S.at(b, 0), { gain: 0.4, send: 0 });
         }
         if (b >= 12 && b < 28) {
           const m = (b % 8) < 4 ? A : B;
-          for (const n of realize(m, b % 2, scale, ch)) M.add(mallet(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.32 + Math.min(0.15, b / 200), pan: 0.15, send: 0.3 });
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mMallet(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.32 + Math.min(0.15, b / 200), pan: 0.15, send: 0.3 });
         }
       }
       return M.render({ wet: 0.3, fadeOut: 4 });
@@ -682,15 +895,15 @@ const tracks = [
     render() {
       const S = song(66), bars = 18, key = 57, rng = makeRng(149);
       const prog = [[0, 'min7'], [8, 'maj7'], [5, 'min7'], [10, 'maj7']];
-      const M = new Mixer(bars * S.bar + 5);
+      const M = new MusicMixer(bars * S.bar + 5);
       const scale = scaleNotes(key, 'minor', 69, 89);
       const A = motif(rng, scale.length, [[0, 1.5, 3], [0, 2, 2.5], [0.5, 2, 3], [0, 1, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 55);
-        ch.forEach((n, i) => M.add(piano(mtof(n - 12), S.beat * 2.2), S.at(b, 0) + i * 0.02, { gain: 0.16, pan: -0.15 + i * 0.1, send: 0.5 }));
-        if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(piano(mtof(n.note), n.len * S.beat * 1.1), S.at(b, n.pos), { gain: 0.3, pan: 0.1, send: 0.5 });
-        if (b >= 6) ch.forEach((n) => M.add(pad(mtof(n - 12), S.bar, { cut: 900, attack: 1.6 }), S.at(b, 0), { gain: 0.08, send: 0.55 }));
+        ch.forEach((n, i) => M.add(mPiano(mtof(n - 12), S.beat * 2.2), S.at(b, 0) + i * 0.02, { gain: 0.16, pan: -0.15 + i * 0.1, send: 0.5 }));
+        if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPiano(mtof(n.note), n.len * S.beat * 1.1), S.at(b, n.pos), { gain: 0.3, pan: 0.1, send: 0.5 });
+        if (b >= 6) ch.forEach((n) => M.add(mPad(mtof(n - 12), S.bar, { cut: 900, attack: 1.6 }), S.at(b, 0), { gain: 0.08, send: 0.55 }));
       }
       const rain = new Float32Array(M.n);
       const r = makeRng(17);
@@ -705,21 +918,21 @@ const tracks = [
     render() {
       const S = song(128), bars = 30, key = 62, rng = makeRng(163);
       const prog = [[0, 'maj'], [5, 'maj'], [7, 'maj'], [0, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'majPent', 74, 96);
       const A = motif(rng, scale.length), B = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 62);
-        for (let i = 0; i < 4; i++) if (rng() < 0.7) M.add(bell(mtof(pick(rng, ch) + 12)), S.at(b, i), { gain: 0.14, pan: rng() * 1.6 - 0.8, send: 0.35 });
-        [0, 1, 2, 3].forEach((p) => M.add(kick(1.1), S.at(b, p), { gain: 0.7, bus: 'd', send: 0 }));
-        [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.5, bus: 'd', send: 0.25 }));
-        for (let i = 0; i < 8; i++) M.add(hat(i % 4 === 3), S.at(b, i * 0.5), { gain: 0.14, pan: 0.3, bus: 'd', send: 0 });
-        M.add(bass(mtof(root - 24), S.beat * 0.9, 1.4), S.at(b, 0), { gain: 0.42, send: 0 });
-        M.add(bass(mtof(root - 24 + 7), S.beat * 0.45), S.at(b, 2), { gain: 0.36, send: 0 });
+        for (let i = 0; i < 4; i++) if (rng() < 0.7) M.add(mBell(mtof(pick(rng, ch) + 12)), S.at(b, i), { gain: 0.14, pan: rng() * 1.6 - 0.8, send: 0.35 });
+        [0, 1, 2, 3].forEach((p) => M.add(mKick(1.1), S.at(b, p), { gain: 0.7, bus: 'd', send: 0 }));
+        [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.5, bus: 'd', send: 0.25 }));
+        for (let i = 0; i < 8; i++) M.add(mHat(i % 4 === 3), S.at(b, i * 0.5), { gain: 0.14, pan: 0.3, bus: 'd', send: 0 });
+        M.add(mBass(mtof(root - 24), S.beat * 0.9, 1.4), S.at(b, 0), { gain: 0.42, send: 0 });
+        M.add(mBass(mtof(root - 24 + 7), S.beat * 0.45), S.at(b, 2), { gain: 0.36, send: 0 });
         if (b >= 4) {
           const m = (b % 8) < 4 ? A : B;
-          for (const n of realize(m, b % 2, scale, ch)) M.add(mallet(mtof(n.note + 12), n.len * S.beat * 0.8), S.at(b, n.pos), { gain: 0.3, pan: -0.1, send: 0.3 });
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mMallet(mtof(n.note + 12), n.len * S.beat * 0.8), S.at(b, n.pos), { gain: 0.3, pan: -0.1, send: 0.3 });
         }
       }
       return M.render({ wet: 0.25, fadeOut: 2 });
@@ -731,17 +944,17 @@ const tracks = [
     render() {
       const S = song(90), bars = 24, key = 50, rng = makeRng(179);
       const prog = [[0, 'min'], [1, 'maj'], [0, 'min'], [6, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'minor', 62, 84);
       const A = motif(rng, scale.length, [[0, 1, 2, 3], [0.5, 1.5, 2.5], [0, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 48);
-        for (let i = 0; i < 4; i++) M.add(hat(), S.at(b, i), { gain: 0.1, pan: i % 2 ? 0.3 : -0.3, bus: 'd', send: 0 });
-        M.add(bass(mtof(root - 12), S.bar * 0.9, 1), S.at(b, 0), { gain: 0.32, send: 0.15 });
-        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 700 + 50 * i, attack: 1.2 }), S.at(b, 0), { gain: 0.1, send: 0.45 }));
-        if (b >= 6 && rng() < 0.6) M.add(bell(mtof(pick(rng, scale))), S.at(b, pick(rng, [0, 1, 2, 3])), { gain: 0.08, send: 0.5 });
-        if (b >= 8 && b < 22) for (const n of realize(A, b % 2, scale, ch)) M.add(pulse(mtof(n.note - 12), n.len * S.beat * 0.6, { duty: 0.3, cut: 1800 }), S.at(b, n.pos), { gain: 0.16, send: 0.2 });
+        for (let i = 0; i < 4; i++) M.add(mHat(), S.at(b, i), { gain: 0.1, pan: i % 2 ? 0.3 : -0.3, bus: 'd', send: 0 });
+        M.add(mBass(mtof(root - 12), S.bar * 0.9, 1), S.at(b, 0), { gain: 0.32, send: 0.15 });
+        ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar, { cut: 700 + 50 * i, attack: 1.2 }), S.at(b, 0), { gain: 0.1, send: 0.45 }));
+        if (b >= 6 && rng() < 0.6) M.add(mBell(mtof(pick(rng, scale))), S.at(b, pick(rng, [0, 1, 2, 3])), { gain: 0.08, send: 0.5 });
+        if (b >= 8 && b < 22) for (const n of realize(A, b % 2, scale, ch)) M.add(mPulse(mtof(n.note - 12), n.len * S.beat * 0.6, { duty: 0.3, cut: 1800 }), S.at(b, n.pos), { gain: 0.16, send: 0.2 });
       }
       return M.render({ wet: 0.35, fadeOut: 3 });
     },
@@ -752,17 +965,17 @@ const tracks = [
     render() {
       const S = song(90, 0.08), bars = 22, key = 58, rng = makeRng(191);
       const prog = [[2, 'min7'], [7, 'dom7'], [0, 'maj7'], [9, 'min7']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'major', 69, 89);
       const A = motif(rng, scale.length, [[0, 1.5, 2.5], [0.5, 1, 2, 3], [0, 2, 3.5]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 58);
         const walk = [root - 24, root - 24 + 4, root - 24 + 7, root - 24 + 9];
-        walk.forEach((n, i) => M.add(bass(mtof(n), S.beat * 0.85, 1.1), S.at(b, i), { gain: 0.4, send: 0.1 }));
-        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 0.9), S.at(b, 1.5) + i * 0.01, { gain: 0.18, pan: -0.2 + i * 0.12, send: 0.3 }));
-        [1, 3].forEach((p) => M.add(hat(), S.at(b, p), { gain: 0.1, bus: 'd', send: 0.05 }));
-        if (b >= 2 && b < 20) for (const n of realize(A, b % 2, scale, ch)) M.add(sineLead(mtof(n.note), n.len * S.beat * 0.85, 0.015), S.at(b, n.pos), { gain: 0.22, pan: 0.1, send: 0.35 });
+        walk.forEach((n, i) => M.add(mBass(mtof(n), S.beat * 0.85, 1.1), S.at(b, i), { gain: 0.4, send: 0.1 }));
+        ch.forEach((n, i) => M.add(mEpiano(mtof(n), S.beat * 0.9), S.at(b, 1.5) + i * 0.01, { gain: 0.18, pan: -0.2 + i * 0.12, send: 0.3 }));
+        [1, 3].forEach((p) => M.add(mHat(), S.at(b, p), { gain: 0.1, bus: 'd', send: 0.05 }));
+        if (b >= 2 && b < 20) for (const n of realize(A, b % 2, scale, ch)) M.add(mSineLead(mtof(n.note), n.len * S.beat * 0.85, 0.015), S.at(b, n.pos), { gain: 0.22, pan: 0.1, send: 0.35 });
       }
       return M.render({ wet: 0.3, fadeOut: 3 });
     },
@@ -773,19 +986,19 @@ const tracks = [
     render() {
       const S = song(86), bars = 20, key = 48, rng = makeRng(211);
       const prog = [[0, 'min'], [5, 'maj'], [8, 'maj'], [0, 'min']];
-      const M = new Mixer(bars * S.bar + 5);
+      const M = new MusicMixer(bars * S.bar + 5);
       const scale = scaleNotes(key, 'minor', 60, 84);
       const A = motif(rng, scale.length, [[0, 1, 2, 3], [0, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 48);
         const rise = Math.min(1, b / 14);
-        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 500 + 1800 * rise, attack: 1 }), S.at(b, 0), { gain: 0.14 + 0.1 * rise, pan: -0.2 + i * 0.2, send: 0.5 }));
-        if (b >= 4) M.add(kick(1.3), S.at(b, 0), { gain: 0.5 + 0.3 * rise, bus: 'd', send: 0 });
-        if (b >= 8) [0, 1, 2, 3].forEach((p) => M.add(kick(1.3), S.at(b, p), { gain: 0.65, bus: 'd', send: 0 }));
-        if (b >= 8) M.add(bass(mtof(root - 24), S.bar * 0.9, 1.6), S.at(b, 0), { gain: 0.4, send: 0.1 });
-        if (b >= 10) for (const n of realize(A, b % 2, scale, ch)) M.add(mallet(mtof(n.note + 12), n.len * S.beat), S.at(b, n.pos), { gain: 0.28, pan: 0.15, send: 0.4 });
-        if (b >= 14) [1, 3].forEach((p) => M.add(snare(200), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.3 }));
+        ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar, { cut: 500 + 1800 * rise, attack: 1 }), S.at(b, 0), { gain: 0.14 + 0.1 * rise, pan: -0.2 + i * 0.2, send: 0.5 }));
+        if (b >= 4) M.add(mKick(1.3), S.at(b, 0), { gain: 0.5 + 0.3 * rise, bus: 'd', send: 0 });
+        if (b >= 8) [0, 1, 2, 3].forEach((p) => M.add(mKick(1.3), S.at(b, p), { gain: 0.65, bus: 'd', send: 0 }));
+        if (b >= 8) M.add(mBass(mtof(root - 24), S.bar * 0.9, 1.6), S.at(b, 0), { gain: 0.4, send: 0.1 });
+        if (b >= 10) for (const n of realize(A, b % 2, scale, ch)) M.add(mMallet(mtof(n.note + 12), n.len * S.beat), S.at(b, n.pos), { gain: 0.28, pan: 0.15, send: 0.4 });
+        if (b >= 14) [1, 3].forEach((p) => M.add(mSnare(200), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.3 }));
       }
       return M.render({ wet: 0.4, fadeOut: 5 });
     },
@@ -800,7 +1013,7 @@ function popArpTrack({ id, title, mood, bpm, bars = 28, key, scaleName, prog, se
     render() {
       const S = song(bpm);
       const rng = makeRng(seed);
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, scaleName, 69, 93);
       const A = motif(rng, scale.length);
       const B = motif(rng, scale.length);
@@ -812,10 +1025,10 @@ function popArpTrack({ id, title, mood, bpm, bars = 28, key, scaleName, prog, se
         const arp = [ch[0], ch[1], ch[2], ch[0] + 12, ch[2], ch[1], ch[0] + 12, ch[1]];
         arp.forEach((n, i) => M.add(inst(mtof(n), S.beat * 0.5), S.at(b, i * 0.5), { gain: 0.28 * (i % 2 ? 0.75 : 1), pan: i % 2 ? 0.3 : -0.3, send: 0.25 }));
         if (b >= drumsFrom) {
-          [0, 2].forEach((p) => M.add(kick(0.8), S.at(b, p), { gain: 0.65, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.25 }));
-          for (let i = 0; i < 8; i++) M.add(shaker(), S.at(b, i * 0.5), { gain: 0.1, pan: -0.3, bus: 'd', send: 0 });
-          M.add(bass(mtof(root - 24), S.beat * 0.42, bassDrive), S.at(b, 0), { gain: 0.4, send: 0 });
+          [0, 2].forEach((p) => M.add(mKick(0.8), S.at(b, p), { gain: 0.65, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.25 }));
+          for (let i = 0; i < 8; i++) M.add(mShaker(), S.at(b, i * 0.5), { gain: 0.1, pan: -0.3, bus: 'd', send: 0 });
+          M.add(mBass(mtof(root - 24), S.beat * 0.42, bassDrive), S.at(b, 0), { gain: 0.4, send: 0 });
         }
         if (b >= leadFrom && b < toEnd) {
           const m = (b % 8) < 4 ? A : B;
@@ -834,27 +1047,27 @@ const PROG_ii_V_I = [[2, 'min'], [7, 'maj'], [0, 'maj'], [5, 'maj']];
 
 const tracks2 = [
   // ---- Vlog：烏克麗麗／木吉他感的撥弦，速度不快不慢，生活感的日常配樂 ----
-  popArpTrack({ id: 'ukulele-cafe', title: '咖啡廳烏克麗麗', mood: 'Vlog', bpm: 100, key: 60, scaleName: 'majPent', prog: PROG_I_IV_vi_V, seed: 211, inst: (f, d) => pluck(f, d, { bright: 0.55 }), lead: sineLead, desc: '輕鬆的烏克麗麗撥弦，適合咖啡廳、小店探訪' }),
-  popArpTrack({ id: 'morning-walk', title: '晨間散步', mood: 'Vlog', bpm: 92, key: 62, scaleName: 'major', prog: PROG_I_V_vi_IV, seed: 223, inst: (f, d) => pluck(f, d, { bright: 0.45 }), lead: mallet, desc: '悠閒的早晨節奏，適合散步、晨間日常' }),
-  popArpTrack({ id: 'city-stroll', title: '城市漫步', mood: 'Vlog', bpm: 104, key: 57, scaleName: 'majPent', prog: PROG_vi_IV_I_V, seed: 229, inst: (f, d) => pluck(f, d, { bright: 0.6 }), lead: sineLead, desc: '輕快但不搶戲，適合城市街拍、逛街紀錄' }),
-  popArpTrack({ id: 'cozy-home', title: '居家日常', mood: 'Vlog', bpm: 88, key: 65, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 233, inst: epiano, lead: epiano, bassDrive: 1.1, desc: '溫暖的電鋼琴，適合居家整理、下廚日常' }),
-  popArpTrack({ id: 'gentle-breeze', title: '微風', mood: 'Vlog', bpm: 96, key: 59, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 241, inst: (f, d) => pluck(f, d, { bright: 0.5, decay: 0.994 }), lead: sineLead, desc: '清爽不膩的配樂，萬用的 Vlog 背景音樂' }),
-  popArpTrack({ id: 'simple-life', title: '簡單生活', mood: 'Vlog', bpm: 90, key: 64, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 251, inst: mallet, lead: mallet, bassDrive: 1.2, desc: '明亮的木琴質感，適合生活紀錄、開箱' }),
-  popArpTrack({ id: 'soft-piano-vlog', title: '輕鋼琴手記', mood: 'Vlog', bpm: 84, key: 60, scaleName: 'major', prog: PROG_ii_V_I, seed: 257, bars: 24, inst: (f, d) => piano(f, d * 0.6), lead: piano, bassDrive: 1, desc: '簡單的鋼琴小品，適合日記式的生活影片' }),
-  popArpTrack({ id: 'acoustic-friends', title: '朋友聚會', mood: 'Vlog', bpm: 108, key: 67, scaleName: 'majPent', prog: PROG_I_IV_vi_V, seed: 263, inst: (f, d) => pluck(f, d, { bright: 0.65 }), lead: mallet, desc: '熱鬧但不吵，適合聚會、朋友出遊' }),
-  popArpTrack({ id: 'first-love', title: '初戀心動', mood: 'Vlog', bpm: 94, key: 62, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 269, inst: epiano, lead: sineLead, bassDrive: 1.1, desc: '帶點少女感的小調配樂，適合情侶、紀念日' }),
-  popArpTrack({ id: 'family-time', title: '家庭時光', mood: 'Vlog', bpm: 86, key: 65, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 277, inst: mallet, lead: epiano, bassDrive: 1.1, desc: '溫馨的家庭感配樂，適合親子、寵物日常' }),
+  popArpTrack({ id: 'ukulele-cafe', title: '咖啡廳烏克麗麗', mood: 'Vlog', bpm: 100, key: 60, scaleName: 'majPent', prog: PROG_I_IV_vi_V, seed: 211, inst: (f, d) => mPluck(f, d, { bright: 0.55 }), lead: mSineLead, desc: '輕鬆的烏克麗麗撥弦，適合咖啡廳、小店探訪' }),
+  popArpTrack({ id: 'morning-walk', title: '晨間散步', mood: 'Vlog', bpm: 92, key: 62, scaleName: 'major', prog: PROG_I_V_vi_IV, seed: 223, inst: (f, d) => mPluck(f, d, { bright: 0.45 }), lead: mMallet, desc: '悠閒的早晨節奏，適合散步、晨間日常' }),
+  popArpTrack({ id: 'city-stroll', title: '城市漫步', mood: 'Vlog', bpm: 104, key: 57, scaleName: 'majPent', prog: PROG_vi_IV_I_V, seed: 229, inst: (f, d) => mPluck(f, d, { bright: 0.6 }), lead: mSineLead, desc: '輕快但不搶戲，適合城市街拍、逛街紀錄' }),
+  popArpTrack({ id: 'cozy-home', title: '居家日常', mood: 'Vlog', bpm: 88, key: 65, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 233, inst: mEpiano, lead: mEpiano, bassDrive: 1.1, desc: '溫暖的電鋼琴，適合居家整理、下廚日常' }),
+  popArpTrack({ id: 'gentle-breeze', title: '微風', mood: 'Vlog', bpm: 96, key: 59, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 241, inst: (f, d) => mPluck(f, d, { bright: 0.5, decay: 0.994 }), lead: mSineLead, desc: '清爽不膩的配樂，萬用的 Vlog 背景音樂' }),
+  popArpTrack({ id: 'simple-life', title: '簡單生活', mood: 'Vlog', bpm: 90, key: 64, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 251, inst: mMallet, lead: mMallet, bassDrive: 1.2, desc: '明亮的木琴質感，適合生活紀錄、開箱' }),
+  popArpTrack({ id: 'soft-piano-vlog', title: '輕鋼琴手記', mood: 'Vlog', bpm: 84, key: 60, scaleName: 'major', prog: PROG_ii_V_I, seed: 257, bars: 24, inst: (f, d) => mPiano(f, d * 0.6), lead: mPiano, bassDrive: 1, desc: '簡單的鋼琴小品，適合日記式的生活影片' }),
+  popArpTrack({ id: 'acoustic-friends', title: '朋友聚會', mood: 'Vlog', bpm: 108, key: 67, scaleName: 'majPent', prog: PROG_I_IV_vi_V, seed: 263, inst: (f, d) => mPluck(f, d, { bright: 0.65 }), lead: mMallet, desc: '熱鬧但不吵，適合聚會、朋友出遊' }),
+  popArpTrack({ id: 'first-love', title: '初戀心動', mood: 'Vlog', bpm: 94, key: 62, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 269, inst: mEpiano, lead: mSineLead, bassDrive: 1.1, desc: '帶點少女感的小調配樂，適合情侶、紀念日' }),
+  popArpTrack({ id: 'family-time', title: '家庭時光', mood: 'Vlog', bpm: 86, key: 65, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 277, inst: mMallet, lead: mEpiano, bassDrive: 1.1, desc: '溫馨的家庭感配樂，適合親子、寵物日常' }),
 
   // ---- 其餘補滿不同情緒：輕快、溫馨、可愛、歡慶，跟 Vlog 系互相呼應 ----
-  popArpTrack({ id: 'summer-pool', title: '夏日泳池', mood: '輕快', bpm: 118, key: 60, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 281, inst: (f, d) => pluck(f, d, { bright: 0.7 }), lead: sineLead, desc: '活力滿滿，適合夏天、戶外運動' }),
-  popArpTrack({ id: 'spring-bloom', title: '春天綻放', mood: '輕快', bpm: 112, key: 62, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 283, inst: mallet, lead: mallet, desc: '明亮清新，適合賞花、戶外踏青' }),
-  popArpTrack({ id: 'autumn-walk', title: '秋日散步', mood: '溫馨', bpm: 82, key: 57, scaleName: 'major', prog: PROG_ii_V_I, seed: 293, bars: 22, inst: epiano, lead: epiano, bassDrive: 1, desc: '微涼而溫暖，適合秋天、戶外步道' }),
-  popArpTrack({ id: 'winter-light', title: '冬日暖陽', mood: '溫馨', bpm: 78, key: 60, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 307, bars: 22, inst: (f, d) => piano(f, d * 0.7), lead: piano, bassDrive: 1, desc: '柔和的鋼琴聲，適合冬天室內、節日氣氛' }),
-  popArpTrack({ id: 'elegant-piano', title: '優雅鋼琴', mood: '溫馨', bpm: 80, key: 65, scaleName: 'major', prog: PROG_ii_V_I, seed: 311, bars: 20, inst: (f, d) => piano(f, d * 0.65), lead: piano, bassDrive: 0.9, desc: '優雅內斂，適合質感開箱、生活美學' }),
-  popArpTrack({ id: 'playful-puppy', title: '調皮小狗', mood: '可愛', bpm: 128, key: 62, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 317, inst: (f, d) => pulse(f, d, { duty: 0.4 }), lead: pulse, bassDrive: 1.6, desc: '俏皮彈跳感，適合寵物、萌寵日常' }),
-  popArpTrack({ id: 'kids-playground', title: '兒童樂園', mood: '可愛', bpm: 124, key: 64, scaleName: 'major', prog: PROG_I_V_vi_IV, seed: 331, inst: mallet, lead: mallet, bassDrive: 1.3, desc: '歡樂的兒童感配樂，適合親子、遊樂園' }),
-  popArpTrack({ id: 'beach-sunset', title: '海邊夕陽', mood: '輕快', bpm: 100, key: 57, scaleName: 'majPent', prog: PROG_vi_IV_I_V, seed: 337, inst: (f, d) => pluck(f, d, { bright: 0.55 }), lead: sineLead, desc: '帶點慵懶的海邊氣氛，適合夕陽、旅遊收尾' }),
-  popArpTrack({ id: 'graduation-day', title: '畢業時刻', mood: '勵志', bpm: 96, key: 60, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 347, inst: mallet, lead: mallet, bassDrive: 1.2, desc: '感動又有朝氣，適合畢業、里程碑影片' }),
+  popArpTrack({ id: 'summer-pool', title: '夏日泳池', mood: '輕快', bpm: 118, key: 60, scaleName: 'majPent', prog: PROG_I_V_vi_IV, seed: 281, inst: (f, d) => mPluck(f, d, { bright: 0.7 }), lead: mSineLead, desc: '活力滿滿，適合夏天、戶外運動' }),
+  popArpTrack({ id: 'spring-bloom', title: '春天綻放', mood: '輕快', bpm: 112, key: 62, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 283, inst: mMallet, lead: mMallet, desc: '明亮清新，適合賞花、戶外踏青' }),
+  popArpTrack({ id: 'autumn-walk', title: '秋日散步', mood: '溫馨', bpm: 82, key: 57, scaleName: 'major', prog: PROG_ii_V_I, seed: 293, bars: 22, inst: mEpiano, lead: mEpiano, bassDrive: 1, desc: '微涼而溫暖，適合秋天、戶外步道' }),
+  popArpTrack({ id: 'winter-light', title: '冬日暖陽', mood: '溫馨', bpm: 78, key: 60, scaleName: 'major', prog: PROG_vi_IV_I_V, seed: 307, bars: 22, inst: (f, d) => mPiano(f, d * 0.7), lead: mPiano, bassDrive: 1, desc: '柔和的鋼琴聲，適合冬天室內、節日氣氛' }),
+  popArpTrack({ id: 'elegant-piano', title: '優雅鋼琴', mood: '溫馨', bpm: 80, key: 65, scaleName: 'major', prog: PROG_ii_V_I, seed: 311, bars: 20, inst: (f, d) => mPiano(f, d * 0.65), lead: mPiano, bassDrive: 0.9, desc: '優雅內斂，適合質感開箱、生活美學' }),
+  popArpTrack({ id: 'playful-puppy', title: '調皮小狗', mood: '可愛', bpm: 128, key: 62, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 317, inst: (f, d) => mPulse(f, d, { duty: 0.4 }), lead: mPulse, bassDrive: 1.6, desc: '俏皮彈跳感，適合寵物、萌寵日常' }),
+  popArpTrack({ id: 'kids-playground', title: '兒童樂園', mood: '可愛', bpm: 124, key: 64, scaleName: 'major', prog: PROG_I_V_vi_IV, seed: 331, inst: mMallet, lead: mMallet, bassDrive: 1.3, desc: '歡樂的兒童感配樂，適合親子、遊樂園' }),
+  popArpTrack({ id: 'beach-sunset', title: '海邊夕陽', mood: '輕快', bpm: 100, key: 57, scaleName: 'majPent', prog: PROG_vi_IV_I_V, seed: 337, inst: (f, d) => mPluck(f, d, { bright: 0.55 }), lead: mSineLead, desc: '帶點慵懶的海邊氣氛，適合夕陽、旅遊收尾' }),
+  popArpTrack({ id: 'graduation-day', title: '畢業時刻', mood: '勵志', bpm: 96, key: 60, scaleName: 'major', prog: PROG_I_IV_vi_V, seed: 347, inst: mMallet, lead: mMallet, bassDrive: 1.2, desc: '感動又有朝氣，適合畢業、里程碑影片' }),
 ];
 tracks.push(...tracks2);
 
@@ -866,13 +1079,13 @@ const tracks3 = [
     render() {
       const S = song(68), bars = 16, key = 61, rng = makeRng(353);
       const prog = [[0, 'maj7'], [5, 'maj7'], [9, 'min7'], [7, 'sus2']];
-      const M = new Mixer(bars * S.bar + 5);
+      const M = new MusicMixer(bars * S.bar + 5);
       const scale = scaleNotes(key, 'majPent', 73, 92);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 57);
-        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar * 1.05, { cut: 1500, attack: 1.3 }), S.at(b, 0), { gain: 0.14, pan: -0.25 + i * 0.18, send: 0.55 }));
-        for (let i = 0; i < 4; i++) if (rng() < 0.5) M.add(bell(mtof(pick(rng, scale))), S.at(b, i), { gain: 0.1, pan: rng() * 1.2 - 0.6, send: 0.6 });
+        ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar * 1.05, { cut: 1500, attack: 1.3 }), S.at(b, 0), { gain: 0.14, pan: -0.25 + i * 0.18, send: 0.55 }));
+        for (let i = 0; i < 4; i++) if (rng() < 0.5) M.add(mBell(mtof(pick(rng, scale))), S.at(b, i), { gain: 0.1, pan: rng() * 1.2 - 0.6, send: 0.6 });
       }
       return M.render({ wet: 0.5, fadeOut: 5 });
     },
@@ -883,19 +1096,19 @@ const tracks3 = [
     render() {
       const S = song(100), bars = 26, key = 54, rng = makeRng(359);
       const prog = [[0, 'min'], [8, 'maj'], [5, 'min'], [10, 'maj']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'minor', 70, 87);
       const A = motif(rng, scale.length, [[0, 1.5, 2], [0, 1, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 62);
-        for (let i = 0; i < 8; i++) M.add(pad(mtof(ch[i % 3]), S.beat * 0.22, { cut: 2000, attack: 0.004 }), S.at(b, i * 0.5), { gain: 0.14, pan: i % 2 ? 0.35 : -0.35, send: 0.3 });
+        for (let i = 0; i < 8; i++) M.add(mPad(mtof(ch[i % 3]), S.beat * 0.22, { cut: 2000, attack: 0.004 }), S.at(b, i * 0.5), { gain: 0.14, pan: i % 2 ? 0.35 : -0.35, send: 0.3 });
         if (b >= 4) {
-          [0, 2].forEach((p) => M.add(kick(1), S.at(b, p), { gain: 0.75, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(snare(190), S.at(b, p), { gain: 0.5, bus: 'd', send: 0.6 }));
-          for (let i = 0; i < 8; i++) M.add(bass(mtof(root - 24), S.beat * 0.4, 1.8), S.at(b, i * 0.5), { gain: 0.34, send: 0 });
+          [0, 2].forEach((p) => M.add(mKick(1), S.at(b, p), { gain: 0.75, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mSnare(190), S.at(b, p), { gain: 0.5, bus: 'd', send: 0.6 }));
+          for (let i = 0; i < 8; i++) M.add(mBass(mtof(root - 24), S.beat * 0.4, 1.8), S.at(b, i * 0.5), { gain: 0.34, send: 0 });
         }
-        if (b >= 10 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(pulse(mtof(n.note), n.len * S.beat * 0.8, { duty: 0.4, cut: 2800 }), S.at(b, n.pos), { gain: 0.22, send: 0.35 });
+        if (b >= 10 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPulse(mtof(n.note), n.len * S.beat * 0.8, { duty: 0.4, cut: 2800 }), S.at(b, n.pos), { gain: 0.22, send: 0.35 });
       }
       return M.render({ wet: 0.3, fadeOut: 3 });
     },
@@ -906,15 +1119,15 @@ const tracks3 = [
     render() {
       const S = song(86), bars = 22, key = 52, rng = makeRng(367);
       const prog = [[0, 'min'], [3, 'maj'], [0, 'min'], [8, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'minor', 64, 84);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 50);
-        M.add(bass(mtof(root - 12), S.bar * 0.9, 1), S.at(b, 0), { gain: 0.3, send: 0.15 });
-        ch.forEach((n) => M.add(pad(mtof(n), S.bar, { cut: 700, attack: 1.1 }), S.at(b, 0), { gain: 0.1, send: 0.5 }));
-        for (let i = 0; i < 4; i++) M.add(hat(), S.at(b, i), { gain: 0.08, pan: i % 2 ? 0.3 : -0.3, bus: 'd', send: 0 });
-        if (rng() < 0.4) M.add(bell(mtof(pick(rng, scale))), S.at(b, pick(rng, [0, 1.5, 3])), { gain: 0.09, send: 0.5 });
+        M.add(mBass(mtof(root - 12), S.bar * 0.9, 1), S.at(b, 0), { gain: 0.3, send: 0.15 });
+        ch.forEach((n) => M.add(mPad(mtof(n), S.bar, { cut: 700, attack: 1.1 }), S.at(b, 0), { gain: 0.1, send: 0.5 }));
+        for (let i = 0; i < 4; i++) M.add(mHat(), S.at(b, i), { gain: 0.08, pan: i % 2 ? 0.3 : -0.3, bus: 'd', send: 0 });
+        if (rng() < 0.4) M.add(mBell(mtof(pick(rng, scale))), S.at(b, pick(rng, [0, 1.5, 3])), { gain: 0.09, send: 0.5 });
       }
       return M.render({ wet: 0.35, fadeOut: 3 });
     },
@@ -925,17 +1138,17 @@ const tracks3 = [
     render() {
       const S = song(90), bars = 18, key = 50, rng = makeRng(373);
       const prog = [[0, 'min'], [10, 'maj'], [5, 'min'], [8, 'maj']];
-      const M = new Mixer(bars * S.bar + 5);
+      const M = new MusicMixer(bars * S.bar + 5);
       const scale = scaleNotes(key, 'minor', 62, 86);
       const A = motif(rng, scale.length, [[0, 1, 2, 3], [0, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 48);
         const rise = Math.min(1, b / 12);
-        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 450 + 1600 * rise, attack: 1 }), S.at(b, 0), { gain: 0.13 + 0.08 * rise, pan: -0.2 + i * 0.2, send: 0.5 }));
-        if (b >= 6) [0, 2].forEach((p) => M.add(kick(1.2), S.at(b, p), { gain: 0.5 + 0.25 * rise, bus: 'd', send: 0 }));
-        if (b >= 8) M.add(bass(mtof(root - 24), S.bar * 0.9, 1.4), S.at(b, 0), { gain: 0.36, send: 0.1 });
-        if (b >= 9) for (const n of realize(A, b % 2, scale, ch)) M.add(mallet(mtof(n.note + 12), n.len * S.beat), S.at(b, n.pos), { gain: 0.26, pan: 0.15, send: 0.4 });
+        ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar, { cut: 450 + 1600 * rise, attack: 1 }), S.at(b, 0), { gain: 0.13 + 0.08 * rise, pan: -0.2 + i * 0.2, send: 0.5 }));
+        if (b >= 6) [0, 2].forEach((p) => M.add(mKick(1.2), S.at(b, p), { gain: 0.5 + 0.25 * rise, bus: 'd', send: 0 }));
+        if (b >= 8) M.add(mBass(mtof(root - 24), S.bar * 0.9, 1.4), S.at(b, 0), { gain: 0.36, send: 0.1 });
+        if (b >= 9) for (const n of realize(A, b % 2, scale, ch)) M.add(mMallet(mtof(n.note + 12), n.len * S.beat), S.at(b, n.pos), { gain: 0.26, pan: 0.15, send: 0.4 });
       }
       return M.render({ wet: 0.4, fadeOut: 5 });
     },
@@ -946,17 +1159,17 @@ const tracks3 = [
     render() {
       const S = song(96, 0.09), bars = 20, key = 60, rng = makeRng(379);
       const prog = [[0, 'maj7'], [9, 'min7'], [2, 'min7'], [7, 'dom7']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'major', 69, 89);
       const A = motif(rng, scale.length, [[0, 1.5, 2.5], [0.5, 1, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 58);
         const walk = [root - 24, root - 24 + 3, root - 24 + 7, root - 24 + 10];
-        walk.forEach((n, i) => M.add(bass(mtof(n), S.beat * 0.85, 1), S.at(b, i), { gain: 0.36, send: 0.1 }));
-        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 0.9), S.at(b, 1.5) + i * 0.01, { gain: 0.17, pan: -0.2 + i * 0.12, send: 0.3 }));
-        [1, 3].forEach((p) => M.add(hat(), S.at(b, p), { gain: 0.09, bus: 'd', send: 0.05 }));
-        if (b >= 3 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(sineLead(mtof(n.note), n.len * S.beat * 0.85, 0.012), S.at(b, n.pos), { gain: 0.2, pan: 0.1, send: 0.35 });
+        walk.forEach((n, i) => M.add(mBass(mtof(n), S.beat * 0.85, 1), S.at(b, i), { gain: 0.36, send: 0.1 }));
+        ch.forEach((n, i) => M.add(mEpiano(mtof(n), S.beat * 0.9), S.at(b, 1.5) + i * 0.01, { gain: 0.17, pan: -0.2 + i * 0.12, send: 0.3 }));
+        [1, 3].forEach((p) => M.add(mHat(), S.at(b, p), { gain: 0.09, bus: 'd', send: 0.05 }));
+        if (b >= 3 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mSineLead(mtof(n.note), n.len * S.beat * 0.85, 0.012), S.at(b, n.pos), { gain: 0.2, pan: 0.1, send: 0.35 });
       }
       return M.render({ wet: 0.3, fadeOut: 3 });
     },
@@ -967,15 +1180,15 @@ const tracks3 = [
     render() {
       const S = song(76, 0.1), bars = 16, key = 55, rng = makeRng(383);
       const prog = [[0, 'dom7'], [0, 'dom7'], [5, 'dom7'], [0, 'dom7']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'minor', 67, 86);
       const A = motif(rng, scale.length, [[0, 2, 3], [0, 1.5, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 55);
-        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 2.6), S.at(b, 0) + i * 0.015, { gain: 0.18, pan: -0.2 + i * 0.13, send: 0.3 }));
-        M.add(bass(mtof(root - 24), S.beat * 1.6, 1.1), S.at(b, 0), { gain: 0.42, send: 0 });
-        if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(sineLead(mtof(n.note), n.len * S.beat, 0.02), S.at(b, n.pos), { gain: 0.24, pan: 0.15, send: 0.35 });
+        ch.forEach((n, i) => M.add(mEpiano(mtof(n), S.beat * 2.6), S.at(b, 0) + i * 0.015, { gain: 0.18, pan: -0.2 + i * 0.13, send: 0.3 }));
+        M.add(mBass(mtof(root - 24), S.beat * 1.6, 1.1), S.at(b, 0), { gain: 0.42, send: 0 });
+        if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mSineLead(mtof(n.note), n.len * S.beat, 0.02), S.at(b, n.pos), { gain: 0.24, pan: 0.15, send: 0.35 });
       }
       return M.render({ wet: 0.35, fadeOut: 4 });
     },
@@ -986,19 +1199,19 @@ const tracks3 = [
     render() {
       const S = song(118), bars = 28, key = 57, rng = makeRng(389);
       const prog = [[0, 'maj'], [9, 'min'], [5, 'maj'], [7, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'majPent', 69, 90);
       const A = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 62);
-        for (let i = 0; i < 8; i++) M.add(pulse(mtof(ch[i % 3] + 12), S.beat * 0.18, { duty: 0.3, cut: 3200 }), S.at(b, i * 0.5), { gain: 0.12, pan: i % 2 ? 0.3 : -0.3, send: 0.2 });
+        for (let i = 0; i < 8; i++) M.add(mPulse(mtof(ch[i % 3] + 12), S.beat * 0.18, { duty: 0.3, cut: 3200 }), S.at(b, i * 0.5), { gain: 0.12, pan: i % 2 ? 0.3 : -0.3, send: 0.2 });
         if (b >= 4) {
-          [0, 1, 2, 3].forEach((p) => M.add(kick(1), S.at(b, p), { gain: 0.6, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.2 }));
-          M.add(sawBass(mtof(root - 24), S.beat * 0.4), S.at(b, 0), { gain: 0.36, send: 0 });
+          [0, 1, 2, 3].forEach((p) => M.add(mKick(1), S.at(b, p), { gain: 0.6, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.4, bus: 'd', send: 0.2 }));
+          M.add(mSawBass(mtof(root - 24), S.beat * 0.4), S.at(b, 0), { gain: 0.36, send: 0 });
         }
-        if (b >= 8 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(pluck(mtof(n.note), n.len * S.beat * 0.8, { bright: 0.75 }), S.at(b, n.pos), { gain: 0.26, pan: 0.12, send: 0.3 });
+        if (b >= 8 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPluck(mtof(n.note), n.len * S.beat * 0.8, { bright: 0.75 }), S.at(b, n.pos), { gain: 0.26, pan: 0.12, send: 0.3 });
       }
       return M.render({ wet: 0.25, fadeOut: 3 });
     },
@@ -1009,13 +1222,13 @@ const tracks3 = [
     render() {
       const S = song(72), bars = 18, key = 60, rng = makeRng(397);
       const prog = [[0, 'maj7'], [7, 'sus2'], [9, 'min7'], [5, 'maj7']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'majPent', 72, 90);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 60);
-        if (rng() < 0.7) M.add(piano(mtof(pick(rng, ch)), S.beat * 1.5), S.at(b, pick(rng, [0, 1.5, 2.5])), { gain: 0.22, send: 0.4 });
-        if (b % 2 === 0) M.add(pad(mtof(root - 12), S.bar * 1.8, { cut: 900, attack: 2 }), S.at(b, 0), { gain: 0.08, send: 0.45 });
+        if (rng() < 0.7) M.add(mPiano(mtof(pick(rng, ch)), S.beat * 1.5), S.at(b, pick(rng, [0, 1.5, 2.5])), { gain: 0.22, send: 0.4 });
+        if (b % 2 === 0) M.add(mPad(mtof(root - 12), S.bar * 1.8, { cut: 900, attack: 2 }), S.at(b, 0), { gain: 0.08, send: 0.45 });
       }
       return M.render({ wet: 0.4, fadeOut: 4 });
     },
@@ -1026,20 +1239,20 @@ const tracks3 = [
     render() {
       const S = song(110), bars = 26, key = 58, rng = makeRng(401);
       const prog = [[0, 'min7'], [5, 'min7'], [8, 'maj'], [3, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'minPent', 70, 88);
       const A = motif(rng, scale.length, [[0, 0.75, 1.5, 2.5], [0, 1, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 60);
-        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 0.5), S.at(b, i), { gain: 0.16, pan: -0.2 + i * 0.13, send: 0.25 }));
+        ch.forEach((n, i) => M.add(mEpiano(mtof(n), S.beat * 0.5), S.at(b, i), { gain: 0.16, pan: -0.2 + i * 0.13, send: 0.25 }));
         if (b >= 4) {
-          [0, 2.5].forEach((p) => M.add(kick(1), S.at(b, p), { gain: 0.68, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(snare(180), S.at(b, p), { gain: 0.42, bus: 'd', send: 0.3 }));
-          for (let i = 0; i < 8; i++) M.add(hat(i === 6), S.at(b, i * 0.5), { gain: 0.1, pan: 0.25, bus: 'd', send: 0 });
-          M.add(bass(mtof(root - 24), S.beat * 0.4, 1.5), S.at(b, 0.5), { gain: 0.4, send: 0 });
+          [0, 2.5].forEach((p) => M.add(mKick(1), S.at(b, p), { gain: 0.68, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mSnare(180), S.at(b, p), { gain: 0.42, bus: 'd', send: 0.3 }));
+          for (let i = 0; i < 8; i++) M.add(mHat(i === 6), S.at(b, i * 0.5), { gain: 0.1, pan: 0.25, bus: 'd', send: 0 });
+          M.add(mBass(mtof(root - 24), S.beat * 0.4, 1.5), S.at(b, 0.5), { gain: 0.4, send: 0 });
         }
-        if (b >= 8 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(pluck(mtof(n.note), n.len * S.beat * 0.75, { bright: 0.7 }), S.at(b, n.pos), { gain: 0.26, send: 0.3 });
+        if (b >= 8 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPluck(mtof(n.note), n.len * S.beat * 0.75, { bright: 0.7 }), S.at(b, n.pos), { gain: 0.26, send: 0.3 });
       }
       return M.render({ wet: 0.25, fadeOut: 3 });
     },
@@ -1050,14 +1263,14 @@ const tracks3 = [
     render() {
       const S = song(70), bars = 18, key = 62, rng = makeRng(409);
       const prog = [[0, 'maj7'], [9, 'min7'], [5, 'maj7'], [2, 'min7']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'majPent', 71, 88);
       const A = motif(rng, scale.length, [[0, 1.5, 3], [0, 2]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 60);
-        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 2.4), S.at(b, 0) + i * 0.01, { gain: 0.15, pan: -0.2 + i * 0.13, send: 0.3 }));
-        if (b >= 3 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(epiano(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.18, pan: 0.1, send: 0.35 });
+        ch.forEach((n, i) => M.add(mEpiano(mtof(n), S.beat * 2.4), S.at(b, 0) + i * 0.01, { gain: 0.15, pan: -0.2 + i * 0.13, send: 0.3 }));
+        if (b >= 3 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mEpiano(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.18, pan: 0.1, send: 0.35 });
       }
       return M.render({ wet: 0.35, fadeOut: 4 });
     },
@@ -1068,21 +1281,21 @@ const tracks3 = [
     render() {
       const S = song(104), bars = 24, key = 62, rng = makeRng(419);
       const prog = [[0, 'maj'], [9, 'min'], [5, 'maj'], [7, 'maj']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'major', 69, 91);
       const A = motif(rng, scale.length), B = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 57);
-        ch.forEach((n, i) => M.add(piano(mtof(n), S.beat * 0.5), S.at(b, i * 0.5), { gain: 0.2, pan: -0.2, send: 0.3 }));
-        if (b >= 5) ch.forEach((n, i) => M.add(pad(mtof(n), S.bar, { cut: 1600, attack: 0.6 }), S.at(b, 0), { gain: 0.1, pan: -0.2 + i * 0.2, send: 0.4 }));
+        ch.forEach((n, i) => M.add(mPiano(mtof(n), S.beat * 0.5), S.at(b, i * 0.5), { gain: 0.2, pan: -0.2, send: 0.3 }));
+        if (b >= 5) ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar, { cut: 1600, attack: 0.6 }), S.at(b, 0), { gain: 0.1, pan: -0.2 + i * 0.2, send: 0.4 }));
         if (b >= 10) {
-          [0, 1, 2, 3].forEach((p) => M.add(kick(1), S.at(b, p), { gain: 0.55, bus: 'd', send: 0 }));
-          M.add(bass(mtof(root - 24), S.bar * 0.9, 1.2), S.at(b, 0), { gain: 0.36, send: 0 });
+          [0, 1, 2, 3].forEach((p) => M.add(mKick(1), S.at(b, p), { gain: 0.55, bus: 'd', send: 0 }));
+          M.add(mBass(mtof(root - 24), S.bar * 0.9, 1.2), S.at(b, 0), { gain: 0.36, send: 0 });
         }
         if (b >= 10 && b < bars - 2) {
           const m = (b % 8) < 4 ? A : B;
-          for (const n of realize(m, b % 2, scale, ch)) M.add(mallet(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.3, pan: 0.15, send: 0.3 });
+          for (const n of realize(m, b % 2, scale, ch)) M.add(mMallet(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.3, pan: 0.15, send: 0.3 });
         }
       }
       return M.render({ wet: 0.3, fadeOut: 4 });
@@ -1094,14 +1307,14 @@ const tracks3 = [
     render() {
       const S = song(64), bars = 16, key = 57, rng = makeRng(421);
       const prog = [[0, 'min7'], [5, 'min7'], [8, 'maj7'], [3, 'maj7']];
-      const M = new Mixer(bars * S.bar + 5);
+      const M = new MusicMixer(bars * S.bar + 5);
       const scale = scaleNotes(key, 'minor', 69, 86);
       const A = motif(rng, scale.length, [[0, 2, 3], [0, 1.5, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 55);
-        ch.forEach((n, i) => M.add(piano(mtof(n - 12), S.beat * 2.2), S.at(b, 0) + i * 0.02, { gain: 0.15, pan: -0.15 + i * 0.1, send: 0.5 }));
-        if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(piano(mtof(n.note), n.len * S.beat * 1.1), S.at(b, n.pos), { gain: 0.28, pan: 0.1, send: 0.5 });
+        ch.forEach((n, i) => M.add(mPiano(mtof(n - 12), S.beat * 2.2), S.at(b, 0) + i * 0.02, { gain: 0.15, pan: -0.15 + i * 0.1, send: 0.5 }));
+        if (b >= 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPiano(mtof(n.note), n.len * S.beat * 1.1), S.at(b, n.pos), { gain: 0.28, pan: 0.1, send: 0.5 });
       }
       const rain = new Float32Array(M.n);
       const r = makeRng(31);
@@ -1116,19 +1329,19 @@ const tracks3 = [
     render() {
       const S = song(114), bars = 24, key = 62, rng = makeRng(431);
       const prog = [[0, 'maj'], [5, 'maj'], [7, 'maj'], [5, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'majPent', 69, 90);
       const A = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 60);
-        for (let i = 0; i < 4; i++) M.add(shaker(), S.at(b, i), { gain: 0.16, pan: i % 2 ? 0.4 : -0.4, bus: 'd', send: 0 });
+        for (let i = 0; i < 4; i++) M.add(mShaker(), S.at(b, i), { gain: 0.16, pan: i % 2 ? 0.4 : -0.4, bus: 'd', send: 0 });
         if (b >= 3) {
-          [0, 2].forEach((p) => M.add(kick(0.8), S.at(b, p), { gain: 0.55, bus: 'd', send: 0 }));
-          M.add(bass(mtof(root - 24), S.beat * 0.4, 1.2), S.at(b, 0), { gain: 0.36, send: 0 });
-          ch.forEach((n, i) => M.add(pluck(mtof(n), S.beat * 0.4, { bright: 0.7 }), S.at(b, 1 + i * 0.3), { gain: 0.2, pan: -0.2 + i * 0.2, send: 0.25 }));
+          [0, 2].forEach((p) => M.add(mKick(0.8), S.at(b, p), { gain: 0.55, bus: 'd', send: 0 }));
+          M.add(mBass(mtof(root - 24), S.beat * 0.4, 1.2), S.at(b, 0), { gain: 0.36, send: 0 });
+          ch.forEach((n, i) => M.add(mPluck(mtof(n), S.beat * 0.4, { bright: 0.7 }), S.at(b, 1 + i * 0.3), { gain: 0.2, pan: -0.2 + i * 0.2, send: 0.25 }));
         }
-        if (b >= 6 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mallet(mtof(n.note + 12), n.len * S.beat * 0.8), S.at(b, n.pos), { gain: 0.26, send: 0.3 });
+        if (b >= 6 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mMallet(mtof(n.note + 12), n.len * S.beat * 0.8), S.at(b, n.pos), { gain: 0.26, send: 0.3 });
       }
       return M.render({ wet: 0.3, fadeOut: 3 });
     },
@@ -1139,13 +1352,13 @@ const tracks3 = [
     render() {
       const S = song(62), bars = 14, key = 59, rng = makeRng(439);
       const prog = [[0, 'maj7'], [5, 'sus2'], [9, 'min7'], [2, 'sus2']];
-      const M = new Mixer(bars * S.bar + 6);
+      const M = new MusicMixer(bars * S.bar + 6);
       const scale = scaleNotes(key, 'majPent', 71, 91);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 57);
-        ch.forEach((n, i) => M.add(pad(mtof(n), S.bar * 1.3, { cut: 1100, attack: 1.6 }), S.at(b, 0), { gain: 0.11, pan: -0.2 + i * 0.2, send: 0.6 }));
-        if (rng() < 0.55) M.add(bell(mtof(pick(rng, scale))), S.at(b, pick(rng, [0, 1, 2, 3])), { gain: 0.11, send: 0.65 });
+        ch.forEach((n, i) => M.add(mPad(mtof(n), S.bar * 1.3, { cut: 1100, attack: 1.6 }), S.at(b, 0), { gain: 0.11, pan: -0.2 + i * 0.2, send: 0.6 }));
+        if (rng() < 0.55) M.add(mBell(mtof(pick(rng, scale))), S.at(b, pick(rng, [0, 1, 2, 3])), { gain: 0.11, send: 0.65 });
       }
       return M.render({ wet: 0.55, fadeOut: 6 });
     },
@@ -1156,16 +1369,16 @@ const tracks3 = [
     render() {
       const S = song(86), bars = 20, key = 57, rng = makeRng(443);
       const prog = [[0, 'maj'], [9, 'min'], [5, 'maj'], [0, 'maj']];
-      const M = new Mixer(bars * S.bar + 4);
+      const M = new MusicMixer(bars * S.bar + 4);
       const scale = scaleNotes(key, 'majPent', 69, 88);
       const A = motif(rng, scale.length);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 57);
         const arp = [ch[0], ch[1], ch[2], ch[1]];
-        arp.forEach((n, i) => M.add(pluck(mtof(n), S.beat * 0.9, { bright: 0.4, decay: 0.993 }), S.at(b, i), { gain: 0.24, pan: i % 2 ? 0.25 : -0.25, send: 0.3 }));
-        if (b >= 4) M.add(bass(mtof(root - 24), S.beat * 0.9, 1), S.at(b, 0), { gain: 0.34, send: 0 });
-        if (b >= 7 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mallet(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.22, send: 0.3 });
+        arp.forEach((n, i) => M.add(mPluck(mtof(n), S.beat * 0.9, { bright: 0.4, decay: 0.993 }), S.at(b, i), { gain: 0.24, pan: i % 2 ? 0.25 : -0.25, send: 0.3 }));
+        if (b >= 4) M.add(mBass(mtof(root - 24), S.beat * 0.9, 1), S.at(b, 0), { gain: 0.34, send: 0 });
+        if (b >= 7 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mMallet(mtof(n.note), n.len * S.beat), S.at(b, n.pos), { gain: 0.22, send: 0.3 });
       }
       return M.render({ wet: 0.35, fadeOut: 4 });
     },
@@ -1176,20 +1389,20 @@ const tracks3 = [
     render() {
       const S = song(128), bars = 20, key = 55, rng = makeRng(449);
       const prog = [[0, 'min'], [5, 'min'], [8, 'maj'], [10, 'maj']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'minor', 67, 88);
       const A = motif(rng, scale.length, [[0, 0.5, 1, 1.5], [0, 1, 2, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 58);
         const rise = Math.min(1, b / 14);
-        for (let i = 0; i < 8; i++) M.add(pulse(mtof(ch[i % 3] + 12), S.beat * 0.15, { duty: 0.25 + rise * 0.2 }), S.at(b, i * 0.5), { gain: 0.1 + 0.08 * rise, send: 0.2 });
+        for (let i = 0; i < 8; i++) M.add(mPulse(mtof(ch[i % 3] + 12), S.beat * 0.15, { duty: 0.25 + rise * 0.2 }), S.at(b, i * 0.5), { gain: 0.1 + 0.08 * rise, send: 0.2 });
         if (b >= 3) {
-          [0, 1, 2, 3].forEach((p) => M.add(kick(1), S.at(b, p), { gain: 0.55 + 0.2 * rise, bus: 'd', send: 0 }));
-          [1, 3].forEach((p) => M.add(clap(), S.at(b, p), { gain: 0.35, bus: 'd', send: 0.3 }));
-          M.add(sawBass(mtof(root - 24), S.beat * 0.38), S.at(b, 0), { gain: 0.34, send: 0 });
+          [0, 1, 2, 3].forEach((p) => M.add(mKick(1), S.at(b, p), { gain: 0.55 + 0.2 * rise, bus: 'd', send: 0 }));
+          [1, 3].forEach((p) => M.add(mClap(), S.at(b, p), { gain: 0.35, bus: 'd', send: 0.3 }));
+          M.add(mSawBass(mtof(root - 24), S.beat * 0.38), S.at(b, 0), { gain: 0.34, send: 0 });
         }
-        if (b >= 10 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(pulse(mtof(n.note + 12), n.len * S.beat * 0.7, { duty: 0.35 }), S.at(b, n.pos), { gain: 0.22, send: 0.3 });
+        if (b >= 10 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mPulse(mtof(n.note + 12), n.len * S.beat * 0.7, { duty: 0.35 }), S.at(b, n.pos), { gain: 0.22, send: 0.3 });
       }
       return M.render({ wet: 0.22, fadeOut: 2 });
     },
@@ -1200,18 +1413,18 @@ const tracks3 = [
     render() {
       const S = song(98, 0.08), bars = 22, key = 60, rng = makeRng(457);
       const prog = [[0, 'maj7'], [5, 'dom7'], [9, 'min7'], [2, 'min7']];
-      const M = new Mixer(bars * S.bar + 3);
+      const M = new MusicMixer(bars * S.bar + 3);
       const scale = scaleNotes(key, 'major', 69, 89);
       const A = motif(rng, scale.length, [[0, 1, 2.5], [0.5, 1.5, 3]]);
       for (let b = 0; b < bars; b++) {
         const [iv, q] = prog[b % 4];
         const root = key + iv, ch = voicing(root, q, 58);
-        ch.forEach((n, i) => M.add(epiano(mtof(n), S.beat * 0.7), S.at(b, i * 0.5), { gain: 0.17, pan: -0.2 + i * 0.13, send: 0.25 }));
+        ch.forEach((n, i) => M.add(mEpiano(mtof(n), S.beat * 0.7), S.at(b, i * 0.5), { gain: 0.17, pan: -0.2 + i * 0.13, send: 0.25 }));
         if (b >= 4) {
-          M.add(bass(mtof(root - 24), S.beat * 0.7, 1.1), S.at(b, 0), { gain: 0.34, send: 0 });
-          [1, 3].forEach((p) => M.add(hat(), S.at(b, p), { gain: 0.08, bus: 'd', send: 0.05 }));
+          M.add(mBass(mtof(root - 24), S.beat * 0.7, 1.1), S.at(b, 0), { gain: 0.34, send: 0 });
+          [1, 3].forEach((p) => M.add(mHat(), S.at(b, p), { gain: 0.08, bus: 'd', send: 0.05 }));
         }
-        if (b >= 6 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(sineLead(mtof(n.note), n.len * S.beat * 0.85, 0.015), S.at(b, n.pos), { gain: 0.22, pan: 0.12, send: 0.3 });
+        if (b >= 6 && b < bars - 2) for (const n of realize(A, b % 2, scale, ch)) M.add(mSineLead(mtof(n.note), n.len * S.beat * 0.85, 0.015), S.at(b, n.pos), { gain: 0.22, pan: 0.12, send: 0.3 });
       }
       return M.render({ wet: 0.3, fadeOut: 3 });
     },

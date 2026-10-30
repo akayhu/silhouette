@@ -24,9 +24,9 @@ export const audioCategoryOf = (m: MediaItem | undefined): 'music' | 'voice' | '
 };
 export const audioTrackOf = (a: AudioClip, media: MediaItem[]): TrackKey => `audio-${audioCategoryOf(media.find((m) => m.id === a.mediaId))}`;
 
-/** 選取項目對應到哪一條軌道；音訊依素材類型分成三條獨立軌道 */
-export const trackOf = (item: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string }, d: Pick<ProjectData, 'audio' | 'media'>): TrackKey => {
-  if (item.type === 'clip') return 'main';
+/** 選取項目對應到哪一條軌道；音訊依素材類型分成三條獨立軌道。標記不屬於任何軌道，不會真的鎖定 */
+export const trackOf = (item: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string }, d: Pick<ProjectData, 'audio' | 'media'>): TrackKey => {
+  if (item.type === 'clip' || item.type === 'marker') return 'main';
   if (item.type !== 'audio') return item.type;
   const clip = d.audio.find((a) => a.id === item.id);
   return clip ? audioTrackOf(clip, d.media) : 'audio-music';
@@ -283,8 +283,8 @@ export function moveMainClip(d: ProjectData, from: number, to: number): ProjectD
   return { ...d, clips };
 }
 
-/** 一次刪除多個項目：音訊與字幕直接移除，主軌片段用波紋刪除讓後面的內容補上 */
-export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string }[]): ProjectData {
+/** 一次刪除多個項目：音訊與字幕直接移除，主軌片段用波紋刪除讓後面的內容補上。標記不是軌道項目，呼叫端應另外處理 */
+export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string }[]): ProjectData {
   const ids = new Set(items.filter((i) => !isLocked(d, trackOf(i, d))).map((i) => i.id));
   const ranges = layoutMain(d.clips)
     .filter((c) => ids.has(c.id))
@@ -300,7 +300,7 @@ export function removeItems(d: ProjectData, items: { type: 'clip' | 'audio' | 'c
 }
 
 export type TrimSide = 'left' | 'right';
-export type TrimItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string };
+export type TrimItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string };
 
 /**
  * 向左裁剪／向右裁剪：把項目在播放頭左邊（或右邊）的部分剪掉。

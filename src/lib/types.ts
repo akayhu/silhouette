@@ -207,6 +207,13 @@ export interface StickerItem {
 /** 時間軸的軌道：音訊依類型（背景音樂／人聲／音效）分成各自獨立的軌道，可各自鎖定、靜音 */
 export type TrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio-music' | 'audio-voice' | 'audio-sfx';
 
+/** 時間軸標記：不屬於任何軌道，單純標出某個時間點（節拍、轉場點…），方便之後點擊跳轉 */
+export interface Marker {
+  id: string;
+  time: number;
+  label?: string;
+}
+
 /** 影片封面：從影片挑一格畫面（或用一張圖片），再加上封面標題 */
 export interface VideoCover {
   source: 'frame' | 'image';
@@ -236,6 +243,7 @@ export interface ProjectData {
   captions: Caption[];
   stickers: StickerItem[];
   overlays: OverlayClip[];
+  markers: Marker[];
   duration: number;
 }
 

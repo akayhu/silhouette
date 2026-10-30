@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { ProjectData, TrackKey } from '../lib/types';
 import { totalDuration } from '../lib/timeline';
 
-export type SelItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay'; id: string };
+export type SelItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string };
 export type Selection = SelItem | null;
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict';
 
@@ -50,7 +50,7 @@ const HISTORY = 100;
 
 const withDuration = (d: ProjectData): ProjectData => ({ ...d, duration: totalDuration(d) });
 
-const empty: ProjectData = { aspect: '9:16', media: [], clips: [], audio: [], captions: [], stickers: [], overlays: [], duration: 0 };
+const empty: ProjectData = { aspect: '9:16', media: [], clips: [], audio: [], captions: [], stickers: [], overlays: [], markers: [], duration: 0 };
 
 export const useEditor = create<EditorState>((set, get) => ({
   projectId: null,
@@ -72,7 +72,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({
       projectId,
       name,
-      data: withDuration({ ...empty, ...data, audio: data.audio ?? [], stickers: data.stickers ?? [], overlays: data.overlays ?? [] }),
+      data: withDuration({ ...empty, ...data, audio: data.audio ?? [], stickers: data.stickers ?? [], overlays: data.overlays ?? [], markers: data.markers ?? [] }),
       past: [],
       future: [],
       selection: null,

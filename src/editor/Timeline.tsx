@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { AudioLines, Film, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, Volume2, VolumeX, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
+import { AudioLines, Film, Flag, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, Volume2, VolumeX, X, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
 import type { TrimSide } from '../lib/timeline';
 import { audioCategoryOf, clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, TRACK_LABELS, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
-import type { AudioClip, Caption, TrackKey } from '../lib/types';
+import type { AudioClip, Caption, Marker, TrackKey } from '../lib/types';
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { useEditor, type SelItem } from './store';
 import { IconBtn } from './Editor';
@@ -61,7 +61,7 @@ function TrimIcon({ side }: { side: TrimSide }) {
   );
 }
 
-export function Timeline({ height, seek, split, trim, remove, togglePlay, onCover }: { height: number; seek: (t: number) => void; split: () => void; trim: (side: TrimSide) => void; remove: () => void; togglePlay: () => void; onCover: () => void }) {
+export function Timeline({ height, seek, split, trim, remove, togglePlay, onCover, addMarker }: { height: number; seek: (t: number) => void; split: () => void; trim: (side: TrimSide) => void; remove: () => void; togglePlay: () => void; onCover: () => void; addMarker: () => void }) {
   const coverThumb = useEditor((s) => s.data.cover?.thumb);
   const data = useEditor((s) => s.data);
   const zoom = useEditor((s) => s.zoom);
@@ -101,6 +101,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
     data.stickers.forEach((st) => !skip(st.id) && pts.push(st.start, st.end));
     data.overlays.forEach((o) => !skip(o.id) && pts.push(o.start, overlayEnd(o)));
     data.audio.forEach((a) => !skip(a.id) && pts.push(a.start, a.start + clipLength(a)));
+    data.markers.forEach((m) => pts.push(m.time));
     return pts;
   };
   const snap = (t: number, pts: number[]) => {
@@ -511,6 +512,10 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
         <IconBtn label="刪除（Delete）" onClick={remove} disabled={!selected.length}>
           <Trash2 className="size-4" />
         </IconBtn>
+        <span className="mx-1 h-5 w-px bg-line" />
+        <IconBtn label="在播放頭加標記（M）" onClick={addMarker}>
+          <Flag className="size-4" />
+        </IconBtn>
         {selected.length > 1 ? (
           <span className="ml-3 flex items-center gap-2 text-xs font-bold text-brand">
             已選取 {selected.length} 個項目
@@ -602,7 +607,23 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
           }}
         >
           <div className="relative" style={{ width }}>
-            <Ruler width={width} zoom={zoom} onPointerDown={scrub} />
+            <Ruler
+              width={width}
+              zoom={zoom}
+              onPointerDown={scrub}
+              markers={data.markers}
+              selIds={selIds}
+              onMarkerClick={(m, e) => {
+                e.stopPropagation();
+                seek(m.time);
+                select({ type: 'marker', id: m.id });
+              }}
+              onMarkerDelete={(m, e) => {
+                e.stopPropagation();
+                useEditor.getState().commit((d) => ({ ...d, markers: d.markers.filter((x) => x.id !== m.id) }));
+                select(null);
+              }}
+            />
             <div ref={tracksRef} className="relative" onPointerDown={onBackground}>
               {/* 字幕軌 */}
               <div className={`relative h-10 border-b border-line/60 ${lockedRow('caption')}`}>
@@ -746,6 +767,10 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
                 </div>
               ))}
               {marquee && <div className="pointer-events-none absolute z-40 rounded-md border border-brand bg-brand/10" style={marquee} />}
+              {/* 標記的輔助對齊線，貫穿所有軌道方便對齊剪輯點 */}
+              {data.markers.map((m) => (
+                <div key={m.id} className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-sun/50" style={{ left: x(m.time) }} />
+              ))}
             </div>
             {/* 播放頭 */}
             <div className="pointer-events-none absolute top-0 bottom-0 z-30 w-px bg-coral" style={{ left: x(time) }}>
@@ -862,7 +887,23 @@ function Wave() {
   );
 }
 
-function Ruler({ width, zoom, onPointerDown }: { width: number; zoom: number; onPointerDown: (e: RPointerEvent<HTMLDivElement>) => void }) {
+function Ruler({
+  width,
+  zoom,
+  onPointerDown,
+  markers,
+  selIds,
+  onMarkerClick,
+  onMarkerDelete,
+}: {
+  width: number;
+  zoom: number;
+  onPointerDown: (e: RPointerEvent<HTMLDivElement>) => void;
+  markers: Marker[];
+  selIds: Set<string>;
+  onMarkerClick: (m: Marker, e: RMouseEvent<HTMLButtonElement>) => void;
+  onMarkerDelete: (m: Marker, e: RMouseEvent<HTMLButtonElement>) => void;
+}) {
   const steps = [0.5, 1, 2, 5, 10, 15, 30, 60];
   const major = steps.find((s) => s * zoom >= 70) ?? 120;
   const ticks: number[] = [];
@@ -878,6 +919,33 @@ function Ruler({ width, zoom, onPointerDown }: { width: number; zoom: number; on
           ))}
         </div>
       ))}
+      {markers.map((m) => {
+        const active = selIds.has(m.id);
+        return (
+          <div key={m.id} className="group/marker absolute bottom-0 z-10 -translate-x-1/2" style={{ left: PAD + m.time * zoom }}>
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => onMarkerDelete(m, e)}
+              title="刪除標記"
+              aria-label={`刪除標記 ${formatTime(m.time)}`}
+              className="absolute -top-4 left-1/2 grid size-3.5 -translate-x-1/2 place-items-center rounded-full bg-ink text-white opacity-0 transition group-hover/marker:opacity-100 hover:bg-brand"
+            >
+              <X className="size-2.5" strokeWidth={3} />
+            </button>
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => onMarkerClick(m, e)}
+              title={formatTime(m.time)}
+              aria-label={`標記 ${formatTime(m.time)}`}
+              className="block cursor-pointer"
+            >
+              <svg viewBox="0 0 12 14" className={`h-3.5 w-3 drop-shadow-sm transition ${active ? 'text-brand' : 'text-sun group-hover/marker:text-brand'}`} fill="currentColor" aria-hidden>
+                <path d="M1 0h9.3a1 1 0 0 1 .8 1.6L8 6l3.1 4.4a1 1 0 0 1-.8 1.6H1z" />
+              </svg>
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
 import { ensureUnlocked } from './locks';
+import { uid } from '../lib/format';
 import type { Aspect } from '../lib/types';
 import { Button, Logo, notify } from '../components/ui';
 import { useEditor } from './store';
@@ -165,10 +166,17 @@ export default function Editor() {
   const removeSelected = useCallback(() => {
     const { selected, commit, select, data } = useEditor.getState();
     if (!selected.length) return;
+    // 標記不屬於任何軌道，不受鎖定影響，跟其他項目分開處理
+    const markerIds = new Set(selected.filter((s) => s.type === 'marker').map((s) => s.id));
+    const rest = selected.filter((s) => s.type !== 'marker');
     // 刪主軌片段會波紋移動其他軌；主軌鎖定時整個不動
-    if (selected.some((s) => s.type === 'clip') && !ensureUnlocked('main')) return;
-    if (selected.every((s) => isLocked(data, trackOf(s, data)))) return void ensureUnlocked(trackOf(selected[0], data));
-    commit((d) => removeItems(d, selected));
+    if (rest.some((s) => s.type === 'clip') && !ensureUnlocked('main')) return;
+    if (rest.length && rest.every((s) => isLocked(data, trackOf(s, data)))) return void ensureUnlocked(trackOf(rest[0], data));
+    commit((d) => {
+      let next = rest.length ? removeItems(d, rest) : d;
+      if (markerIds.size) next = { ...next, markers: next.markers.filter((m) => !markerIds.has(m.id)) };
+      return next;
+    });
     select(null);
   }, []);
 
@@ -182,6 +190,14 @@ export default function Editor() {
       ...data.audio.map((a) => ({ type: 'audio' as const, id: a.id })),
     ];
     setSelected(all.filter((i) => !isLocked(data, trackOf(i, data))));
+  }, []);
+
+  /** 在播放頭加一個時間軸標記 */
+  const addMarker = useCallback(() => {
+    const { time, commit, select } = useEditor.getState();
+    const id = uid();
+    commit((d) => ({ ...d, markers: [...d.markers, { id, time }].sort((a, b) => a.time - b.time) }));
+    select({ type: 'marker', id });
   }, []);
 
   useEffect(() => {
@@ -218,6 +234,9 @@ export default function Editor() {
       } else if (!mod && e.code === 'KeyK') {
         e.preventDefault();
         togglePlay();
+      } else if (!mod && e.code === 'KeyM') {
+        e.preventDefault();
+        addMarker();
       } else if (!mod && (e.code === 'KeyJ' || e.code === 'KeyL')) {
         e.preventDefault();
         const step = e.shiftKey ? 5 : 1;
@@ -233,7 +252,7 @@ export default function Editor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [loaded, togglePlay, split, trim, removeSelected, selectAll, seek, undo, redo]);
+  }, [loaded, togglePlay, split, trim, removeSelected, selectAll, addMarker, seek, undo, redo]);
 
   const openExport = () => {
     engineRef.current?.pause();
@@ -338,7 +357,7 @@ export default function Editor() {
     />
   );
   // 引導中時間軸縮小，讓位給引導步驟（不改使用者設定的高度）
-  const timelinePanel = <Timeline height={guide ? Math.min(layout.timeline, 190) : layout.timeline} seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} onCover={() => setCoverOpen(true)} />;
+  const timelinePanel = <Timeline height={guide ? Math.min(layout.timeline, 190) : layout.timeline} seek={seek} split={split} trim={trim} remove={removeSelected} togglePlay={togglePlay} onCover={() => setCoverOpen(true)} addMarker={addMarker} />;
 
   return (
     <div data-theme={layout.theme} className="flex h-screen min-w-[1024px] flex-col overflow-hidden bg-canvas">

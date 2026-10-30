@@ -405,7 +405,7 @@ app.post('/api/projects', requireAuth, (req, res) => {
   }
   const id = randomUUID();
   const aspect = ['9:16', '16:9', '1:1'].includes(req.body.aspect) ? req.body.aspect : '9:16';
-  const data = { aspect, media: [], clips: [], audio: [], captions: [], stickers: [], overlays: [], duration: 0 };
+  const data = { aspect, media: [], clips: [], audio: [], captions: [], stickers: [], overlays: [], markers: [], duration: 0 };
   const name = String(req.body.name || '').trim() || '未命名專案';
   db.prepare(`INSERT INTO projects (id, user_id, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
     id, req.user.id, name, JSON.stringify(data), now(), now(),

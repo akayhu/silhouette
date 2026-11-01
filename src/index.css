@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* 給編輯器深色主題用的 dark: 變體（套在 data-theme="dark" 容器底下的元素），
+   跟 Tailwind 內建以 OS 色彩模式判斷的 dark: 不一樣，這裡是看畫面上的主題切換開關 */
+@custom-variant dark (&:where([data-theme='dark'] *));
+
 @theme {
   --font-sans: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, sans-serif;
 

@@ -5,6 +5,7 @@ import { ToastProvider, UpgradeProvider } from './components/ui';
 import Landing from './pages/Landing';
 import Auth from './pages/Auth';
 import Pricing from './pages/Pricing';
+import Faq from './pages/Faq';
 import Checkout from './pages/Checkout';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
@@ -34,6 +35,7 @@ function AppContent() {
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/pricing" element={<Pricing />} />
+                <Route path="/faq" element={<Faq />} />
                 <Route path="/login" element={<Auth mode="login" />} />
                 <Route path="/register" element={<Auth mode="register" />} />
                 <Route path="/checkout" element={<RequireAuth><Checkout /></RequireAuth>} />

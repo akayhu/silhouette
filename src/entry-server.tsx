@@ -6,11 +6,12 @@ import { AuthProvider } from './lib/auth';
 import { ToastProvider, UpgradeProvider } from './components/ui';
 import Landing from './pages/Landing';
 import Pricing from './pages/Pricing';
+import Faq from './pages/Faq';
 
 export { PUBLIC_ROUTES } from './lib/seo';
 
 /** 要預先產生的頁面（只放不需要登入、內容固定的頁面） */
-export const PRERENDER_ROUTES = ['/', '/pricing'];
+export const PRERENDER_ROUTES = ['/', '/pricing', '/faq'];
 
 export function render(url: string) {
   return renderToString(
@@ -22,6 +23,7 @@ export function render(url: string) {
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/pricing" element={<Pricing />} />
+                <Route path="/faq" element={<Faq />} />
               </Routes>
             </UpgradeProvider>
           </ToastProvider>

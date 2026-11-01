@@ -1,0 +1,118 @@
+// 資料庫：schema、舊資料庫補欄位的 migration，以及 db 實例本身
+import { DatabaseSync } from 'node:sqlite';
+import path from 'node:path';
+import { DATA_DIR } from './env.mjs';
+
+export const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
+db.exec(`
+  PRAGMA journal_mode = WAL;
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    plan TEXT NOT NULL DEFAULT 'free',
+    plan_renews_at TEXT,
+    plan_cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    data TEXT NOT NULL,
+    thumbnail TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS project_creations (
+    user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS exports (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    file TEXT NOT NULL,
+    meta TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    card_last4 TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ecpay_orders (
+    trade_no TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    promo_code TEXT
+  );
+  CREATE TABLE IF NOT EXISTS promo_codes (
+    code TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'months',
+    months INTEGER NOT NULL,
+    discount_amount INTEGER,
+    created_by TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS promo_redemptions (
+    code TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    redeemed_at TEXT NOT NULL,
+    PRIMARY KEY (code, user_id)
+  );
+  CREATE TABLE IF NOT EXISTS email_verifications (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS password_resets (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS voices (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    prompt_text TEXT NOT NULL,
+    file TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+`);
+
+export const now = () => new Date().toISOString();
+
+// 舊資料庫補欄位：role（user／admin）、plan_source（paid 自己付費／admin 管理者開通）
+const userColumns = db.prepare(`PRAGMA table_info(users)`).all().map((c) => c.name);
+if (!userColumns.includes('role')) db.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`);
+if (!userColumns.includes('plan_source')) db.exec(`ALTER TABLE users ADD COLUMN plan_source TEXT`);
+
+// 舊資料庫補欄位：優惠碼加上「折扣金額」類型、訂單記錄用了哪組優惠碼
+const promoColumns = db.prepare(`PRAGMA table_info(promo_codes)`).all().map((c) => c.name);
+if (!promoColumns.includes('kind')) db.exec(`ALTER TABLE promo_codes ADD COLUMN kind TEXT NOT NULL DEFAULT 'months'`);
+if (!promoColumns.includes('discount_amount')) db.exec(`ALTER TABLE promo_codes ADD COLUMN discount_amount INTEGER`);
+const ecpayOrderColumns = db.prepare(`PRAGMA table_info(ecpay_orders)`).all().map((c) => c.name);
+if (!ecpayOrderColumns.includes('promo_code')) db.exec(`ALTER TABLE ecpay_orders ADD COLUMN promo_code TEXT`);
+
+// 舊資料庫補欄位：Email 驗證（舊帳號視為已驗證，避免這次改動把既有使用者鎖在外面）
+if (!userColumns.includes('email_verified_at')) {
+  db.exec(`ALTER TABLE users ADD COLUMN email_verified_at TEXT`);
+  db.exec(`UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL`);
+}
+
+// 舊資料庫補欄位：Google 登入帳號的 Google 使用者 ID（用來比對是否已經綁過）
+if (!userColumns.includes('google_id')) db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT`);

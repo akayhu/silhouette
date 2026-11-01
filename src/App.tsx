@@ -2,24 +2,28 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { createBrowserRouter, RouterProvider, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, RequireAuth } from './lib/auth';
 import { ToastProvider, UpgradeProvider } from './components/ui';
+// 行銷／SEO 頁面維持一般匯入：首頁等六頁會預先產生靜態 HTML，這些元件本來就一定要載入，
+// eager 匯入讓它們跟主要的路由程式碼放在同一個 chunk，不必多一次網路請求。
 import Landing from './pages/Landing';
-import Auth from './pages/Auth';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
 import Pricing from './pages/Pricing';
 import Faq from './pages/Faq';
 import Ai from './pages/Ai';
 import Local from './pages/Local';
 import Features from './pages/Features';
-import Checkout from './pages/Checkout';
-import Dashboard from './pages/Dashboard';
-import Tutorial from './pages/Tutorial';
-import FeatureGuide from './pages/FeatureGuide';
-import Account from './pages/Account';
 import NotFound from './pages/NotFound';
 import { applySeo } from './lib/seo';
 import { RequireAdmin } from './pages/admin/AdminLayout';
 
+// 登入後才會用到的頁面（含登入／註冊本身）改成 lazy：訪客看首頁等行銷頁時
+// 不會多下載這些程式碼，縮小第一次載入的主要 bundle。
+const Auth = lazy(() => import('./pages/Auth'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Tutorial = lazy(() => import('./pages/Tutorial'));
+const FeatureGuide = lazy(() => import('./pages/FeatureGuide'));
+const Account = lazy(() => import('./pages/Account'));
 const Editor = lazy(() => import('./editor/Editor'));
 const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'));
 const AdminMembers = lazy(() => import('./pages/admin/AdminMembers'));

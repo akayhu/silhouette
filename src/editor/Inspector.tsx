@@ -159,6 +159,13 @@ export function Inspector() {
             {formatTime(a.start, true)} – {formatTime(a.start + clipLength(a), true)}
           </div>
         </Section>
+        <Section title="速度">
+          <Chips
+            options={SPEEDS.map((s) => ({ id: s, label: `${s}x` }))}
+            value={a.speed ?? 1}
+            onChange={(speed) => commit((d) => ({ ...d, audio: d.audio.map((x) => (x.id === a.id ? { ...x, speed } : x)) }))}
+          />
+        </Section>
         <Section title="音量">
           <Slider label="音量" value={Math.round(a.volume * 100)} min={0} max={200} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => live((d) => ({ ...d, audio: d.audio.map((x) => (x.id === a.id ? { ...x, volume: v / 100 } : x)) }))} />
         </Section>
@@ -538,6 +545,10 @@ function MultiInspector() {
       {auds.length > 0 && (
         <Section title={`音訊（${auds.length} 段）`}>
           <div className="space-y-3">
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-ink-soft">速度</div>
+              <Chips options={SPEEDS.map((v) => ({ id: v, label: `${v}x` }))} value={auds[0].speed ?? 1} onChange={(speed) => setAuds({ speed }, true)} />
+            </div>
             <Slider label="音量" value={Math.round(auds[0].volume * 100)} min={0} max={200} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => setAuds({ volume: v / 100 })} />
             <Slider label="淡入" value={Math.min(auds[0].fadeIn ?? 0, maxFade)} min={0} max={maxFade} step={0.1} format={(v) => (v ? `${v.toFixed(1)} 秒` : '無')} onStart={checkpoint} onChange={(v) => setAuds({ fadeIn: v })} />
             <Slider label="淡出" value={Math.min(auds[0].fadeOut ?? 0, maxFade)} min={0} max={maxFade} step={0.1} format={(v) => (v ? `${v.toFixed(1)} 秒` : '無')} onStart={checkpoint} onChange={(v) => setAuds({ fadeOut: v })} />

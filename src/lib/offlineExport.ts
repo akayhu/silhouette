@@ -207,7 +207,7 @@ export async function mixAudio(data: ProjectData, duration: number, signal: Abor
     const buffer = await audioOf(m.url, true, m.name);
     if (!buffer) continue;
     const len = clipLength(a);
-    await play(buffer, a.start, a.in, a.out - a.in, 1, (g) => {
+    await play(buffer, a.start, a.in, a.out - a.in, a.speed ?? 1, (g) => {
       g.setValueAtTime(a.fadeIn ? 0 : a.volume, a.start);
       if (a.fadeIn) g.linearRampToValueAtTime(a.volume, a.start + Math.min(a.fadeIn, len));
       if (a.fadeOut) {

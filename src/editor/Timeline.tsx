@@ -435,6 +435,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
     if (!press(e, { type: 'audio', id }, mode)) return;
     const orig = data.audio.find((a) => a.id === id)!;
     const max = media.get(orig.mediaId)?.duration ?? orig.out;
+    const speed = orig.speed ?? 1;
     const len = clipLength(orig);
     const pts = snapPoints(id);
     drag(e, (dt) =>
@@ -450,11 +451,11 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
           }
           if (mode === 'left') {
             const startT = snap(orig.start + dt, pts);
-            const inPt = Math.max(0, Math.min(orig.out - MIN_CLIP, orig.in + (startT - orig.start)));
-            return { ...a, in: inPt, start: orig.start + (inPt - orig.in) };
+            const inPt = Math.max(0, Math.min(orig.out - MIN_CLIP * speed, orig.in + (startT - orig.start) * speed));
+            return { ...a, in: inPt, start: orig.start + (inPt - orig.in) / speed };
           }
           const endT = snap(orig.start + len + dt, pts);
-          return { ...a, out: Math.min(max, Math.max(orig.in + MIN_CLIP, orig.out + (endT - orig.start - len))) };
+          return { ...a, out: Math.min(max, Math.max(orig.in + MIN_CLIP * speed, orig.in + (endT - orig.start) * speed)) };
         }),
       })),
     );

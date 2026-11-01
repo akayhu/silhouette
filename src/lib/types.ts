@@ -118,6 +118,8 @@ export interface AudioClip {
   /** 淡入／淡出秒數 */
   fadeIn?: number;
   fadeOut?: number;
+  /** 播放快慢，1 為原速 */
+  speed?: number;
   /** 智能剪輯模板加的配樂／音效（重新套用模板時會先移除） */
   role?: 'template';
 }

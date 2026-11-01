@@ -32,14 +32,19 @@ export interface ExportOptions extends ExportReporter {
 }
 
 export function validateExport(data: ProjectData) {
-  const used = [...data.clips, ...data.audio, ...data.overlays];
-  for (const clip of used) {
+  // 畫面軌（主軌、疊加）只能放影片／圖片；音訊軌才能放音訊素材，分開標記才不會混淆
+  const used = [
+    ...data.clips.map((clip) => ({ clip, onScreen: true })),
+    ...data.overlays.map((clip) => ({ clip, onScreen: true })),
+    ...data.audio.map((clip) => ({ clip, onScreen: false })),
+  ];
+  for (const { clip, onScreen } of used) {
     const media = data.media.find((m) => m.id === clip.mediaId);
     if (!media?.url) throw new Error(media?.local ? `素材「${media.name}」不在這台裝置上，請到素材庫按「重新提供素材」後再匯出。` : '專案有遺失的素材，請重新加入素材後再匯出。');
-    if ('speed' in clip && media.kind === 'audio') {
+    if (onScreen && media.kind === 'audio') {
       throw new Error(`素材「${media.name}」不是影片或圖片，請從畫面軌移除。`);
     }
-    const speed = 'speed' in clip ? clip.speed : 1;
+    const speed = clip.speed ?? 1;
     if (!Number.isFinite(clip.in) || !Number.isFinite(clip.out) || clip.in < 0 || clip.out <= clip.in || !Number.isFinite(speed) || speed <= 0) {
       throw new Error(`素材「${media.name}」的剪輯範圍或速度無效，請調整後再試。`);
     }

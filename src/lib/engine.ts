@@ -333,11 +333,12 @@ export class Engine {
     for (const a of this.data.audio) {
       const node = this.audios.get(a.id);
       if (!node) continue;
+      const speed = a.speed ?? 1;
       const len = clipLength(a);
       const local = t - a.start;
       if (local >= 0 && local < len) {
         const fade = Math.min(1, a.fadeIn ? local / a.fadeIn : 1, a.fadeOut ? (len - local) / a.fadeOut : 1);
-        this.syncNode(node, a.in + local, 1, a.volume * Math.max(0, fade));
+        this.syncNode(node, a.in + local * speed, speed, a.volume * Math.max(0, fade));
       } else if (!node.el.paused) node.el.pause();
     }
   }

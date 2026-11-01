@@ -23,7 +23,7 @@ export const LAYOUT_DEFAULT = (): EditorLayout => ({
   mode: 'side',
   compactTools: false,
   toolsExpanded: true,
-  theme: 'light',
+  theme: 'dark',
 });
 
 /** 每個區塊的最小／最大；最大值依視窗大小計算，中間的屬性區至少保留 240px，上方至少保留 200px */

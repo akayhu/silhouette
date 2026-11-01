@@ -173,10 +173,12 @@ function parseCookies(header = '') {
   );
 }
 
+// 正式環境（APP_URL 是 https）才加 Secure，本機 http://localhost 開發不受影響
+const COOKIE_SECURE = APP_URL.startsWith('https://') ? '; Secure' : '';
 function setSessionCookie(res, token) {
   res.setHeader(
     'Set-Cookie',
-    `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}`,
+    `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}${COOKIE_SECURE}`,
   );
 }
 
@@ -518,7 +520,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
   const { sid } = parseCookies(req.headers.cookie);
   if (sid) db.prepare(`DELETE FROM sessions WHERE token=?`).run(sid);
-  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+  res.setHeader('Set-Cookie', `sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${COOKIE_SECURE}`);
   res.json({ ok: true });
 });
 
@@ -1391,7 +1393,19 @@ app.get('/api/tts/jobs/:id', requireAuth, (req, res) => {
 // ---------- 正式環境：提供建置好的網站（npm run build 之後） ----------
 // 預先產生的頁面直接回傳；登入後才用的頁面回傳空外殼；其他網址回 404，避免軟 404 被搜尋引擎收錄
 const DIST = path.join(ROOT, '..', 'dist');
-const APP_ROUTES = [/^\/login\/?$/, /^\/register\/?$/, /^\/dashboard\/?$/, /^\/account\/?$/, /^\/checkout\/?$/, /^\/editor\/[^/]+\/?$/, /^\/admin(\/members)?\/?$/];
+const APP_ROUTES = [
+  /^\/login\/?$/,
+  /^\/register\/?$/,
+  /^\/forgot-password\/?$/,
+  /^\/reset-password\/?$/,
+  /^\/dashboard\/?$/,
+  /^\/tutorial\/?$/,
+  /^\/feature-guide\/?$/,
+  /^\/account\/?$/,
+  /^\/checkout\/?$/,
+  /^\/editor\/[^/]+\/?$/,
+  /^\/admin(\/members|\/promo-codes)?\/?$/,
+];
 if (fs.existsSync(path.join(DIST, 'app.html'))) {
   app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '1y', immutable: true }));
   app.use(express.static(DIST, { index: 'index.html', redirect: false }));

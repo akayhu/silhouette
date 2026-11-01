@@ -69,9 +69,9 @@ body {
   --color-surface: #1b1e24;
   --color-sunken: #14161b;
   --color-line: #2c2f37;
-  --color-ink: #f2f3f5;
-  --color-ink-soft: #b6bac2;
-  --color-ink-mute: #888c96;
+  --color-ink: #ffffff;
+  --color-ink-soft: #d4d6db;
+  --color-ink-mute: #9a9da5;
 
   --color-brand: #ff6354;
   --color-brand-hover: #ff8679;
@@ -96,6 +96,10 @@ body {
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.5);
   --shadow-pop: 0 12px 40px -12px rgb(0 0 0 / 0.6);
 
+  /* 文字顏色靠繼承：只改 --color-ink 變數不會讓已經從 body 繼承的 color 重新生效，
+     這裡用實際的 color 宣告重新起算，底下沒有自己設 text-ink 的元素才會吃到深色主題的白字 */
+  color: var(--color-ink);
+  background: var(--color-canvas);
   color-scheme: dark;
 }
 

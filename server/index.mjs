@@ -40,6 +40,12 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const RESEND_FROM = process.env.RESEND_FROM || '片刻剪趣 <onboarding@resend.dev>';
 const EMAIL_VERIFICATION_HOURS = 24;
 
+// ---------- Google 登入／註冊 ----------
+// 沒設定這兩個環境變數時，前端會顯示「需要先設定」的提示，不影響一般 Email 註冊
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_REDIRECT_URI = `${APP_URL}/api/auth/google/callback`;
+
 const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -136,6 +142,9 @@ if (!userColumns.includes('email_verified_at')) {
   db.exec(`ALTER TABLE users ADD COLUMN email_verified_at TEXT`);
   db.exec(`UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL`);
 }
+
+// 舊資料庫補欄位：Google 登入帳號的 Google 使用者 ID（用來比對是否已經綁過）
+if (!userColumns.includes('google_id')) db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT`);
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
@@ -380,6 +389,64 @@ app.post('/api/auth/login', (req, res) => {
   }
   createSession(res, user.id);
   res.json({ user: publicUser(refreshPlan(user)) });
+});
+
+// ---------- Google 登入／註冊：標準 OAuth2 授權碼流程，不經過第三方套件 ----------
+app.get('/api/auth/google', (req, res) => {
+  if (!GOOGLE_CLIENT_ID) return res.status(503).send('尚未設定 Google 登入（GOOGLE_CLIENT_ID）');
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+  url.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', 'openid email profile');
+  url.searchParams.set('prompt', 'select_account');
+  res.redirect(url.toString());
+});
+
+app.get('/api/auth/google/callback', async (req, res) => {
+  const code = String(req.query.code || '');
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !code) return res.redirect(`${APP_URL}/login?google=error`);
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tokenBody = await tokenRes.json();
+    if (!tokenRes.ok || !tokenBody.id_token) throw new Error(tokenBody.error_description || '換取權杖失敗');
+    // id_token 是直接從 Google 的 token endpoint（HTTPS、server-to-server）換來的，不需要另外驗簽
+    const payload = JSON.parse(Buffer.from(tokenBody.id_token.split('.')[1], 'base64url').toString('utf8'));
+    if (!payload.email || !payload.email_verified) throw new Error('Google 帳號沒有已驗證的 Email');
+    const email = String(payload.email).toLowerCase();
+
+    let user = db.prepare(`SELECT * FROM users WHERE google_id=? OR email=?`).get(payload.sub, email);
+    let isNew = false;
+    if (!user) {
+      isNew = true;
+      const id = randomUUID();
+      const trialEnds = new Date(Date.now() + TRIAL_DAYS * 86400_000).toISOString();
+      db.prepare(
+        `INSERT INTO users (id, email, name, password_hash, google_id, email_verified_at, plan, plan_source, plan_renews_at, plan_cancel_at_period_end, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'pro', 'trial', ?, 1, ?)`,
+      ).run(id, email, payload.name || email.split('@')[0], hashPassword(randomBytes(32).toString('hex')), payload.sub, now(), trialEnds, now());
+      user = db.prepare(`SELECT * FROM users WHERE id=?`).get(id);
+    } else if (!user.google_id || !user.email_verified_at) {
+      // 既有帳號第一次用 Google 登入：補上 google_id，並視同已驗證（Google 已經確認過這個 Email）
+      db.prepare(`UPDATE users SET google_id=?, email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?`).run(payload.sub, now(), user.id);
+      user = db.prepare(`SELECT * FROM users WHERE id=?`).get(user.id);
+    }
+    createSession(res, user.id);
+    res.redirect(`${APP_URL}/dashboard${isNew ? '?verified=1' : ''}`);
+  } catch (err) {
+    console.error('Google 登入失敗', err);
+    res.redirect(`${APP_URL}/login?google=error`);
+  }
 });
 
 app.post('/api/auth/logout', (req, res) => {

@@ -12,7 +12,13 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
   const navigate = useNavigate();
   const toast = useToast();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
-  const [error, setError] = useState(params.get('verify') === 'invalid' ? '驗證連結已失效或過期，請重新登入後再寄一次驗證信' : '');
+  const [error, setError] = useState(
+    params.get('verify') === 'invalid'
+      ? '驗證連結已失效或過期，請重新登入後再寄一次驗證信'
+      : params.get('google') === 'error'
+        ? 'Google 登入失敗，請再試一次或改用 Email 登入'
+        : '',
+  );
   const [needsVerify, setNeedsVerify] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
@@ -92,9 +98,8 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
           <h1 className="text-[34px] leading-tight font-black tracking-tight">{isLogin ? '歡迎回來' : '建立免費帳號'}</h1>
           <p className="mt-2 text-ink-soft">{isLogin ? '登入後繼續剪輯你的專案。' : '註冊就送 7 天專業版，不需信用卡。'}</p>
 
-          <button
-            type="button"
-            onClick={() => toast('Google 登入需要先設定 Google OAuth 用戶端 ID，目前請先用 Email 登入')}
+          <a
+            href="/api/auth/google"
             className="mt-8 flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-line bg-surface text-sm font-bold transition hover:border-ink"
           >
             <svg viewBox="0 0 48 48" className="size-5" aria-hidden>
@@ -104,7 +109,7 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
               <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
             </svg>
             使用 Google 帳號{isLogin ? '登入' : '註冊'}
-          </button>
+          </a>
 
           <div className="my-6 flex items-center gap-3 text-xs text-ink-mute">
             <span className="h-px flex-1 bg-line" /> 或使用 Email <span className="h-px flex-1 bg-line" />

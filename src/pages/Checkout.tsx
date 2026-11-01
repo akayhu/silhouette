@@ -7,6 +7,8 @@ import { isPaidPro, isTrial } from '../lib/plan';
 import { useAuth } from '../lib/auth';
 import { Button, Logo, inputClass, useToast } from '../components/ui';
 
+type AppliedPromo = { code: string } & ({ kind: 'months'; months: number } | { kind: 'discount'; discountAmount: number });
+
 export default function Checkout() {
   const { user, setUser } = useAuth();
   const toast = useToast();
@@ -15,14 +17,17 @@ export default function Checkout() {
   const [busy, setBusy] = useState(false);
   const [promo, setPromo] = useState('');
   const [promoBusy, setPromoBusy] = useState(false);
+  const [applied, setApplied] = useState<AppliedPromo | null>(null);
   const alreadyPro = useRef(isPaidPro(user)).current;
 
   if (alreadyPro) return <Navigate to="/account" replace />;
 
+  const price = applied?.kind === 'discount' ? Math.max(1, 399 - applied.discountAmount) : 399;
+
   const goToEcpay = async () => {
     setBusy(true);
     try {
-      const { actionUrl, fields } = await api.ecpayCheckout();
+      const { actionUrl, fields } = await api.ecpayCheckout(applied?.kind === 'discount' ? applied.code : undefined);
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = actionUrl;
@@ -41,11 +46,27 @@ export default function Checkout() {
     }
   };
 
-  const redeemPromo = async () => {
-    if (!promo.trim()) return;
+  const applyPromo = async () => {
+    const code = promo.trim();
+    if (!code) return;
     setPromoBusy(true);
     try {
-      const { user, months } = await api.redeemPromo(promo.trim());
+      const r = await api.checkPromo(code);
+      setApplied({ code, ...r });
+      toast(r.kind === 'discount' ? `已套用優惠碼，折抵 NT$${r.discountAmount}` : `這組優惠碼可以免費升級 ${r.months} 個月`, 'success');
+    } catch (err) {
+      setApplied(null);
+      toast((err as Error).message, 'error');
+    } finally {
+      setPromoBusy(false);
+    }
+  };
+
+  const redeemMonths = async () => {
+    if (applied?.kind !== 'months') return;
+    setPromoBusy(true);
+    try {
+      const { user, months } = await api.redeemPromo(applied.code);
       setUser(user);
       toast(`優惠碼兌換成功，已升級專業版 ${months} 個月`, 'success');
       if (location.key !== 'default') navigate(-1);
@@ -74,9 +95,16 @@ export default function Checkout() {
           <div className="mt-6 rounded-3xl border border-line bg-surface p-6 shadow-card">
             <div className="flex items-baseline justify-between">
               <span className="font-bold">片刻剪趣 專業版</span>
-              <span className="text-2xl font-extrabold">NT$399</span>
+              {applied?.kind === 'discount' ? (
+                <span className="flex items-baseline gap-2">
+                  <span className="text-sm text-ink-mute line-through">NT$399</span>
+                  <span className="text-2xl font-extrabold text-brand">NT${price}</span>
+                </span>
+              ) : (
+                <span className="text-2xl font-extrabold">NT$399</span>
+              )}
             </div>
-            <div className="text-sm text-ink-mute">每月自動續訂，可隨時取消</div>
+            <div className="text-sm text-ink-mute">{applied?.kind === 'discount' ? '首月折扣，之後每月 NT$399 自動續訂，可隨時取消' : '每月自動續訂，可隨時取消'}</div>
             {isTrial(user) && (
               <p className="mt-3 rounded-xl bg-coral-soft px-3 py-2 text-xs font-semibold text-coral">
                 你的試用到 {formatDate(user!.planRenewsAt!)}，現在付款的話，第一個月會從試用結束後開始計算，剩下的試用天數不會浪費。
@@ -91,21 +119,12 @@ export default function Checkout() {
             </ul>
             <div className="mt-5 flex justify-between border-t border-line pt-4 font-bold">
               <span>今日應付</span>
-              <span>NT$399</span>
+              <span>NT${price}</span>
             </div>
           </div>
         </div>
         <div className="h-fit rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">
-          <h2 className="text-lg font-extrabold">用信用卡付款</h2>
-          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-            按下方按鈕後，會前往綠界金流的收銀台頁面輸入卡號，刷卡資料不會經過片刻剪趣的伺服器。付款完成後會自動回到這裡。
-          </p>
-          <Button size="lg" className="mt-6 w-full" disabled={busy} onClick={goToEcpay}>
-            {busy ? '前往付款頁面中…' : '前往綠界付款 NT$399／月'}
-          </Button>
-          <p className="mt-3 text-center text-xs text-ink-mute">訂閱後每月自動扣款，可在帳戶設定隨時取消。</p>
-
-          <div className="mt-6 border-t border-line pt-6">
+          <div className="border-b border-line pb-6">
             <div className="flex items-center gap-2 text-sm font-extrabold">
               <Ticket className="size-4 text-brand" /> 有優惠碼？
             </div>
@@ -113,16 +132,38 @@ export default function Checkout() {
               <input
                 className={inputClass}
                 value={promo}
-                onChange={(e) => setPromo(e.target.value)}
+                onChange={(e) => {
+                  setPromo(e.target.value);
+                  setApplied(null);
+                }}
                 placeholder="輸入優惠碼"
-                onKeyDown={(e) => e.key === 'Enter' && redeemPromo()}
+                onKeyDown={(e) => e.key === 'Enter' && applyPromo()}
               />
-              <Button variant="secondary" disabled={promoBusy || !promo.trim()} onClick={redeemPromo}>
-                {promoBusy ? '兌換中…' : '兌換'}
+              <Button variant="secondary" disabled={promoBusy || !promo.trim()} onClick={applyPromo}>
+                {promoBusy && !applied ? '確認中…' : '套用'}
               </Button>
             </div>
-            <p className="mt-2 text-xs text-ink-mute">兌換後直接升級，不需要信用卡。</p>
+            {applied?.kind === 'months' ? (
+              <div className="mt-3">
+                <p className="mb-2 text-xs text-ink-soft">這組優惠碼可以直接免費升級 {applied.months} 個月，不需要信用卡。</p>
+                <Button className="w-full" disabled={promoBusy} onClick={redeemMonths}>
+                  {promoBusy ? '兌換中…' : `免費升級 ${applied.months} 個月`}
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-ink-mute">{applied?.kind === 'discount' ? `已套用折扣，今日應付 NT$${price}。` : '輸入折扣碼可折抵下方刷卡金額。'}</p>
+            )}
           </div>
+          <h2 className="mt-6 text-lg font-extrabold">用信用卡付款</h2>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            按下方按鈕後，會前往綠界金流的收銀台頁面輸入卡號，刷卡資料不會經過片刻剪趣的伺服器。付款完成後會自動回到這裡。
+          </p>
+          <Button size="lg" className="mt-6 w-full" disabled={busy} onClick={goToEcpay}>
+            {busy ? '前往付款頁面中…' : `前往綠界付款 NT$${price}${applied?.kind === 'discount' ? '' : '／月'}`}
+          </Button>
+          <p className="mt-3 text-center text-xs text-ink-mute">
+            {applied?.kind === 'discount' ? '折扣只折抵這次付款，升級 1 個月，到期後不會自動續訂。' : '訂閱後每月自動扣款，可在帳戶設定隨時取消。'}
+          </p>
         </div>
       </div>
     </div>

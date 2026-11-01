@@ -32,10 +32,12 @@ export const api = {
   logout: () => request('/api/auth/logout', json('POST')),
   updateMe: (d: { name?: string; currentPassword?: string; newPassword?: string }) => request<{ user: User }>('/api/auth/me', json('PATCH', d)),
 
-  /** 建立綠界訂單：回傳收銀台網址和表單欄位，前端要組一個 <form> 用瀏覽器導頁過去（不是 fetch） */
-  ecpayCheckout: () => request<{ actionUrl: string; fields: Record<string, string | number> }>('/api/billing/ecpay/checkout', json('POST')),
+  /** 建立綠界訂單：回傳收銀台網址和表單欄位，前端要組一個 <form> 用瀏覽器導頁過去（不是 fetch）；code 是折扣優惠碼 */
+  ecpayCheckout: (code?: string) => request<{ actionUrl: string; fields: Record<string, string | number> }>('/api/billing/ecpay/checkout', json('POST', code ? { code } : undefined)),
   cancel: () => request<{ user: User }>('/api/billing/cancel', json('POST')),
   payments: () => request<{ payments: { id: string; amount: number; cardLast4: string | null; createdAt: string }[] }>('/api/billing/payments'),
+  checkPromo: (code: string) =>
+    request<{ kind: 'months'; months: number } | { kind: 'discount'; discountAmount: number }>('/api/billing/promo/check', json('POST', { code })),
   redeemPromo: (code: string) => request<{ user: User; months: number }>('/api/billing/promo/redeem', json('POST', { code })),
 
   projects: () => request<{ projects: ProjectSummary[] }>('/api/projects'),
@@ -75,7 +77,8 @@ export const api = {
   adminRevoke: (id: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'revoke' })),
   adminDelete: (id: string) => request(`/api/admin/users/${id}`, json('DELETE')),
   adminPromoCodes: () => request<{ codes: PromoCode[] }>('/api/admin/promo-codes'),
-  adminCreatePromoCode: (months: number) => request<{ code: PromoCode }>('/api/admin/promo-codes', json('POST', { months })),
+  adminCreatePromoCode: (d: { kind: 'months'; months: number } | { kind: 'discount'; discountAmount: number }) =>
+    request<{ code: PromoCode }>('/api/admin/promo-codes', json('POST', d)),
   music: () => request<{ license: string; items: LibraryTrack[] }>('/api/music'),
   voices: () => request<{ voices: Voice[]; breezy: boolean }>('/api/tts/voices'),
   createVoice: (wav: Blob, name: string, text: string) =>

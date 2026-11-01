@@ -17,6 +17,8 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const PORT = Number(process.env.PORT || 8787);
 const FREE_MONTHLY_PROJECTS = 3;
 const PRO_PRICE_TWD = 399;
+// 折扣優惠碼最多折這麼多錢（確保扣款金額一定是正數）
+const MAX_PROMO_DISCOUNT_TWD = 300;
 const SESSION_DAYS = 30;
 
 // ---------- 綠界 ECPay 金流設定 ----------
@@ -84,11 +86,14 @@ db.exec(`
     user_id TEXT NOT NULL,
     amount INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    promo_code TEXT
   );
   CREATE TABLE IF NOT EXISTS promo_codes (
     code TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'months',
     months INTEGER NOT NULL,
+    discount_amount INTEGER,
     created_by TEXT,
     created_at TEXT NOT NULL
   );
@@ -106,6 +111,13 @@ const now = () => new Date().toISOString();
 const userColumns = db.prepare(`PRAGMA table_info(users)`).all().map((c) => c.name);
 if (!userColumns.includes('role')) db.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`);
 if (!userColumns.includes('plan_source')) db.exec(`ALTER TABLE users ADD COLUMN plan_source TEXT`);
+
+// 舊資料庫補欄位：優惠碼加上「折扣金額」類型、訂單記錄用了哪組優惠碼
+const promoColumns = db.prepare(`PRAGMA table_info(promo_codes)`).all().map((c) => c.name);
+if (!promoColumns.includes('kind')) db.exec(`ALTER TABLE promo_codes ADD COLUMN kind TEXT NOT NULL DEFAULT 'months'`);
+if (!promoColumns.includes('discount_amount')) db.exec(`ALTER TABLE promo_codes ADD COLUMN discount_amount INTEGER`);
+const ecpayOrderColumns = db.prepare(`PRAGMA table_info(ecpay_orders)`).all().map((c) => c.name);
+if (!ecpayOrderColumns.includes('promo_code')) db.exec(`ALTER TABLE ecpay_orders ADD COLUMN promo_code TEXT`);
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
@@ -331,19 +343,34 @@ async function ecpayPeriodAction(tradeNo, action) {
   return data;
 }
 
-// 建立訂單：導向綠界的收銀台頁面付款，同時設定「信用卡定期定額」讓綠界之後每月自動扣款
+// 建立訂單：導向綠界的收銀台頁面付款。一般訂單會設定「信用卡定期定額」讓綠界之後每月自動扣款；
+// 折扣優惠碼訂單只收一次折扣後的金額，不設定定期定額（折抵的錢跟每月自動扣款沒辦法同時用同一張綠界訂單做到）
 app.post('/api/billing/ecpay/checkout', requireAuth, (req, res) => {
   if (req.user.plan === 'pro' && req.user.plan_source !== 'trial') return res.status(400).json({ error: '已經是專業版了' });
+
+  let amount = PRO_PRICE_TWD;
+  let promoCode = null;
+  if (req.body.code) {
+    const code = String(req.body.code).trim().toUpperCase();
+    const promo = db.prepare(`SELECT * FROM promo_codes WHERE code=?`).get(code);
+    if (!promo || promo.kind !== 'discount') return res.status(400).json({ error: '優惠碼不存在或已失效' });
+    if (db.prepare(`SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?`).get(code, req.user.id)) {
+      return res.status(400).json({ error: '這組優惠碼你已經用過了' });
+    }
+    amount = Math.max(1, PRO_PRICE_TWD - promo.discount_amount);
+    promoCode = code;
+  }
+
   const tradeNo = `T${Date.now().toString(36)}${randomBytes(3).toString('hex')}`.slice(0, 20);
-  db.prepare(`INSERT INTO ecpay_orders (trade_no, user_id, amount, status, created_at) VALUES (?, ?, ?, 'pending', ?)`).run(
-    tradeNo, req.user.id, PRO_PRICE_TWD, now(),
+  db.prepare(`INSERT INTO ecpay_orders (trade_no, user_id, amount, status, created_at, promo_code) VALUES (?, ?, ?, 'pending', ?, ?)`).run(
+    tradeNo, req.user.id, amount, now(), promoCode,
   );
   const fields = {
     MerchantID: ECPAY_MERCHANT_ID,
     MerchantTradeNo: tradeNo,
     MerchantTradeDate: ecpayDate(),
     PaymentType: 'aio',
-    TotalAmount: PRO_PRICE_TWD,
+    TotalAmount: amount,
     TradeDesc: 'Pianke Jianqu Pro Subscription',
     ItemName: '片刻剪趣 專業版（每月）',
     ReturnURL: `${APP_URL}/api/billing/ecpay/notify`,
@@ -351,12 +378,16 @@ app.post('/api/billing/ecpay/checkout', requireAuth, (req, res) => {
     ClientBackURL: `${APP_URL}/account`,
     OrderResultURL: `${APP_URL}/api/billing/ecpay/result`,
     NeedExtraPaidInfo: 'Y',
-    PeriodAmount: PRO_PRICE_TWD,
-    PeriodType: 'M',
-    Frequency: ECPAY_PERIOD_MONTHS,
-    ExecTimes: 99,
-    PeriodReturnURL: `${APP_URL}/api/billing/ecpay/period-notify`,
     EncryptType: 1,
+    ...(promoCode
+      ? {}
+      : {
+          PeriodAmount: amount,
+          PeriodType: 'M',
+          Frequency: ECPAY_PERIOD_MONTHS,
+          ExecTimes: 99,
+          PeriodReturnURL: `${APP_URL}/api/billing/ecpay/period-notify`,
+        }),
   };
   fields.CheckMacValue = ecpayCheckMacValue(fields);
   res.json({ actionUrl: `${ECPAY_HOST}/Cashier/AioCheckOut/V5`, fields });
@@ -378,11 +409,17 @@ app.post('/api/billing/ecpay/notify', (req, res) => {
   }
   if (order.status === 'pending') {
     if (body.RtnCode === '1') {
-      const renews = new Date();
-      renews.setMonth(renews.getMonth() + ECPAY_PERIOD_MONTHS);
-      db.prepare(`UPDATE users SET plan='pro', plan_source='paid', plan_renews_at=?, plan_cancel_at_period_end=0 WHERE id=?`).run(
-        renews.toISOString(), order.user_id,
-      );
+      if (order.promo_code) {
+        // 折扣優惠碼訂單：一次性付款，只給 1 個月、不會自動續訂
+        grantProMonths(db.prepare(`SELECT * FROM users WHERE id=?`).get(order.user_id), 1, 'paid');
+        db.prepare(`INSERT INTO promo_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)`).run(order.promo_code, order.user_id, now());
+      } else {
+        const renews = new Date();
+        renews.setMonth(renews.getMonth() + ECPAY_PERIOD_MONTHS);
+        db.prepare(`UPDATE users SET plan='pro', plan_source='paid', plan_renews_at=?, plan_cancel_at_period_end=0 WHERE id=?`).run(
+          renews.toISOString(), order.user_id,
+        );
+      }
       db.prepare(`INSERT INTO payments (id, user_id, amount, card_last4, created_at) VALUES (?, ?, ?, ?, ?)`).run(
         randomUUID(), order.user_id, Number(body.TradeAmt) || order.amount, body.card4no || null, now(),
       );
@@ -424,7 +461,10 @@ app.post('/api/billing/ecpay/result', (_req, res) => {
 });
 
 app.post('/api/billing/cancel', requireAuth, async (req, res) => {
-  const order = db.prepare(`SELECT * FROM ecpay_orders WHERE user_id=? AND status='paid' ORDER BY created_at DESC LIMIT 1`).get(req.user.id);
+  // 折扣優惠碼的訂單是一次性付款，沒有在綠界設定定期定額，不用也不能呼叫終止 API
+  const order = db
+    .prepare(`SELECT * FROM ecpay_orders WHERE user_id=? AND status='paid' AND promo_code IS NULL ORDER BY created_at DESC LIMIT 1`)
+    .get(req.user.id);
   if (order) {
     try {
       await ecpayPeriodAction(order.trade_no, 'Cancel');
@@ -445,12 +485,25 @@ app.get('/api/billing/payments', requireAuth, (req, res) => {
   });
 });
 
-// 兌換優惠碼：免費升級，不用走綠界；同一組碼每個人都能用，但每人限用一次
-app.post('/api/billing/promo/redeem', requireAuth, (req, res) => {
+// 查詢優惠碼：不會兌換，單純回傳這組碼是「免費月數」還是「折扣金額」，前端依類型決定接下來要怎麼做
+app.post('/api/billing/promo/check', requireAuth, (req, res) => {
   const code = String(req.body.code || '').trim().toUpperCase();
   if (!code) return res.status(400).json({ error: '請輸入優惠碼' });
   const promo = db.prepare(`SELECT * FROM promo_codes WHERE code=?`).get(code);
   if (!promo) return res.status(400).json({ error: '優惠碼不存在或已失效' });
+  if (db.prepare(`SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?`).get(code, req.user.id)) {
+    return res.status(400).json({ error: '這組優惠碼你已經用過了' });
+  }
+  if (promo.kind === 'discount') return res.json({ kind: 'discount', discountAmount: promo.discount_amount });
+  return res.json({ kind: 'months', months: promo.months });
+});
+
+// 兌換「免費月數」優惠碼：直接升級，不用走綠界；同一組碼每個人都能用，但每人限用一次
+app.post('/api/billing/promo/redeem', requireAuth, (req, res) => {
+  const code = String(req.body.code || '').trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: '請輸入優惠碼' });
+  const promo = db.prepare(`SELECT * FROM promo_codes WHERE code=?`).get(code);
+  if (!promo || promo.kind !== 'months') return res.status(400).json({ error: '優惠碼不存在或已失效' });
   if (db.prepare(`SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?`).get(code, req.user.id)) {
     return res.status(400).json({ error: '這組優惠碼你已經用過了' });
   }
@@ -558,19 +611,33 @@ app.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
 });
 
 // 管理者產生優惠碼：免費升級 1~12 個月，不會產生付款紀錄；同一組碼每個人都能用，但每人限用一次
+// kind='months'：免費升級 1~12 個月。kind='discount'：折抵綠界實際扣款金額（最多折 MAX_PROMO_DISCOUNT_TWD 元，且要小於原價）
 app.post('/api/admin/promo-codes', requireAuth, requireAdmin, (req, res) => {
-  const months = Number(req.body.months);
-  if (!Number.isInteger(months) || months < 1 || months > 12) return res.status(400).json({ error: '月數要是 1~12 之間的整數' });
+  const kind = req.body.kind === 'discount' ? 'discount' : 'months';
   const code = generatePromoCode();
   const createdAt = now();
-  db.prepare(`INSERT INTO promo_codes (code, months, created_by, created_at) VALUES (?, ?, ?, ?)`).run(code, months, req.user.id, createdAt);
-  res.json({ code: { code, months, createdAt, redemptions: 0 } });
+  let months = 0;
+  let discountAmount = null;
+  if (kind === 'months') {
+    months = Number(req.body.months);
+    if (!Number.isInteger(months) || months < 1 || months > 12) return res.status(400).json({ error: '月數要是 1~12 之間的整數' });
+  } else {
+    discountAmount = Number(req.body.discountAmount);
+    if (!Number.isInteger(discountAmount) || discountAmount < 1 || discountAmount > MAX_PROMO_DISCOUNT_TWD || discountAmount >= PRO_PRICE_TWD) {
+      return res.status(400).json({ error: `折扣金額要是 1~${MAX_PROMO_DISCOUNT_TWD} 之間的整數` });
+    }
+  }
+  db.prepare(`INSERT INTO promo_codes (code, kind, months, discount_amount, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
+    code, kind, months, discountAmount, req.user.id, createdAt,
+  );
+  res.json({ code: { code, kind, months, discountAmount, createdAt, redemptions: 0 } });
 });
 
 app.get('/api/admin/promo-codes', requireAuth, requireAdmin, (req, res) => {
   const codes = db
     .prepare(
-      `SELECT p.code, p.months, p.created_at AS createdAt, (SELECT COUNT(*) FROM promo_redemptions r WHERE r.code = p.code) AS redemptions
+      `SELECT p.code, p.kind, p.months, p.discount_amount AS discountAmount, p.created_at AS createdAt,
+              (SELECT COUNT(*) FROM promo_redemptions r WHERE r.code = p.code) AS redemptions
        FROM promo_codes p ORDER BY p.created_at DESC`,
     )
     .all();

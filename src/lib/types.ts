@@ -18,7 +18,9 @@ export interface User {
 
 export interface PromoCode {
   code: string;
+  kind: 'months' | 'discount';
   months: number;
+  discountAmount: number | null;
   createdAt: string;
   redemptions: number;
 }

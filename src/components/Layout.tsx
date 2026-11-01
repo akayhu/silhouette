@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronDown, Crown, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, X } from 'lucide-react';
+import { BookOpen, ChevronDown, Compass, Crown, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { isPaidPro, isTrial, trialDaysLeft } from '../lib/plan';
 import { Logo, buttonClass } from './ui';
@@ -138,8 +138,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <NavLink to="/dashboard" className={tab}>
               <LayoutGrid className="size-4" /> 我的專案
             </NavLink>
+            <NavLink to="/feature-guide" className={tab}>
+              <Compass className="size-4" /> 功能介紹
+            </NavLink>
             <NavLink to="/tutorial" className={tab}>
-              <BookOpen className="size-4" /> 教學
+              <BookOpen className="size-4" /> 使用教學
             </NavLink>
             <NavLink to="/account" className={tab}>
               <Settings className="size-4" /> 帳戶

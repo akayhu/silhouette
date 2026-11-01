@@ -49,6 +49,7 @@ const PRIVATE_TITLES: [RegExp, string][] = [
   [/^\/reset-password/, '重設密碼'],
   [/^\/dashboard/, '我的專案'],
   [/^\/tutorial/, '使用教學'],
+  [/^\/feature-guide/, '功能介紹'],
   [/^\/account/, '帳戶設定'],
   [/^\/checkout/, '升級專業版'],
   [/^\/editor\//, '編輯器'],

@@ -2,13 +2,23 @@ import { useState, type ComponentType } from 'react';
 import {
   ArrowRightLeft,
   AudioLines,
+  Download,
   Film,
+  Keyboard,
+  Layers,
+  LayoutTemplate,
   ListChecks,
+  Lock,
+  Moon,
   Palette,
+  Play,
+  Redo2,
   Scissors,
   Sparkles,
   Type,
+  Undo2,
   Upload,
+  Volume2,
 } from 'lucide-react';
 import { AppLayout } from '../components/Layout';
 import { ProBadge } from '../components/ui';
@@ -19,12 +29,29 @@ type Group = {
   icon: ComponentType<{ className?: string }>;
   intro: string;
   steps: string[];
+  /** 'workspace'：用整體版面示意圖；其他則用左側工具列＋面板的示意圖 */
   tool: string;
   toolIcon: ComponentType<{ className?: string }>;
   rows: { label: string; tag?: string; pro?: boolean }[];
 };
 
 const GROUPS: Group[] = [
+  {
+    id: 'workspace',
+    title: '編輯器介面',
+    icon: LayoutTemplate,
+    intro: '打開一個專案後，先認識畫面的三大區塊：頂部工具列、預覽畫面、時間軸與軌道，之後學其他功能會更順。',
+    steps: [
+      '頂部工具列：左邊是專案名稱（可以直接點了改）和自動儲存狀態；中間是復原／重做；右邊可以切換深色介面、預覽位置（上方或右側）、工具列顯示方式，還有畫面比例和「匯出」按鈕',
+      '預覽畫面：下方圓形按鈕播放／暫停，可以開「參考線」顯示短影音安全框，避免重要內容被平台介面（按讚、留言）擋住；按住 ⌘／Ctrl 滾動可以縮放預覽',
+      '時間軸分成 5 條軌道：字幕、貼紙、疊加、主軌（影片畫面）、音訊（音樂、人聲、音效各自獨立），每條軌道前面都有鎖定和靜音兩個按鈕',
+      '點一下軌道上的片段就能選取、拖曳可以移動位置；右上角的「引導」可以切成四步驟精簡模式，熟悉後再關掉看全部工具',
+      '不想一直用滑鼠的話，按 ? 打開完整快捷鍵列表，分割、裁剪、復原都有對應按鍵',
+    ],
+    tool: 'workspace',
+    toolIcon: LayoutTemplate,
+    rows: [],
+  },
   {
     id: 'basics',
     title: '剪輯基礎',
@@ -194,11 +221,61 @@ export default function Tutorial() {
                 ))}
               </ol>
             </div>
-            <DemoPanel group={g} />
+            {g.tool === 'workspace' ? <WorkspaceMock /> : <DemoPanel group={g} />}
           </section>
         ))}
       </div>
     </AppLayout>
+  );
+}
+
+/** 示範圖：整體版面示意（頂部工具列、預覽畫面、時間軸軌道），對應「編輯器介面」這個單元 */
+function WorkspaceMock() {
+  const tracks = [
+    { label: '字幕', icon: Type },
+    { label: '貼紙', icon: Sparkles },
+    { label: '疊加', icon: Layers },
+    { label: '主軌', icon: Film },
+    { label: '音訊', icon: Volume2 },
+  ];
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-ink/[0.03]">
+      <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
+        <span className="rounded-lg bg-sunken px-2 py-1 text-[11px] font-bold text-ink">未命名專案</span>
+        <Undo2 className="size-3.5 text-ink-mute" />
+        <Redo2 className="size-3.5 text-ink-mute" />
+        <span className="ml-auto flex items-center gap-2 text-ink-mute">
+          <Moon className="size-3.5" />
+          <Keyboard className="size-3.5" />
+          <span className="rounded-lg bg-sunken px-2 py-1 text-[11px] font-bold text-ink">9:16</span>
+          <span className="flex items-center gap-1 rounded-lg bg-brand px-2 py-1 text-[11px] font-bold text-white">
+            <Download className="size-3" /> 匯出
+          </span>
+        </span>
+      </div>
+      <div className="flex flex-col items-center gap-2 border-b border-line bg-surface px-4 py-5">
+        <div className="relative flex h-24 w-14 items-center justify-center rounded-lg bg-ink/10">
+          <span className="grid size-7 place-items-center rounded-full bg-brand text-white">
+            <Play className="size-3" fill="currentColor" />
+          </span>
+        </div>
+        <span className="text-[10px] text-ink-mute">預覽畫面・參考線／縮放</span>
+      </div>
+      <div className="space-y-1.5 p-3">
+        {tracks.map((t) => (
+          <div key={t.label} className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 shadow-card">
+            <t.icon className="size-3 shrink-0 text-ink-mute" />
+            <span className="w-9 shrink-0 text-[10px] font-semibold text-ink-soft">{t.label}</span>
+            <span className="h-3.5 flex-1 rounded bg-brand/15" />
+            <Lock className="size-3 shrink-0 text-ink-mute" />
+            <Volume2 className="size-3 shrink-0 text-ink-mute" />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 border-t border-line px-3 py-2 text-[10px] text-ink-mute">
+        <ArrowRightLeft className="size-3" /> 時間軸與軌道示意
+      </div>
+    </div>
   );
 }
 

@@ -336,9 +336,44 @@ function createPasswordReset(userId) {
 }
 
 const app = express();
+// 正式環境部署在反向代理（Fly.io／Zeabur／Railway／nginx）後面時，相信第一層代理加的
+// X-Forwarded-For，req.ip 才會是使用者真正的 IP，而不是全部都變成代理自己的 IP
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 // 綠界的付款通知是用 application/x-www-form-urlencoded POST 回來的
 app.use(express.urlencoded({ extended: false }));
+
+// ---------- 簡單的記憶體限流器：避免登入、註冊、忘記密碼這類端點被暴力嘗試或濫用 ----------
+// 同一個 IP 在時間窗內呼叫同一個路由超過上限就擋掉；只用在單一伺服器部署，多台主機水平擴展時
+// 各台主機各自計算，不會共用額度（這個規模的流量還不需要接 Redis 之類的共用儲存）
+const rateLimiterMaps = [];
+function rateLimit(windowMs, max) {
+  const hits = new Map();
+  rateLimiterMaps.push(hits);
+  return (req, res, next) => {
+    const key = req.ip || 'unknown';
+    const now = Date.now();
+    let hit = hits.get(key);
+    if (!hit || hit.resetAt < now) {
+      hit = { count: 0, resetAt: now + windowMs };
+      hits.set(key, hit);
+    }
+    hit.count++;
+    if (hit.count > max) return res.status(429).json({ error: '請求太頻繁，請稍後再試' });
+    next();
+  };
+}
+// 定期清掉過期紀錄，避免 Map 無限長大
+setInterval(() => {
+  const now = Date.now();
+  for (const hits of rateLimiterMaps) for (const [key, hit] of hits) if (hit.resetAt < now) hits.delete(key);
+}, 10 * 60_000).unref();
+
+const loginLimiter = rateLimit(15 * 60_000, 10);
+const registerLimiter = rateLimit(60 * 60_000, 5);
+const forgotPasswordLimiter = rateLimit(60 * 60_000, 5);
+const resendVerificationLimiter = rateLimit(60 * 60_000, 5);
+const resetPasswordLimiter = rateLimit(15 * 60_000, 10);
 
 app.use((req, _res, next) => {
   const { sid } = parseCookies(req.headers.cookie);
@@ -365,7 +400,7 @@ function createSession(res, userId) {
 }
 
 // ---------- 會員 ----------
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', registerLimiter, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const name = String(req.body.name || '').trim();
   const password = String(req.body.password || '');
@@ -403,7 +438,7 @@ app.get('/api/auth/verify', async (req, res) => {
   res.redirect(`${APP_URL}/dashboard?verified=1`);
 });
 
-app.post('/api/auth/resend-verification', async (req, res) => {
+app.post('/api/auth/resend-verification', resendVerificationLimiter, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const user = db.prepare(`SELECT * FROM users WHERE email=?`).get(email);
   if (!user) return res.status(404).json({ error: '找不到這個帳號' });
@@ -417,7 +452,7 @@ app.post('/api/auth/resend-verification', async (req, res) => {
 });
 
 // 忘記密碼：不管帳號存不存在都回一樣的訊息，避免被用來試探哪些 Email 有註冊
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', forgotPasswordLimiter, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const user = db.prepare(`SELECT * FROM users WHERE email=?`).get(email);
   if (user) {
@@ -429,7 +464,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/auth/reset-password', (req, res) => {
+app.post('/api/auth/reset-password', resetPasswordLimiter, (req, res) => {
   const token = String(req.body.token || '');
   const password = String(req.body.password || '');
   if (password.length < 8) return res.status(400).json({ error: '密碼至少需要 8 個字元' });
@@ -446,7 +481,7 @@ app.post('/api/auth/reset-password', (req, res) => {
   res.json({ user: publicUser(refreshPlan(user)) });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', loginLimiter, (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const user = db.prepare(`SELECT * FROM users WHERE email=?`).get(email);
   if (!user || !verifyPassword(String(req.body.password || ''), user.password_hash)) {
@@ -882,7 +917,8 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   if (user.role === 'admin') return res.status(400).json({ error: '不能刪除管理者帳號' });
   db.exec('BEGIN');
   try {
-    for (const t of ['sessions', 'projects', 'voices', 'project_creations', 'exports']) db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(user.id);
+    for (const t of ['sessions', 'projects', 'voices', 'project_creations', 'exports', 'email_verifications', 'password_resets', 'promo_redemptions'])
+      db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(user.id);
     db.prepare(`DELETE FROM users WHERE id=?`).run(user.id);
     db.exec('COMMIT');
   } catch (err) {

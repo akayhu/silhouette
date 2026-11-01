@@ -22,8 +22,18 @@ test('project saves use atomic version checks without changing other project dat
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     assert.ok(base, '測試伺服器未啟動');
+    // 註冊後要先驗證信箱才能登入；沒設定 RESEND_API_KEY 時驗證連結會印在 stdout，從那裡取出 token 直接呼叫驗證
     const register = await request('/api/auth/register', { email: 'save-test@example.test', password: 'test-only-password-123', name: '儲存測試' });
-    assert.equal(register.status, 200); cookie = register.headers.get('set-cookie').split(';')[0];
+    assert.equal(register.status, 200); assert.equal((await register.json()).pending, true);
+    let token;
+    for (let i = 0; i < 100; i++) {
+      const match = output.match(/\/api\/auth\/verify\?token=([0-9a-f]+)/);
+      if (match) { token = match[1]; break; }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.ok(token, '沒有在伺服器輸出裡找到驗證連結');
+    const verify = await fetch(`${base}/api/auth/verify?token=${token}`, { redirect: 'manual' });
+    cookie = verify.headers.get('set-cookie').split(';')[0];
     const created = await (await request('/api/projects', { name: '原始版本', aspect: '9:16' })).json();
     const project = created.project;
     const patch = (body) => request(`/api/projects/${project.id}`, body, 'PATCH');

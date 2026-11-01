@@ -348,7 +348,7 @@ app.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   if (!user) return res.status(404).json({ error: '找不到這個會員' });
   if (req.body.action === 'grant') {
     const months = Number(req.body.months);
-    if (![0, 1, 3, 6, 12].includes(months)) return res.status(400).json({ error: '開通期間不正確' });
+    if (!Number.isInteger(months) || months < 0 || months > 12) return res.status(400).json({ error: '開通期間不正確' });
     let renews = null;
     if (months) {
       const base = user.plan === 'pro' && user.plan_renews_at && new Date(user.plan_renews_at) > new Date() ? new Date(user.plan_renews_at) : new Date();

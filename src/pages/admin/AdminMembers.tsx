@@ -9,13 +9,8 @@ import { AdminLayout } from './AdminLayout';
 import { money } from './charts';
 
 type Filter = 'all' | 'pro' | 'trial' | 'free';
-const DURATIONS = [
-  { months: 1, label: '1 個月' },
-  { months: 3, label: '3 個月' },
-  { months: 6, label: '6 個月' },
-  { months: 12, label: '1 年' },
-  { months: 0, label: '永久' },
-];
+/** 開通期間：0 代表永久（不過期），否則 1～12 個月 */
+const durationLabel = (months: number) => (months === 0 ? '永久' : `${months} 個月`);
 
 export default function AdminMembers() {
   const { user: me } = useAuth();
@@ -170,16 +165,26 @@ export default function AdminMembers() {
         <p className="mt-1 text-sm text-ink-soft">
           直接把「{granting?.name}」升級為專業版，不會產生付款紀錄，也不會計入營收。到期後自動回到免費版。
         </p>
-        <div className="mt-5 grid grid-cols-5 gap-1.5">
-          {DURATIONS.map((d) => (
-            <button
-              key={d.months}
-              onClick={() => setMonths(d.months)}
-              className={`rounded-xl border-2 py-2.5 text-sm font-bold transition ${months === d.months ? 'border-brand bg-brand-soft/60 text-brand' : 'border-line text-ink-soft hover:border-ink-mute/40'}`}
-            >
-              {d.label}
-            </button>
-          ))}
+        <div className="mt-5">
+          <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <input type="checkbox" className="accent-brand" checked={months === 0} onChange={(e) => setMonths(e.target.checked ? 0 : 1)} />
+            永久（不會過期）
+          </label>
+          {months !== 0 && (
+            <div className="mt-4 flex items-center gap-3">
+              <input
+                type="range"
+                min={1}
+                max={12}
+                step={1}
+                value={months}
+                onChange={(e) => setMonths(Number(e.target.value))}
+                className="flex-1 accent-brand"
+                aria-label="開通月數"
+              />
+              <span className="w-16 shrink-0 text-right text-sm font-bold tabular-nums">{durationLabel(months)}</span>
+            </div>
+          )}
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setGranting(null)}>
@@ -191,7 +196,7 @@ export default function AdminMembers() {
             onClick={async () => {
               const u = granting!;
               setGranting(null);
-              await act(() => api.adminGrant(u.id, months), `已為 ${u.name} 開通專業版（${DURATIONS.find((d) => d.months === months)?.label}）`);
+              await act(() => api.adminGrant(u.id, months), `已為 ${u.name} 開通專業版（${durationLabel(months)}）`);
             }}
           >
             確認開通

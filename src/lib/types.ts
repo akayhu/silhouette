@@ -27,7 +27,7 @@ export interface MediaItem {
   width?: number;
   height?: number;
   /** 朗讀產生的音訊會標記來源，素材庫用來分組 */
-  origin?: 'upload' | 'tts' | 'library';
+  origin?: 'upload' | 'tts' | 'library' | 'record';
   /** 影片／圖片的小縮圖（data URL），時間軸和素材庫使用 */
   thumb?: string;
   /** 去浮水印區域（套用在這個素材的所有片段） */

@@ -18,7 +18,7 @@ export const TRACK_LABELS: Record<TrackKey, string> = {
 
 /** 音訊依素材判斷屬於哪一類：朗讀配音、音效庫的音效，其餘都算背景音樂 */
 export const audioCategoryOf = (m: MediaItem | undefined): 'music' | 'voice' | 'sfx' => {
-  if (m?.origin === 'tts') return 'voice';
+  if (m?.origin === 'tts' || m?.origin === 'record') return 'voice';
   if (m && /\/music\/sfx-/.test(m.url)) return 'sfx';
   return 'music';
 };

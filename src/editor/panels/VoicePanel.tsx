@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveLocalFile } from '../../lib/localMedia';
 import { AudioLines, Loader2, Mic, Play, Sparkles, Square, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { ASR_MODELS, transcribe } from '../../lib/asr';
 import { uid } from '../../lib/format';
-import { probe } from '../../lib/media';
+import { audioPeaks, decodeAudio, probe, sliceMono } from '../../lib/media';
 import { splitSentences } from '../../lib/sentences';
-import { newCaption } from '../../lib/timeline';
+import { captionFromWords, newCaption } from '../../lib/timeline';
 import { progressLabel, runTts, type TtsProgress } from '../../lib/tts';
-import type { MediaItem, Voice } from '../../lib/types';
+import type { Caption, MediaItem, Voice } from '../../lib/types';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
-import { Slider } from '../Inspector';
+import { Chips, Slider } from '../Inspector';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 import { VoiceCloneDialog } from './VoiceCloneDialog';
@@ -267,6 +268,8 @@ export function VoicePanel() {
         </div>
       )}
 
+      <RecordCaption isPro={isPro} guard={guard} />
+
       <div className="mt-4 rounded-2xl bg-sunken/70 p-4">
         <div className="text-sm font-extrabold">字幕轉語音</div>
         <p className="mt-1 text-xs text-ink-soft">把每一句字幕各自產生配音，對齊字幕的開始時間。</p>
@@ -297,3 +300,177 @@ export function VoicePanel() {
 
 // AI 人聲排最前面，其次台灣國語
 const rank = (v: Voice) => (v.engine === 'breezy' ? (v.custom ? 1 : 0) : v.locale === 'zh_TW' ? 2 : 3);
+
+/** 錄一段口白：直接加到音訊軌，還能自動辨識成字幕（辨識在瀏覽器裡執行，和 AI 自動字幕共用同一套模型） */
+function RecordCaption({ isPro, guard }: { isPro: boolean; guard: () => boolean }) {
+  const toast = useToast();
+  const [model, setModel] = useState<string>(ASR_MODELS[0].id);
+  const [withCaptions, setWithCaptions] = useState(true);
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [clip, setClip] = useState<{ blob: Blob; url: string } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const timer = useRef<number>(0);
+
+  useEffect(
+    () => () => {
+      clearInterval(timer.current);
+      recorder.current?.stream.getTracks().forEach((t) => t.stop());
+    },
+    [],
+  );
+
+  const start = async () => {
+    if (!guard()) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const rec = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => chunks.push(e.data);
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setClip((prev) => {
+          if (prev) URL.revokeObjectURL(prev.url);
+          const blob = new Blob(chunks, { type: rec.mimeType });
+          return { blob, url: URL.createObjectURL(blob) };
+        });
+      };
+      rec.start();
+      recorder.current = rec;
+      setRecording(true);
+      setElapsed(0);
+      const t0 = Date.now();
+      timer.current = window.setInterval(() => {
+        const s = (Date.now() - t0) / 1000;
+        setElapsed(s);
+        if (s >= 600) stop(); // 最長錄 10 分鐘，避免錄太久忘記停
+      }, 200);
+    } catch {
+      toast('無法使用麥克風，請確認瀏覽器已允許錄音', 'error');
+    }
+  };
+
+  const stop = () => {
+    clearInterval(timer.current);
+    if (recorder.current?.state === 'recording') recorder.current.stop();
+    setRecording(false);
+  };
+
+  const discard = () => {
+    setClip((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  };
+
+  const add = async () => {
+    if (!clip || !ensureUnlocked('audio-voice', ...(withCaptions ? (['caption'] as const) : []))) return;
+    setBusy('add');
+    try {
+      const id = uid();
+      const ext = clip.blob.type.includes('ogg') ? '.ogg' : clip.blob.type.includes('mp4') ? '.m4a' : '.webm';
+      const [{ duration }, peaks, saved] = await Promise.all([probe(clip.url, 'audio'), audioPeaks(clip.blob), saveLocalFile(id, clip.blob, '錄音' + ext)]);
+      const m: MediaItem = { id, name: '錄音', kind: 'audio', url: saved.url, duration, origin: 'record', peaks, local: saved.local };
+      const { time, data } = useEditor.getState();
+      let captions: Caption[] = [];
+      if (withCaptions) {
+        setStatus('讀取錄音');
+        const buffer = await decodeAudio(saved.url);
+        const samples = await sliceMono(buffer, 0, duration, 16000);
+        const segs = await transcribe(
+          samples,
+          model,
+          (p) => setStatus(p.phase === 'download' ? `下載語音模型 ${Math.round(p.progress ?? 0)}%（只有第一次）` : '辨識中…'),
+          { words: true },
+        );
+        const style = data.captions.find((c) => c.role !== 'flower')?.style;
+        captions = segs
+          .filter((s) => s.text.trim())
+          .map((s) =>
+            s.words?.length
+              ? captionFromWords(
+                  time + s.words[0].start,
+                  time + s.words[s.words.length - 1].end,
+                  s.text,
+                  style,
+                  s.words.map((w) => ({ ...w, start: time + w.start, end: time + w.end })),
+                )
+              : newCaption(time + s.start, time + s.end, s.text, style),
+          );
+      }
+      useEditor.getState().commit((d) => ({
+        ...d,
+        media: [...d.media, m],
+        audio: [...d.audio, { id: uid(), mediaId: m.id, start: time, in: 0, out: duration, volume: 1 }],
+        captions: [...d.captions, ...captions],
+      }));
+      toast(captions.length ? `已加入錄音和 ${captions.length} 句字幕` : '已加入錄音', 'success');
+      discard();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(null);
+      setStatus(null);
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-2xl bg-sunken/70 p-4">
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-extrabold">錄音上字幕</div>
+        {!isPro && <ProBadge />}
+      </div>
+      <p className="mt-1 text-xs text-ink-soft">直接用麥克風錄一段口白，加到音訊軌，還能自動辨識成字幕。</p>
+
+      <div className="mt-3 rounded-xl bg-surface p-3">
+        {recording ? (
+          <div className="flex items-center gap-3">
+            <span className="relative flex size-3">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-coral opacity-60" />
+              <span className="relative inline-flex size-3 rounded-full bg-coral" />
+            </span>
+            <span className="flex-1 text-sm font-bold tabular-nums">錄音中 {elapsed.toFixed(1)} 秒</span>
+            <Button variant="coral" size="sm" onClick={stop}>
+              <Square className="size-3.5" fill="currentColor" /> 停止
+            </Button>
+          </div>
+        ) : clip ? (
+          <div>
+            <audio src={clip.url} controls className="w-full" />
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Button variant="secondary" size="sm" onClick={discard} disabled={!!busy}>
+                重新錄音
+              </Button>
+              <Button size="sm" onClick={add} disabled={!!busy}>
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
+                {status ?? '加到時間軸'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="secondary" className="w-full" onClick={start}>
+            <Mic className="size-4" /> 開始錄音
+          </Button>
+        )}
+      </div>
+
+      {!recording && !clip && (
+        <>
+          <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-ink">
+            <input type="checkbox" className="accent-brand" checked={withCaptions} onChange={(e) => setWithCaptions(e.target.checked)} />
+            同時辨識成字幕
+          </label>
+          {withCaptions && (
+            <div className="mt-2">
+              <div className="mb-1.5 text-xs font-semibold text-ink-soft">辨識模型</div>
+              <Chips options={ASR_MODELS.map((m) => ({ id: m.id, label: m.label }))} value={model} onChange={setModel} />
+            </div>
+          )}
+        </>
+      )}
+      <p className="mt-3 text-[11px] text-ink-mute">語音辨識在你的瀏覽器裡執行，錄音不會傳到外部服務。</p>
+    </div>
+  );
+}

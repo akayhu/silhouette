@@ -1,5 +1,5 @@
 import type { ExportInfo, SavedExport } from './exportStore';
-import type { AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, User, Voice } from './types';
+import type { AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, PromoCode, User, Voice } from './types';
 
 export interface TtsResult {
   url: string;
@@ -32,10 +32,11 @@ export const api = {
   logout: () => request('/api/auth/logout', json('POST')),
   updateMe: (d: { name?: string; currentPassword?: string; newPassword?: string }) => request<{ user: User }>('/api/auth/me', json('PATCH', d)),
 
-  checkout: (d: { cardNumber: string; name: string }) => request<{ user: User }>('/api/billing/checkout', json('POST', d)),
+  /** 建立綠界訂單：回傳收銀台網址和表單欄位，前端要組一個 <form> 用瀏覽器導頁過去（不是 fetch） */
+  ecpayCheckout: () => request<{ actionUrl: string; fields: Record<string, string | number> }>('/api/billing/ecpay/checkout', json('POST')),
   cancel: () => request<{ user: User }>('/api/billing/cancel', json('POST')),
-  resume: () => request<{ user: User }>('/api/billing/resume', json('POST')),
-  payments: () => request<{ payments: { id: string; amount: number; cardLast4: string; createdAt: string }[] }>('/api/billing/payments'),
+  payments: () => request<{ payments: { id: string; amount: number; cardLast4: string | null; createdAt: string }[] }>('/api/billing/payments'),
+  redeemPromo: (code: string) => request<{ user: User; months: number }>('/api/billing/promo/redeem', json('POST', { code })),
 
   projects: () => request<{ projects: ProjectSummary[] }>('/api/projects'),
   project: (id: string, signal?: AbortSignal) => request<{ project: Project }>(`/api/projects/${id}`, { signal }),
@@ -73,6 +74,8 @@ export const api = {
   adminGrant: (id: string, months: number) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'grant', months })),
   adminRevoke: (id: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'revoke' })),
   adminDelete: (id: string) => request(`/api/admin/users/${id}`, json('DELETE')),
+  adminPromoCodes: () => request<{ codes: PromoCode[] }>('/api/admin/promo-codes'),
+  adminCreatePromoCode: (months: number) => request<{ code: PromoCode }>('/api/admin/promo-codes', json('POST', { months })),
   music: () => request<{ license: string; items: LibraryTrack[] }>('/api/music'),
   voices: () => request<{ voices: Voice[]; breezy: boolean }>('/api/tts/voices'),
   createVoice: (wav: Blob, name: string, text: string) =>

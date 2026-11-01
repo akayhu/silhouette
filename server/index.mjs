@@ -1,7 +1,7 @@
-// 片刻剪趣 本機後端：會員、訂閱（模擬付款）、專案、媒體上傳、文字朗讀（macOS say）
+// 片刻剪趣 本機後端：會員、訂閱（綠界 ECPay 金流）、專案、媒體上傳、文字朗讀（macOS say）
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
-import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
+import { randomBytes, scryptSync, timingSafeEqual, randomUUID, createHash } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
@@ -18,6 +18,18 @@ const PORT = Number(process.env.PORT || 8787);
 const FREE_MONTHLY_PROJECTS = 3;
 const PRO_PRICE_TWD = 399;
 const SESSION_DAYS = 30;
+
+// ---------- 綠界 ECPay 金流設定 ----------
+// 沒設定環境變數時，預設用綠界公開的測試環境帳號（僅供測試，不會真的請款）
+const ECPAY_ENV = process.env.ECPAY_ENV === 'production' ? 'production' : 'test';
+const ECPAY_MERCHANT_ID = process.env.ECPAY_MERCHANT_ID || '2000132';
+const ECPAY_HASH_KEY = process.env.ECPAY_HASH_KEY || '5294y06JbISpM5x9';
+const ECPAY_HASH_IV = process.env.ECPAY_HASH_IV || 'v77hoKGq4kWxNNIS';
+const ECPAY_HOST = ECPAY_ENV === 'production' ? 'https://payment.ecpay.com.tw' : 'https://payment-stage.ecpay.com.tw';
+// 使用者實際瀏覽這個網站的網址（正式上線請設成正式網域；本機開發預設 Vite 的網址）
+const APP_URL = (process.env.APP_URL || 'http://localhost:5173').replace(/\/+$/, '');
+// 定期定額每期月數固定為 1（每月扣款一次）
+const ECPAY_PERIOD_MONTHS = 1;
 const TRIAL_DAYS = 7;
 
 const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
@@ -67,6 +79,25 @@ db.exec(`
     card_last4 TEXT,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS ecpay_orders (
+    trade_no TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS promo_codes (
+    code TEXT PRIMARY KEY,
+    months INTEGER NOT NULL,
+    created_by TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS promo_redemptions (
+    code TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    redeemed_at TEXT NOT NULL,
+    PRIMARY KEY (code, user_id)
+  );
 `);
 
 const now = () => new Date().toISOString();
@@ -109,21 +140,36 @@ function startOfMonth() {
 }
 
 // 到期未續訂的專業版自動降回免費版
+// 到期就降回免費版：真正的續訂由綠界定期定額的 PeriodReturnURL 通知觸發，
+// 會在到期前延長 plan_renews_at；這裡只負責「沒有收到續訂通知」時的降級。
 function refreshPlan(user) {
   if (user.plan === 'pro' && user.plan_renews_at && new Date(user.plan_renews_at) < new Date()) {
-    if (user.plan_cancel_at_period_end) {
-      db.prepare(`UPDATE users SET plan='free', plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
-      return { ...user, plan: 'free', plan_renews_at: null, plan_cancel_at_period_end: 0 };
-    }
-    const next = new Date(user.plan_renews_at);
-    next.setMonth(next.getMonth() + 1);
-    db.prepare(`UPDATE users SET plan_renews_at=? WHERE id=?`).run(next.toISOString(), user.id);
-    db.prepare(`INSERT INTO payments (id, user_id, amount, card_last4, created_at) VALUES (?, ?, ?, ?, ?)`).run(
-      randomUUID(), user.id, PRO_PRICE_TWD, 'auto', user.plan_renews_at,
-    );
-    return { ...user, plan_renews_at: next.toISOString() };
+    db.prepare(`UPDATE users SET plan='free', plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
+    return { ...user, plan: 'free', plan_renews_at: null, plan_cancel_at_period_end: 0 };
   }
   return user;
+}
+
+// 免費把使用者升級成專業版 N 個月（管理者開通、優惠碼兌換共用）：
+// 原本還在有效期內就從原到期日續算，否則從現在起算；不會產生付款紀錄
+function grantProMonths(user, months, source) {
+  const base = user.plan === 'pro' && user.plan_renews_at && new Date(user.plan_renews_at) > new Date() ? new Date(user.plan_renews_at) : new Date();
+  base.setMonth(base.getMonth() + months);
+  const renews = base.toISOString();
+  db.prepare(`UPDATE users SET plan='pro', plan_source=?, plan_renews_at=?, plan_cancel_at_period_end=1 WHERE id=?`).run(source, renews, user.id);
+  return renews;
+}
+
+// 優惠碼不用容易看錯的字元（0/O、1/I/L）
+const PROMO_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generatePromoCode() {
+  const pick = () => PROMO_ALPHABET[randomBytes(1)[0] % PROMO_ALPHABET.length];
+  const group = () => Array.from({ length: 4 }, pick).join('');
+  for (let i = 0; i < 20; i++) {
+    const code = `${group()}-${group()}`;
+    if (!db.prepare(`SELECT 1 FROM promo_codes WHERE code=?`).get(code)) return code;
+  }
+  throw new Error('無法產生唯一的優惠碼，請再試一次');
 }
 
 function publicUser(user) {
@@ -148,8 +194,37 @@ function publicUser(user) {
   };
 }
 
+// ---------- 綠界 ECPay 檢查碼與下單工具函式 ----------
+// 把字串編碼成跟 .NET UrlEncode 一致的格式：JS 的 encodeURIComponent 本來就不會
+// 編碼 ~ 和 '，但 .NET 會，所以這三個差異要手動補上；空白 .NET 編成 +，JS 編成 %20。
+function ecpayUrlEncode(str) {
+  return encodeURIComponent(str).replace(/~/g, '%7E').replace(/%20/g, '+').replace(/'/g, '%27');
+}
+
+// 依綠界「檢查碼機制」規則計算 CheckMacValue：參數依欄位名稱排序、前後加上
+// HashKey／HashIV、URL encode、轉小寫、SHA256、轉大寫
+function ecpayCheckMacValue(data) {
+  const keys = Object.keys(data).sort((a, b) => {
+    const al = a.toLowerCase();
+    const bl = b.toLowerCase();
+    return al > bl ? 1 : al < bl ? -1 : 0;
+  });
+  const raw = keys.map((k) => `${k}=${data[k]}`).join('&');
+  const wrapped = `HashKey=${ECPAY_HASH_KEY}&${raw}&HashIV=${ECPAY_HASH_IV}`;
+  const encoded = ecpayUrlEncode(wrapped).toLowerCase();
+  return createHash('sha256').update(encoded).digest('hex').toUpperCase();
+}
+
+// yyyy/MM/dd HH:mm:ss（綠界要求的時間格式，用本機時間）
+function ecpayDate(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+// 綠界的付款通知是用 application/x-www-form-urlencoded POST 回來的
+app.use(express.urlencoded({ extended: false }));
 
 app.use((req, _res, next) => {
   const { sid } = parseCookies(req.headers.cookie);
@@ -229,30 +304,136 @@ app.patch('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)) });
 });
 
-// ---------- 訂閱（模擬付款，之後可換成 Stripe Checkout） ----------
-app.post('/api/billing/checkout', requireAuth, (req, res) => {
-  const card = String(req.body.cardNumber || '').replace(/\s/g, '');
-  if (!/^\d{13,19}$/.test(card)) return res.status(400).json({ error: '卡號格式不正確' });
+// ---------- 訂閱（綠界 ECPay 信用卡定期定額，真的會請款） ----------
+
+// 跟綠界「信用卡定期定額訂單作業」API 溝通（補授權 ReAuth／終止 Cancel）
+async function ecpayPeriodAction(tradeNo, action) {
+  const fields = {
+    MerchantID: ECPAY_MERCHANT_ID,
+    MerchantTradeNo: tradeNo,
+    Action: action,
+    TimeStamp: Math.floor(Date.now() / 1000),
+  };
+  fields.CheckMacValue = ecpayCheckMacValue(fields);
+  const resp = await fetch(`${ECPAY_HOST}/Cashier/CreditCardPeriodAction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields).toString(),
+  });
+  const text = await resp.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = Object.fromEntries(new URLSearchParams(text));
+  }
+  if (String(data.RtnCode) !== '1') throw new Error(data.RtnMsg || '綠界回應失敗：' + text);
+  return data;
+}
+
+// 建立訂單：導向綠界的收銀台頁面付款，同時設定「信用卡定期定額」讓綠界之後每月自動扣款
+app.post('/api/billing/ecpay/checkout', requireAuth, (req, res) => {
   if (req.user.plan === 'pro' && req.user.plan_source !== 'trial') return res.status(400).json({ error: '已經是專業版了' });
-  const inTrial = req.user.plan_source === 'trial' && req.user.plan_renews_at && new Date(req.user.plan_renews_at) > new Date();
-  const renews = inTrial ? new Date(req.user.plan_renews_at) : new Date();
-  renews.setMonth(renews.getMonth() + 1);
-  db.prepare(`UPDATE users SET plan='pro', plan_source='paid', plan_renews_at=?, plan_cancel_at_period_end=0 WHERE id=?`).run(
-    renews.toISOString(), req.user.id,
+  const tradeNo = `T${Date.now().toString(36)}${randomBytes(3).toString('hex')}`.slice(0, 20);
+  db.prepare(`INSERT INTO ecpay_orders (trade_no, user_id, amount, status, created_at) VALUES (?, ?, ?, 'pending', ?)`).run(
+    tradeNo, req.user.id, PRO_PRICE_TWD, now(),
   );
-  db.prepare(`INSERT INTO payments (id, user_id, amount, card_last4, created_at) VALUES (?, ?, ?, ?, ?)`).run(
-    randomUUID(), req.user.id, PRO_PRICE_TWD, card.slice(-4), now(),
-  );
-  res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)) });
+  const fields = {
+    MerchantID: ECPAY_MERCHANT_ID,
+    MerchantTradeNo: tradeNo,
+    MerchantTradeDate: ecpayDate(),
+    PaymentType: 'aio',
+    TotalAmount: PRO_PRICE_TWD,
+    TradeDesc: 'Pianke Jianqu Pro Subscription',
+    ItemName: '片刻剪趣 專業版（每月）',
+    ReturnURL: `${APP_URL}/api/billing/ecpay/notify`,
+    ChoosePayment: 'Credit',
+    ClientBackURL: `${APP_URL}/account`,
+    OrderResultURL: `${APP_URL}/api/billing/ecpay/result`,
+    NeedExtraPaidInfo: 'Y',
+    PeriodAmount: PRO_PRICE_TWD,
+    PeriodType: 'M',
+    Frequency: ECPAY_PERIOD_MONTHS,
+    ExecTimes: 99,
+    PeriodReturnURL: `${APP_URL}/api/billing/ecpay/period-notify`,
+    EncryptType: 1,
+  };
+  fields.CheckMacValue = ecpayCheckMacValue(fields);
+  res.json({ actionUrl: `${ECPAY_HOST}/Cashier/AioCheckOut/V5`, fields });
 });
 
-app.post('/api/billing/cancel', requireAuth, (req, res) => {
+// 綠界付款完成後，伺服器對伺服器送來的通知（跟使用者的瀏覽器無關，不能用 requireAuth）
+app.post('/api/billing/ecpay/notify', (req, res) => {
+  const body = { ...req.body };
+  const receivedMac = body.CheckMacValue;
+  delete body.CheckMacValue;
+  if (receivedMac !== ecpayCheckMacValue(body)) {
+    console.error('[ecpay] notify 檢查碼不符', body);
+    return res.status(400).send('0|CheckMacValue error');
+  }
+  const order = db.prepare(`SELECT * FROM ecpay_orders WHERE trade_no=?`).get(body.MerchantTradeNo);
+  if (!order) {
+    console.error('[ecpay] notify 找不到對應訂單', body.MerchantTradeNo);
+    return res.send('1|OK');
+  }
+  if (order.status === 'pending') {
+    if (body.RtnCode === '1') {
+      const renews = new Date();
+      renews.setMonth(renews.getMonth() + ECPAY_PERIOD_MONTHS);
+      db.prepare(`UPDATE users SET plan='pro', plan_source='paid', plan_renews_at=?, plan_cancel_at_period_end=0 WHERE id=?`).run(
+        renews.toISOString(), order.user_id,
+      );
+      db.prepare(`INSERT INTO payments (id, user_id, amount, card_last4, created_at) VALUES (?, ?, ?, ?, ?)`).run(
+        randomUUID(), order.user_id, Number(body.TradeAmt) || order.amount, body.card4no || null, now(),
+      );
+      db.prepare(`UPDATE ecpay_orders SET status='paid' WHERE trade_no=?`).run(order.trade_no);
+    } else {
+      db.prepare(`UPDATE ecpay_orders SET status='failed' WHERE trade_no=?`).run(order.trade_no);
+    }
+  }
+  res.send('1|OK');
+});
+
+// 定期定額每一期扣款的通知（第一期也會走這個通知，由 ReturnURL 另外處理首期）
+app.post('/api/billing/ecpay/period-notify', (req, res) => {
+  const body = { ...req.body };
+  const receivedMac = body.CheckMacValue;
+  delete body.CheckMacValue;
+  if (receivedMac !== ecpayCheckMacValue(body)) {
+    console.error('[ecpay] period-notify 檢查碼不符', body);
+    return res.status(400).send('0|CheckMacValue error');
+  }
+  const order = db.prepare(`SELECT * FROM ecpay_orders WHERE trade_no=?`).get(body.MerchantTradeNo);
+  if (order && body.RtnCode === '1' && body.SimulatePaid !== '1' && Number(body.TotalSuccessTimes) > 1) {
+    const user = db.prepare(`SELECT * FROM users WHERE id=?`).get(order.user_id);
+    if (user) {
+      const renews = new Date();
+      renews.setMonth(renews.getMonth() + ECPAY_PERIOD_MONTHS);
+      db.prepare(`UPDATE users SET plan='pro', plan_source='paid', plan_renews_at=? WHERE id=?`).run(renews.toISOString(), user.id);
+      db.prepare(`INSERT INTO payments (id, user_id, amount, card_last4, created_at) VALUES (?, ?, ?, ?, ?)`).run(
+        randomUUID(), user.id, Number(body.Amount) || order.amount, null, now(),
+      );
+    }
+  }
+  res.send('1|OK');
+});
+
+// 使用者付款完刷卡後，瀏覽器被導回這裡（綠界用 POST 導回，跟上面的伺服器通知是分開的兩條路徑）
+app.post('/api/billing/ecpay/result', (_req, res) => {
+  res.redirect('/account?upgraded=1');
+});
+
+app.post('/api/billing/cancel', requireAuth, async (req, res) => {
+  const order = db.prepare(`SELECT * FROM ecpay_orders WHERE user_id=? AND status='paid' ORDER BY created_at DESC LIMIT 1`).get(req.user.id);
+  if (order) {
+    try {
+      await ecpayPeriodAction(order.trade_no, 'Cancel');
+    } catch (e) {
+      console.error('[ecpay] 終止定期定額失敗', e);
+      return res.status(502).json({ error: '向金流商終止訂閱失敗，請稍後再試' });
+    }
+  }
   db.prepare(`UPDATE users SET plan_cancel_at_period_end=1 WHERE id=?`).run(req.user.id);
-  res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)) });
-});
-
-app.post('/api/billing/resume', requireAuth, (req, res) => {
-  db.prepare(`UPDATE users SET plan_cancel_at_period_end=0 WHERE id=?`).run(req.user.id);
   res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)) });
 });
 
@@ -262,6 +443,20 @@ app.get('/api/billing/payments', requireAuth, (req, res) => {
       .prepare(`SELECT id, amount, card_last4 AS cardLast4, created_at AS createdAt FROM payments WHERE user_id=? ORDER BY created_at DESC`)
       .all(req.user.id),
   });
+});
+
+// 兌換優惠碼：免費升級，不用走綠界；同一組碼每個人都能用，但每人限用一次
+app.post('/api/billing/promo/redeem', requireAuth, (req, res) => {
+  const code = String(req.body.code || '').trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: '請輸入優惠碼' });
+  const promo = db.prepare(`SELECT * FROM promo_codes WHERE code=?`).get(code);
+  if (!promo) return res.status(400).json({ error: '優惠碼不存在或已失效' });
+  if (db.prepare(`SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?`).get(code, req.user.id)) {
+    return res.status(400).json({ error: '這組優惠碼你已經用過了' });
+  }
+  grantProMonths(req.user, promo.months, 'promo');
+  db.prepare(`INSERT INTO promo_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)`).run(code, req.user.id, now());
+  res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)), months: promo.months });
 });
 
 // ---------- 管理後台 ----------
@@ -349,19 +544,37 @@ app.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   if (req.body.action === 'grant') {
     const months = Number(req.body.months);
     if (!Number.isInteger(months) || months < 0 || months > 12) return res.status(400).json({ error: '開通期間不正確' });
-    let renews = null;
-    if (months) {
-      const base = user.plan === 'pro' && user.plan_renews_at && new Date(user.plan_renews_at) > new Date() ? new Date(user.plan_renews_at) : new Date();
-      base.setMonth(base.getMonth() + months);
-      renews = base.toISOString();
+    if (months === 0) {
+      db.prepare(`UPDATE users SET plan='pro', plan_source='admin', plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
+    } else {
+      grantProMonths(user, months, 'admin');
     }
-    db.prepare(`UPDATE users SET plan='pro', plan_source='admin', plan_renews_at=?, plan_cancel_at_period_end=? WHERE id=?`).run(renews, months ? 1 : 0, user.id);
   } else if (req.body.action === 'revoke') {
     db.prepare(`UPDATE users SET plan='free', plan_source=NULL, plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
   } else {
     return res.status(400).json({ error: '不支援的操作' });
   }
   res.json({ ok: true });
+});
+
+// 管理者產生優惠碼：免費升級 1~12 個月，不會產生付款紀錄；同一組碼每個人都能用，但每人限用一次
+app.post('/api/admin/promo-codes', requireAuth, requireAdmin, (req, res) => {
+  const months = Number(req.body.months);
+  if (!Number.isInteger(months) || months < 1 || months > 12) return res.status(400).json({ error: '月數要是 1~12 之間的整數' });
+  const code = generatePromoCode();
+  const createdAt = now();
+  db.prepare(`INSERT INTO promo_codes (code, months, created_by, created_at) VALUES (?, ?, ?, ?)`).run(code, months, req.user.id, createdAt);
+  res.json({ code: { code, months, createdAt, redemptions: 0 } });
+});
+
+app.get('/api/admin/promo-codes', requireAuth, requireAdmin, (req, res) => {
+  const codes = db
+    .prepare(
+      `SELECT p.code, p.months, p.created_at AS createdAt, (SELECT COUNT(*) FROM promo_redemptions r WHERE r.code = p.code) AS redemptions
+       FROM promo_codes p ORDER BY p.created_at DESC`,
+    )
+    .all();
+  res.json({ codes });
 });
 
 // 刪除會員：連同專案、上傳檔案、自訂聲音與登入狀態；付款紀錄保留以維持營收報表正確

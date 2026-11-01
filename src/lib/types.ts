@@ -1,6 +1,7 @@
 import type { ClipFilter } from './filters';
 
 export type Plan = 'free' | 'pro';
+export type PlanSource = 'paid' | 'admin' | 'promo' | 'trial' | null;
 
 export interface User {
   id: string;
@@ -8,11 +9,18 @@ export interface User {
   name: string;
   plan: Plan;
   role: 'user' | 'admin';
-  planSource: 'paid' | 'admin' | 'trial' | null;
+  planSource: PlanSource;
   planRenewsAt: string | null;
   cancelAtPeriodEnd: boolean;
   createdAt: string;
   usage: { projectsThisMonth: number; projectLimit: number | null };
+}
+
+export interface PromoCode {
+  code: string;
+  months: number;
+  createdAt: string;
+  redemptions: number;
 }
 
 export type Aspect = '9:16' | '16:9' | '1:1';
@@ -275,7 +283,7 @@ export interface AdminMember {
   name: string;
   role: 'user' | 'admin';
   plan: Plan;
-  planSource: 'paid' | 'admin' | 'trial' | null;
+  planSource: PlanSource;
   planRenewsAt: string | null;
   cancelAtPeriodEnd: boolean;
   createdAt: string;

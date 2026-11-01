@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, Navigate, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BarChart3, LogOut, ShieldCheck, Users } from 'lucide-react';
+import { ArrowLeft, BarChart3, LogOut, ShieldCheck, Ticket, Users } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { Logo } from '../../components/ui';
 
@@ -33,6 +33,9 @@ export function AdminLayout({ title, actions, children }: { title: string; actio
             <NavLink to="/admin/members" className={tab}>
               <Users className="size-4" /> 會員管理
             </NavLink>
+            <NavLink to="/admin/promo-codes" className={tab}>
+              <Ticket className="size-4" /> 優惠碼
+            </NavLink>
           </nav>
           <div className="ml-auto flex items-center gap-1">
             <Link to="/dashboard" className="hidden items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-sunken hover:text-ink md:flex">
@@ -58,6 +61,9 @@ export function AdminLayout({ title, actions, children }: { title: string; actio
           </NavLink>
           <NavLink to="/admin/members" className={tab}>
             <Users className="size-4" /> 會員管理
+          </NavLink>
+          <NavLink to="/admin/promo-codes" className={tab}>
+            <Ticket className="size-4" /> 優惠碼
           </NavLink>
         </nav>
       </header>

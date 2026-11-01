@@ -19,6 +19,7 @@ import { RequireAdmin } from './pages/admin/AdminLayout';
 const Editor = lazy(() => import('./editor/Editor'));
 const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'));
 const AdminMembers = lazy(() => import('./pages/admin/AdminMembers'));
+const AdminPromoCodes = lazy(() => import('./pages/admin/AdminPromoCodes'));
 
 /** 換頁時更新標題、描述、canonical；私人頁面和 404 加上 noindex */
 function RouteSeo() {
@@ -50,6 +51,7 @@ function AppContent() {
                 <Route path="/editor/:id" element={<RequireAuth><Editor /></RequireAuth>} />
                 <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />
                 <Route path="/admin/members" element={<RequireAdmin><AdminMembers /></RequireAdmin>} />
+                <Route path="/admin/promo-codes" element={<RequireAdmin><AdminPromoCodes /></RequireAdmin>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

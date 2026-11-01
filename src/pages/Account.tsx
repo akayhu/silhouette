@@ -8,7 +8,7 @@ import { isTrial, trialDaysLeft, trialEnded } from '../lib/plan';
 import { AppLayout } from '../components/Layout';
 import { Button, Field, Modal, buttonClass, inputClass, useToast } from '../components/ui';
 
-type Payment = { id: string; amount: number; cardLast4: string; createdAt: string };
+type Payment = { id: string; amount: number; cardLast4: string | null; createdAt: string };
 
 export default function Account() {
   const { user, setUser } = useAuth();
@@ -104,9 +104,7 @@ export default function Account() {
                   </div>
                 </div>
                 {user.cancelAtPeriodEnd ? (
-                  <Button className="mt-4" onClick={async () => setUser((await api.resume()).user)}>
-                    恢復訂閱
-                  </Button>
+                  <p className="mt-4 text-sm text-ink-soft">已停止續扣款，到期後可以再重新訂閱一次。</p>
                 ) : (
                   <Button variant="danger" className="mt-4" onClick={() => setConfirmCancel(true)}>
                     取消訂閱
@@ -137,7 +135,7 @@ export default function Account() {
                   <li key={p.id} className="flex justify-between py-3">
                     <span>
                       {formatDate(p.createdAt)}
-                      <span className="ml-2 text-ink-mute">卡號末四碼 {p.cardLast4}</span>
+                      {p.cardLast4 && <span className="ml-2 text-ink-mute">卡號末四碼 {p.cardLast4}</span>}
                     </span>
                     <span className="font-bold">NT${p.amount}</span>
                   </li>

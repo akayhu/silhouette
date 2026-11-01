@@ -1,42 +1,59 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Lock } from 'lucide-react';
+import { ArrowLeft, Check, Lock, Ticket } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/format';
 import { isPaidPro, isTrial } from '../lib/plan';
 import { useAuth } from '../lib/auth';
-import { Button, Field, Logo, inputClass, useToast } from '../components/ui';
-
-const formatCard = (v: string) => v.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 ');
-const formatExpiry = (v: string) => v.replace(/\D/g, '').slice(0, 4).replace(/(\d{2})(?=\d)/, '$1/');
+import { Button, Logo, inputClass, useToast } from '../components/ui';
 
 export default function Checkout() {
   const { user, setUser } = useAuth();
-  const navigate = useNavigate();
   const toast = useToast();
-  const [card, setCard] = useState({ name: '', number: '', expiry: '', cvc: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const navigate = useNavigate();
   const location = useLocation();
+  const [busy, setBusy] = useState(false);
+  const [promo, setPromo] = useState('');
+  const [promoBusy, setPromoBusy] = useState(false);
   const alreadyPro = useRef(isPaidPro(user)).current;
 
   if (alreadyPro) return <Navigate to="/account" replace />;
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError('');
+  const goToEcpay = async () => {
     setBusy(true);
     try {
-      const { user } = await api.checkout({ cardNumber: card.number, name: card.name });
+      const { actionUrl, fields } = await api.ecpayCheckout();
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = actionUrl;
+      for (const [key, value] of Object.entries(fields)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = String(value);
+        form.appendChild(input);
+      }
+      document.body.appendChild(form);
+      form.submit();
+    } catch (err) {
+      toast((err as Error).message, 'error');
+      setBusy(false);
+    }
+  };
+
+  const redeemPromo = async () => {
+    if (!promo.trim()) return;
+    setPromoBusy(true);
+    try {
+      const { user, months } = await api.redeemPromo(promo.trim());
       setUser(user);
-      toast('升級成功！已解鎖專業版全部功能', 'success');
-      // 從編輯器點升級的話，付款完回到原本的頁面
+      toast(`優惠碼兌換成功，已升級專業版 ${months} 個月`, 'success');
       if (location.key !== 'default') navigate(-1);
       else navigate('/dashboard');
     } catch (err) {
-      setError((err as Error).message);
+      toast((err as Error).message, 'error');
     } finally {
-      setBusy(false);
+      setPromoBusy(false);
     }
   };
 
@@ -78,33 +95,35 @@ export default function Checkout() {
             </div>
           </div>
         </div>
-        <form onSubmit={submit} className="h-fit rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">
-          <h2 className="text-lg font-extrabold">付款資訊</h2>
-          <p className="mt-1 rounded-xl bg-sun/20 px-3 py-2 text-xs font-semibold text-[#8a6100]">
-            目前是本機測試模式，不會真的扣款。可以用測試卡號 4242 4242 4242 4242。
+        <div className="h-fit rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">
+          <h2 className="text-lg font-extrabold">用信用卡付款</h2>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            按下方按鈕後，會前往綠界金流的收銀台頁面輸入卡號，刷卡資料不會經過片刻剪趣的伺服器。付款完成後會自動回到這裡。
           </p>
-          <div className="mt-5 space-y-4">
-            <Field label="持卡人姓名">
-              <input className={inputClass} value={card.name} onChange={(e) => setCard({ ...card, name: e.target.value })} required placeholder={user?.name} />
-            </Field>
-            <Field label="卡號">
-              <input className={inputClass} inputMode="numeric" value={card.number} onChange={(e) => setCard({ ...card, number: formatCard(e.target.value) })} required placeholder="1234 5678 9012 3456" />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="到期日">
-                <input className={inputClass} inputMode="numeric" value={card.expiry} onChange={(e) => setCard({ ...card, expiry: formatExpiry(e.target.value) })} required placeholder="MM/YY" pattern="\d{2}/\d{2}" />
-              </Field>
-              <Field label="安全碼">
-                <input className={inputClass} inputMode="numeric" value={card.cvc} onChange={(e) => setCard({ ...card, cvc: e.target.value.replace(/\D/g, '').slice(0, 4) })} required placeholder="CVC" minLength={3} />
-              </Field>
-            </div>
-          </div>
-          {error && <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">{error}</p>}
-          <Button type="submit" size="lg" className="mt-6 w-full" disabled={busy}>
-            {busy ? '處理中…' : '確認訂閱 NT$399／月'}
+          <Button size="lg" className="mt-6 w-full" disabled={busy} onClick={goToEcpay}>
+            {busy ? '前往付款頁面中…' : '前往綠界付款 NT$399／月'}
           </Button>
           <p className="mt-3 text-center text-xs text-ink-mute">訂閱後每月自動扣款，可在帳戶設定隨時取消。</p>
-        </form>
+
+          <div className="mt-6 border-t border-line pt-6">
+            <div className="flex items-center gap-2 text-sm font-extrabold">
+              <Ticket className="size-4 text-brand" /> 有優惠碼？
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                className={inputClass}
+                value={promo}
+                onChange={(e) => setPromo(e.target.value)}
+                placeholder="輸入優惠碼"
+                onKeyDown={(e) => e.key === 'Enter' && redeemPromo()}
+              />
+              <Button variant="secondary" disabled={promoBusy || !promo.trim()} onClick={redeemPromo}>
+                {promoBusy ? '兌換中…' : '兌換'}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-ink-mute">兌換後直接升級，不需要信用卡。</p>
+          </div>
+        </div>
       </div>
     </div>
   );

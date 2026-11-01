@@ -250,7 +250,7 @@ function PlanBadge({ u }: { u: AdminMember }) {
   if (u.plan === 'pro')
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-bold text-brand">
-        <Crown className="size-3" /> 專業版{u.planSource === 'admin' ? '・管理者開通' : '・付費'}
+        <Crown className="size-3" /> 專業版{u.planSource === 'admin' ? '・管理者開通' : u.planSource === 'promo' ? '・優惠碼' : '・付費'}
       </span>
     );
   return <span className="rounded-full bg-sunken px-2 py-0.5 text-xs font-bold text-ink-soft">免費版{u.planSource === 'trial' ? '・試用已結束' : ''}</span>;

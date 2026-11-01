@@ -302,6 +302,6 @@ export interface LibraryTrack {
   duration: number;
   url: string;
   peaks: number[];
-  /** 封面圖（只有配樂有，音效用漸層占位） */
+  /** 封面圖（沒有的話面板會改用依 id 固定雜湊出的漸層色塊） */
   cover?: string;
 }

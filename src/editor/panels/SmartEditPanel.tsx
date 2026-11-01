@@ -78,7 +78,7 @@ export function SmartEditPanel() {
       </div>
       <p className="mt-1 text-xs leading-relaxed text-ink-mute">選一個模板，一鍵剪掉空拍、配上字幕、花字、音樂和音效。完成後每一項都能再調整，也能一鍵復原。</p>
 
-      <div className="mt-4 grid grid-cols-2 gap-2" role="radiogroup" aria-label="模板">
+      <div className="mt-4 grid grid-cols-3 gap-2" role="radiogroup" aria-label="模板">
         {SMART_TEMPLATES.map((t) => {
           const on = pick.id === t.id;
           const song = library.find((s) => s.id === t.music);

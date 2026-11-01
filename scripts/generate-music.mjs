@@ -1978,7 +1978,7 @@ for (const [category, list] of [['music', tracks], ['sfx', effects]]) {
       duration: Math.round((L.length / SR) * 100) / 100,
       url: `/music/${item.id}.m4a`,
       peaks: peaks(L, R),
-      ...(category === 'music' && fs.existsSync(coverPath) ? { cover: `/music/covers/${item.id}.png` } : {}),
+      ...(fs.existsSync(coverPath) ? { cover: `/music/covers/${item.id}.png` } : {}),
     });
     console.log(`✓ ${item.title}（${(L.length / SR).toFixed(1)} 秒，${Date.now() - t0} ms）`);
   }

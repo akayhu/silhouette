@@ -261,7 +261,7 @@ export function MusicPanel() {
             </div>
           )}
           {items !== null && list.length === 0 && <p className="py-8 text-center text-xs text-ink-mute">找不到符合的{tab === 'music' ? '配樂' : '音效'}</p>}
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-3 gap-2">
             {list.map((t) => {
               const active = playing === t.id;
               return (

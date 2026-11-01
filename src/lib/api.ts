@@ -31,6 +31,8 @@ export const api = {
   register: (d: { name: string; email: string; password: string }) => request<{ pending: true; email: string }>('/api/auth/register', json('POST', d)),
   login: (d: { email: string; password: string }) => request<{ user: User }>('/api/auth/login', json('POST', d)),
   resendVerification: (email: string) => request<{ ok: true }>('/api/auth/resend-verification', json('POST', { email })),
+  forgotPassword: (email: string) => request<{ ok: true }>('/api/auth/forgot-password', json('POST', { email })),
+  resetPassword: (token: string, password: string) => request<{ user: User }>('/api/auth/reset-password', json('POST', { token, password })),
   logout: () => request('/api/auth/logout', json('POST')),
   updateMe: (d: { name?: string; currentPassword?: string; newPassword?: string }) => request<{ user: User }>('/api/auth/me', json('PATCH', d)),
 
@@ -77,6 +79,7 @@ export const api = {
     request<{ users: AdminMember[] }>(`/api/admin/users?q=${encodeURIComponent(q)}&plan=${plan}`),
   adminGrant: (id: string, months: number) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'grant', months })),
   adminRevoke: (id: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'revoke' })),
+  adminResetPassword: (id: string, password: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'reset-password', password })),
   adminDelete: (id: string) => request(`/api/admin/users/${id}`, json('DELETE')),
   adminPromoCodes: () => request<{ codes: PromoCode[] }>('/api/admin/promo-codes'),
   adminCreatePromoCode: (d: { kind: 'months'; months: number } | { kind: 'discount'; discountAmount: number }) =>

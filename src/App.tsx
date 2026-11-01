@@ -4,6 +4,8 @@ import { AuthProvider, RequireAuth } from './lib/auth';
 import { ToastProvider, UpgradeProvider } from './components/ui';
 import Landing from './pages/Landing';
 import Auth from './pages/Auth';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Pricing from './pages/Pricing';
 import Faq from './pages/Faq';
 import Ai from './pages/Ai';
@@ -45,6 +47,8 @@ function AppContent() {
                 <Route path="/features" element={<Features />} />
                 <Route path="/login" element={<Auth mode="login" />} />
                 <Route path="/register" element={<Auth mode="register" />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/checkout" element={<RequireAuth><Checkout /></RequireAuth>} />
                 <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
                 <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />

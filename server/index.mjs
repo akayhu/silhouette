@@ -39,6 +39,7 @@ const TRIAL_DAYS = 7;
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const RESEND_FROM = process.env.RESEND_FROM || '片刻剪趣 <onboarding@resend.dev>';
 const EMAIL_VERIFICATION_HOURS = 24;
+const PASSWORD_RESET_HOURS = 1;
 
 // ---------- Google 登入／註冊 ----------
 // 沒設定這兩個環境變數時，前端會顯示「需要先設定」的提示，不影響一般 Email 註冊
@@ -116,6 +117,12 @@ db.exec(`
     PRIMARY KEY (code, user_id)
   );
   CREATE TABLE IF NOT EXISTS email_verifications (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS password_resets (
     token TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     expires_at TEXT NOT NULL,
@@ -260,40 +267,69 @@ function ecpayDate(d = new Date()) {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-// 寄出註冊驗證信；沒設定 RESEND_API_KEY 時改印在 log，方便本機開發測試整個流程
-async function sendVerificationEmail(email, name, token) {
-  const link = `${APP_URL}/api/auth/verify?token=${token}`;
+// 用 Resend 寄出交易型通知信；沒設定 RESEND_API_KEY 時改印連結在 log，方便本機開發測試整個流程
+async function sendTransactionalEmail(email, subject, html, devLogPrefix, link) {
   if (!RESEND_API_KEY) {
-    console.log(`[驗證信：尚未設定 RESEND_API_KEY，僅印出連結] ${email} -> ${link}`);
+    console.log(`[${devLogPrefix}：尚未設定 RESEND_API_KEY，僅印出連結] ${email} -> ${link}`);
     return;
   }
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to: email,
-        subject: '請完成「片刻剪趣」帳號驗證',
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-            <h2>嗨 ${name}，歡迎加入片刻剪趣</h2>
-            <p>請點擊下方按鈕完成信箱驗證，開通你的帳號（含 7 天免費專業版試用）。</p>
-            <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#111;color:#fff;border-radius:999px;text-decoration:none;font-weight:bold">驗證我的帳號</a></p>
-            <p style="color:#888;font-size:13px">這組連結 ${EMAIL_VERIFICATION_HOURS} 小時內有效。如果不是你本人註冊，請忽略這封信。</p>
-          </div>`,
-      }),
+      body: JSON.stringify({ from: RESEND_FROM, to: email, subject, html }),
     });
-    if (!res.ok) console.error('寄送驗證信失敗', res.status, await res.text());
+    if (!res.ok) console.error(`寄送${devLogPrefix}失敗`, res.status, await res.text());
   } catch (err) {
-    console.error('寄送驗證信失敗', err);
+    console.error(`寄送${devLogPrefix}失敗`, err);
   }
+}
+
+async function sendVerificationEmail(email, name, token) {
+  const link = `${APP_URL}/api/auth/verify?token=${token}`;
+  await sendTransactionalEmail(
+    email,
+    '請完成「片刻剪趣」帳號驗證',
+    `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2>嗨 ${name}，歡迎加入片刻剪趣</h2>
+        <p>請點擊下方按鈕完成信箱驗證，開通你的帳號（含 7 天免費專業版試用）。</p>
+        <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#111;color:#fff;border-radius:999px;text-decoration:none;font-weight:bold">驗證我的帳號</a></p>
+        <p style="color:#888;font-size:13px">這組連結 ${EMAIL_VERIFICATION_HOURS} 小時內有效。如果不是你本人註冊，請忽略這封信。</p>
+      </div>`,
+    '驗證信',
+    link,
+  );
+}
+
+async function sendPasswordResetEmail(email, name, token) {
+  const link = `${APP_URL}/reset-password?token=${token}`;
+  await sendTransactionalEmail(
+    email,
+    '重設「片刻剪趣」密碼',
+    `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2>嗨 ${name}，收到重設密碼的請求</h2>
+        <p>請點擊下方按鈕設定新密碼。如果不是你本人操作，請忽略這封信，你的密碼不會被更改。</p>
+        <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#111;color:#fff;border-radius:999px;text-decoration:none;font-weight:bold">重設密碼</a></p>
+        <p style="color:#888;font-size:13px">這組連結 ${PASSWORD_RESET_HOURS} 小時內有效。</p>
+      </div>`,
+    '密碼重設信',
+    link,
+  );
 }
 
 function createEmailVerification(userId) {
   const token = randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + EMAIL_VERIFICATION_HOURS * 3600_000).toISOString();
   db.prepare(`INSERT INTO email_verifications (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`).run(token, userId, expires, now());
+  return token;
+}
+
+function createPasswordReset(userId) {
+  const token = randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + PASSWORD_RESET_HOURS * 3600_000).toISOString();
+  db.prepare(`INSERT INTO password_resets (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`).run(token, userId, expires, now());
   return token;
 }
 
@@ -376,6 +412,36 @@ app.post('/api/auth/resend-verification', async (req, res) => {
   }
   await sendVerificationEmail(user.email, user.name, createEmailVerification(user.id));
   res.json({ ok: true });
+});
+
+// 忘記密碼：不管帳號存不存在都回一樣的訊息，避免被用來試探哪些 Email 有註冊
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const user = db.prepare(`SELECT * FROM users WHERE email=?`).get(email);
+  if (user) {
+    const last = db.prepare(`SELECT created_at FROM password_resets WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).get(user.id);
+    if (!last || Date.now() - new Date(last.created_at).getTime() >= 60_000) {
+      await sendPasswordResetEmail(user.email, user.name, createPasswordReset(user.id));
+    }
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/reset-password', (req, res) => {
+  const token = String(req.body.token || '');
+  const password = String(req.body.password || '');
+  if (password.length < 8) return res.status(400).json({ error: '密碼至少需要 8 個字元' });
+  const row = db.prepare(`SELECT * FROM password_resets WHERE token=?`).get(token);
+  if (!row || new Date(row.expires_at) < new Date()) {
+    return res.status(400).json({ error: '重設連結已失效或過期，請重新申請一次' });
+  }
+  db.prepare(`UPDATE users SET password_hash=? WHERE id=?`).run(hashPassword(password), row.user_id);
+  db.prepare(`DELETE FROM password_resets WHERE token=?`).run(token);
+  // 重設密碼後，把這個帳號其他裝置的登入都登出，比較安全
+  db.prepare(`DELETE FROM sessions WHERE user_id=?`).run(row.user_id);
+  const user = db.prepare(`SELECT * FROM users WHERE id=?`).get(row.user_id);
+  createSession(res, user.id);
+  res.json({ user: publicUser(refreshPlan(user)) });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -760,6 +826,12 @@ app.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
     }
   } else if (req.body.action === 'revoke') {
     db.prepare(`UPDATE users SET plan='free', plan_source=NULL, plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
+  } else if (req.body.action === 'reset-password') {
+    const password = String(req.body.password || '');
+    if (password.length < 8) return res.status(400).json({ error: '密碼至少需要 8 個字元' });
+    db.prepare(`UPDATE users SET password_hash=? WHERE id=?`).run(hashPassword(password), user.id);
+    // 管理者改密碼後，把這個帳號目前的登入都登出，確保新密碼立刻生效
+    db.prepare(`DELETE FROM sessions WHERE user_id=?`).run(user.id);
   } else {
     return res.status(400).json({ error: '不支援的操作' });
   }

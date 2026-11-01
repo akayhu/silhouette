@@ -135,6 +135,11 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
                 autoComplete={isLogin ? 'current-password' : 'new-password'}
               />
             </Field>
+            {isLogin && (
+              <Link to="/forgot-password" className="-mt-2 block text-right text-xs font-bold text-ink-soft hover:text-ink">
+                忘記密碼？
+              </Link>
+            )}
             {error && (
               <div className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
                 <p>{error}</p>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Crown, Search, ShieldCheck, Trash2, UserMinus } from 'lucide-react';
+import { Check, Copy, Crown, KeyRound, RefreshCw, Search, ShieldCheck, Trash2, UserMinus } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { formatDate } from '../../lib/format';
@@ -12,6 +12,13 @@ type Filter = 'all' | 'pro' | 'trial' | 'free';
 /** 開通期間：0 代表永久（不過期），否則 1～12 個月 */
 const durationLabel = (months: number) => (months === 0 ? '永久' : `${months} 個月`);
 
+/** 產生一組容易輸入、但夠隨機的新密碼，給管理者重設時預設帶入 */
+const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+function generatePassword() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (b) => PASSWORD_CHARS[b % PASSWORD_CHARS.length]).join('');
+}
+
 export default function AdminMembers() {
   const { user: me } = useAuth();
   const toast = useToast();
@@ -22,6 +29,9 @@ export default function AdminMembers() {
   const [months, setMonths] = useState(1);
   const [deleting, setDeleting] = useState<AdminMember | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [resetting, setResetting] = useState<AdminMember | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = () => api.adminUsers(q, filter).then((r) => setMembers(r.users)).catch((e) => toast(e.message, 'error'));
@@ -141,6 +151,14 @@ export default function AdminMembers() {
                             </Button>
                           )}
                           <button
+                            onClick={() => (setResetting(u), setNewPassword(generatePassword()), setCopied(false))}
+                            className="grid size-8 place-items-center rounded-lg text-ink-mute hover:bg-sunken hover:text-ink"
+                            aria-label={`重設 ${u.name} 的密碼`}
+                            title="重設密碼"
+                          >
+                            <KeyRound className="size-4" />
+                          </button>
+                          <button
                             onClick={() => (setDeleting(u), setConfirmText(''))}
                             className="grid size-8 place-items-center rounded-lg text-ink-mute hover:bg-red-50 hover:text-red-600"
                             aria-label={`刪除 ${u.name}`}
@@ -200,6 +218,51 @@ export default function AdminMembers() {
             }}
           >
             確認開通
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={!!resetting} onClose={() => setResetting(null)}>
+        <h2 className="text-xl font-extrabold">重設密碼</h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          直接為「{resetting?.name}」設定一組新密碼，這個帳號其他裝置的登入會被登出。請把新密碼告訴對方，之後請他自行到帳戶設定裡更改。
+        </p>
+        <label className="mt-5 block text-xs font-semibold text-ink-soft">
+          新密碼
+          <div className="mt-1.5 flex gap-2">
+            <input
+              className={`${inputClass} font-mono`}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={8}
+            />
+            <Button type="button" variant="secondary" onClick={() => (setNewPassword(generatePassword()), setCopied(false))} aria-label="重新產生">
+              <RefreshCw className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigator.clipboard.writeText(newPassword).then(() => (setCopied(true), setTimeout(() => setCopied(false), 1500)))}
+              aria-label="複製"
+            >
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            </Button>
+          </div>
+        </label>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setResetting(null)}>
+            取消
+          </Button>
+          <Button
+            variant="coral"
+            disabled={busy || newPassword.trim().length < 8}
+            onClick={async () => {
+              const u = resetting!;
+              setResetting(null);
+              await act(() => api.adminResetPassword(u.id, newPassword.trim()), `已為 ${u.name} 重設密碼`);
+            }}
+          >
+            <KeyRound className="size-4" /> 確認重設
           </Button>
         </div>
       </Modal>

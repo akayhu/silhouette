@@ -45,6 +45,8 @@ export const PUBLIC_ROUTES: Record<string, SeoMeta> = {
 
 const PRIVATE_TITLES: [RegExp, string][] = [
   [/^\/login/, '登入'],
+  [/^\/forgot-password/, '忘記密碼'],
+  [/^\/reset-password/, '重設密碼'],
   [/^\/dashboard/, '我的專案'],
   [/^\/account/, '帳戶設定'],
   [/^\/checkout/, '升級專業版'],

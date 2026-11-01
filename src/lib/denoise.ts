@@ -107,3 +107,43 @@ export async function createDenoiseChain(ctx: BaseAudioContext): Promise<Denoise
 
   return { input: highpass, output: presence, setStrength };
 }
+
+/** 把整段錄音跑過降噪鏈，直接烘進一個新的 WAV（錄音上字幕功能用，取代原始錄音檔） */
+export async function denoiseRecording(blob: Blob, strength: number = DEFAULT_CLIP_DENOISE.strength): Promise<Blob> {
+  const ctx = new AudioContext();
+  let decoded: AudioBuffer;
+  try {
+    decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+  } finally {
+    ctx.close();
+  }
+  const sr = decoded.sampleRate;
+  const off = new OfflineAudioContext(1, decoded.length, sr);
+  const src = off.createBufferSource();
+  src.buffer = decoded;
+  const chain = await createDenoiseChain(off);
+  chain.setStrength(strength);
+  src.connect(chain.input);
+  chain.output.connect(off.destination);
+  src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+
+  const buf = new ArrayBuffer(44 + pcm.length * 2);
+  const view = new DataView(buf);
+  const str = (o: number, s: string) => [...s].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF');
+  view.setUint32(4, 36 + pcm.length * 2, true);
+  str(8, 'WAVE');
+  str(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sr, true);
+  view.setUint32(28, sr * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  str(36, 'data');
+  view.setUint32(40, pcm.length * 2, true);
+  pcm.forEach((v, i) => view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 0x7fff, true));
+  return new Blob([buf], { type: 'audio/wav' });
+}

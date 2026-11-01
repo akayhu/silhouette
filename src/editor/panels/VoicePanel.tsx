@@ -4,6 +4,7 @@ import { AudioLines, Loader2, Mic, Play, Sparkles, Square, Trash2 } from 'lucide
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { ASR_MODELS, transcribe } from '../../lib/asr';
+import { denoiseRecording } from '../../lib/denoise';
 import { uid } from '../../lib/format';
 import { audioPeaks, decodeAudio, probe, sliceMono } from '../../lib/media';
 import { splitSentences } from '../../lib/sentences';
@@ -306,6 +307,7 @@ function RecordCaption({ isPro, guard }: { isPro: boolean; guard: () => boolean 
   const toast = useToast();
   const [model, setModel] = useState<string>(ASR_MODELS[0].id);
   const [withCaptions, setWithCaptions] = useState(true);
+  const [denoise, setDenoise] = useState(true);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [clip, setClip] = useState<{ blob: Blob; url: string } | null>(null);
@@ -370,8 +372,14 @@ function RecordCaption({ isPro, guard }: { isPro: boolean; guard: () => boolean 
     setBusy('add');
     try {
       const id = uid();
-      const ext = clip.blob.type.includes('ogg') ? '.ogg' : clip.blob.type.includes('mp4') ? '.m4a' : '.webm';
-      const [{ duration }, peaks, saved] = await Promise.all([probe(clip.url, 'audio'), audioPeaks(clip.blob), saveLocalFile(id, clip.blob, '錄音' + ext)]);
+      let blob = clip.blob;
+      let ext = clip.blob.type.includes('ogg') ? '.ogg' : clip.blob.type.includes('mp4') ? '.m4a' : '.webm';
+      if (denoise) {
+        setStatus('降噪處理中…');
+        blob = await denoiseRecording(blob);
+        ext = '.wav';
+      }
+      const [{ duration }, peaks, saved] = await Promise.all([probe(clip.url, 'audio'), audioPeaks(blob), saveLocalFile(id, blob, '錄音' + ext)]);
       const m: MediaItem = { id, name: '錄音', kind: 'audio', url: saved.url, duration, origin: 'record', peaks, local: saved.local };
       const { time, data } = useEditor.getState();
       let captions: Caption[] = [];
@@ -459,6 +467,10 @@ function RecordCaption({ isPro, guard }: { isPro: boolean; guard: () => boolean 
       {!recording && !clip && (
         <>
           <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-ink">
+            <input type="checkbox" className="accent-brand" checked={denoise} onChange={(e) => setDenoise(e.target.checked)} />
+            降噪（濾掉雜訊，人聲更清楚）
+          </label>
+          <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink">
             <input type="checkbox" className="accent-brand" checked={withCaptions} onChange={(e) => setWithCaptions(e.target.checked)} />
             同時辨識成字幕
           </label>

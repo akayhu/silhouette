@@ -10,11 +10,11 @@ export function SiteHeader() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const links = [
-    { href: '/#ai', label: 'AI 功能' },
-    { href: '/#local', label: '本機剪輯' },
-    { href: '/#features', label: '全部功能' },
+    { href: '/ai', label: 'AI 功能' },
+    { href: '/local', label: '本機剪輯' },
+    { href: '/features', label: '全部功能' },
     { href: '/pricing', label: '價格' },
-    { href: '/#faq', label: '常見問題' },
+    { href: '/faq', label: '常見問題' },
   ];
   return (
     <header className="sticky top-0 z-40 border-b border-site-line/80 bg-white/90 backdrop-blur-md">
@@ -22,9 +22,9 @@ export function SiteHeader() {
         <PrintedLogo />
         <nav className="hidden items-center gap-1 lg:flex" aria-label="主要">
           {links.map((l) => (
-            <a key={l.href} href={l.href} className="rounded-full px-3.5 py-2 text-[15px] font-bold text-site-soft transition-colors hover:bg-site-band hover:text-site-ink">
+            <Link key={l.href} to={l.href} className="rounded-full px-3.5 py-2 text-[15px] font-bold text-site-soft transition-colors hover:bg-site-band hover:text-site-ink">
               {l.label}
-            </a>
+            </Link>
           ))}
         </nav>
         <div className="hidden items-center gap-3 lg:flex">
@@ -50,9 +50,9 @@ export function SiteHeader() {
       {open && (
         <div className="border-t border-site-line bg-white px-4 pt-2 pb-4 lg:hidden">
           {links.map((l) => (
-            <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="flex border-b border-site-line py-3 font-bold text-site-ink">
+            <Link key={l.href} to={l.href} onClick={() => setOpen(false)} className="flex border-b border-site-line py-3 font-bold text-site-ink">
               {l.label}
-            </a>
+            </Link>
           ))}
           {!user && (
             <Link to="/login" className="flex py-3 font-bold text-site-soft">
@@ -69,7 +69,7 @@ export function SiteHeader() {
 }
 
 const FOOTER_COLS = [
-  { title: '產品', items: [['AI 功能', '/#ai'], ['全部功能', '/#features'], ['價格方案', '/pricing'], ['開始剪輯', '/register']] },
+  { title: '產品', items: [['AI 功能', '/ai'], ['全部功能', '/features'], ['價格方案', '/pricing'], ['開始剪輯', '/register']] },
   { title: '支援', items: [['常見問題', '/faq'], ['帳戶設定', '/account']] },
   { title: '公司', items: [['關於我們', '/'], ['服務條款', '/'], ['隱私權政策', '/']] },
 ];
@@ -88,9 +88,9 @@ export function SiteFooter() {
             <ul className="mt-3 space-y-2.5 text-[15px] text-site-soft">
               {col.items.map(([label, href]) => (
                 <li key={label}>
-                  <a href={href} className="underline-offset-4 hover:text-site-ink hover:underline">
+                  <Link to={href} className="underline-offset-4 hover:text-site-ink hover:underline">
                     {label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

@@ -150,7 +150,7 @@ const AI_TABS = [
   },
 ] as const;
 
-function AiTabs() {
+export function AiTabs() {
   const [tab, setTab] = useState<(typeof AI_TABS)[number]['id']>('auto');
   const t = AI_TABS.find((x) => x.id === tab)!;
   return (
@@ -545,7 +545,7 @@ function Numbers() {
 
 // ---------- 本機剪輯 ----------
 
-function LocalFirst() {
+export function LocalFirst() {
   return (
     <section id="local" className="scroll-mt-16 px-4 pb-24 sm:px-8">
       <div className="mx-auto grid max-w-[1180px] items-center gap-10 rounded-[32px] bg-site-band p-8 sm:p-12 lg:grid-cols-2 lg:gap-16">
@@ -607,7 +607,7 @@ function Steps() {
 
 // ---------- 全部功能 ----------
 
-function FeatureList() {
+export function FeatureList() {
   return (
     <section id="features" className="scroll-mt-16 px-4 py-24 sm:px-8">
       <SectionTitle title="剪一支短影音會用到的，都在這裡" sub="標了「專業版」的需要專業版，其餘免費就能用。" />

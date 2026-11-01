@@ -7,11 +7,14 @@ import { ToastProvider, UpgradeProvider } from './components/ui';
 import Landing from './pages/Landing';
 import Pricing from './pages/Pricing';
 import Faq from './pages/Faq';
+import Ai from './pages/Ai';
+import Local from './pages/Local';
+import Features from './pages/Features';
 
 export { PUBLIC_ROUTES } from './lib/seo';
 
 /** 要預先產生的頁面（只放不需要登入、內容固定的頁面） */
-export const PRERENDER_ROUTES = ['/', '/pricing', '/faq'];
+export const PRERENDER_ROUTES = ['/', '/pricing', '/faq', '/ai', '/local', '/features'];
 
 export function render(url: string) {
   return renderToString(
@@ -24,6 +27,9 @@ export function render(url: string) {
                 <Route path="/" element={<Landing />} />
                 <Route path="/pricing" element={<Pricing />} />
                 <Route path="/faq" element={<Faq />} />
+                <Route path="/ai" element={<Ai />} />
+                <Route path="/local" element={<Local />} />
+                <Route path="/features" element={<Features />} />
               </Routes>
             </UpgradeProvider>
           </ToastProvider>

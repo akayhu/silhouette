@@ -6,6 +6,9 @@ import Landing from './pages/Landing';
 import Auth from './pages/Auth';
 import Pricing from './pages/Pricing';
 import Faq from './pages/Faq';
+import Ai from './pages/Ai';
+import Local from './pages/Local';
+import Features from './pages/Features';
 import Checkout from './pages/Checkout';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
@@ -36,6 +39,9 @@ function AppContent() {
                 <Route path="/" element={<Landing />} />
                 <Route path="/pricing" element={<Pricing />} />
                 <Route path="/faq" element={<Faq />} />
+                <Route path="/ai" element={<Ai />} />
+                <Route path="/local" element={<Local />} />
+                <Route path="/features" element={<Features />} />
                 <Route path="/login" element={<Auth mode="login" />} />
                 <Route path="/register" element={<Auth mode="register" />} />
                 <Route path="/checkout" element={<RequireAuth><Checkout /></RequireAuth>} />

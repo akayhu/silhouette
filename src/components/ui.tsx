@@ -29,8 +29,9 @@ export function Button({ variant, size, className = '', ...rest }: ButtonHTMLAtt
 export function Logo({ to = '/', compact = false }: { to?: string; compact?: boolean }) {
   return (
     <Link to={to} className="flex items-center gap-2 font-extrabold tracking-tight text-ink">
+      {/* 商標固定用深色底＋白色播放鍵，不跟著淺色／深色主題變色（深色主題下 --color-ink 是白色，會讓底色跟播放鍵一樣變不見） */}
       <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
-        <rect width="32" height="32" rx="7" fill="var(--color-ink)" />
+        <rect width="32" height="32" rx="7" fill="#18191d" />
         <path d="M12 9.5v13l11-6.5z" fill="#fff" />
         <circle cx="24" cy="8" r="3.2" fill="var(--color-brand)" />
       </svg>

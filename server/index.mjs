@@ -34,6 +34,12 @@ const APP_URL = (process.env.APP_URL || 'http://localhost:5173').replace(/\/+$/,
 const ECPAY_PERIOD_MONTHS = 1;
 const TRIAL_DAYS = 7;
 
+// ---------- 註冊信箱驗證（Resend） ----------
+// 沒設定 RESEND_API_KEY 時（本機開發預設），驗證信連結只會印在後端 log，方便開發測試
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const RESEND_FROM = process.env.RESEND_FROM || '片刻剪趣 <onboarding@resend.dev>';
+const EMAIL_VERIFICATION_HOURS = 24;
+
 const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -103,6 +109,12 @@ db.exec(`
     redeemed_at TEXT NOT NULL,
     PRIMARY KEY (code, user_id)
   );
+  CREATE TABLE IF NOT EXISTS email_verifications (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);
 
 const now = () => new Date().toISOString();
@@ -118,6 +130,12 @@ if (!promoColumns.includes('kind')) db.exec(`ALTER TABLE promo_codes ADD COLUMN 
 if (!promoColumns.includes('discount_amount')) db.exec(`ALTER TABLE promo_codes ADD COLUMN discount_amount INTEGER`);
 const ecpayOrderColumns = db.prepare(`PRAGMA table_info(ecpay_orders)`).all().map((c) => c.name);
 if (!ecpayOrderColumns.includes('promo_code')) db.exec(`ALTER TABLE ecpay_orders ADD COLUMN promo_code TEXT`);
+
+// 舊資料庫補欄位：Email 驗證（舊帳號視為已驗證，避免這次改動把既有使用者鎖在外面）
+if (!userColumns.includes('email_verified_at')) {
+  db.exec(`ALTER TABLE users ADD COLUMN email_verified_at TEXT`);
+  db.exec(`UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL`);
+}
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
@@ -233,6 +251,43 @@ function ecpayDate(d = new Date()) {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
+// 寄出註冊驗證信；沒設定 RESEND_API_KEY 時改印在 log，方便本機開發測試整個流程
+async function sendVerificationEmail(email, name, token) {
+  const link = `${APP_URL}/api/auth/verify?token=${token}`;
+  if (!RESEND_API_KEY) {
+    console.log(`[驗證信：尚未設定 RESEND_API_KEY，僅印出連結] ${email} -> ${link}`);
+    return;
+  }
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: email,
+        subject: '請完成「片刻剪趣」帳號驗證',
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+            <h2>嗨 ${name}，歡迎加入片刻剪趣</h2>
+            <p>請點擊下方按鈕完成信箱驗證，開通你的帳號（含 7 天免費專業版試用）。</p>
+            <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#111;color:#fff;border-radius:999px;text-decoration:none;font-weight:bold">驗證我的帳號</a></p>
+            <p style="color:#888;font-size:13px">這組連結 ${EMAIL_VERIFICATION_HOURS} 小時內有效。如果不是你本人註冊，請忽略這封信。</p>
+          </div>`,
+      }),
+    });
+    if (!res.ok) console.error('寄送驗證信失敗', res.status, await res.text());
+  } catch (err) {
+    console.error('寄送驗證信失敗', err);
+  }
+}
+
+function createEmailVerification(userId) {
+  const token = randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + EMAIL_VERIFICATION_HOURS * 3600_000).toISOString();
+  db.prepare(`INSERT INTO email_verifications (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`).run(token, userId, expires, now());
+  return token;
+}
+
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 // 綠界的付款通知是用 application/x-www-form-urlencoded POST 回來的
@@ -263,7 +318,7 @@ function createSession(res, userId) {
 }
 
 // ---------- 會員 ----------
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const name = String(req.body.name || '').trim();
   const password = String(req.body.password || '');
@@ -273,14 +328,45 @@ app.post('/api/auth/register', (req, res) => {
   if (db.prepare(`SELECT 1 FROM users WHERE email=?`).get(email)) {
     return res.status(409).json({ error: '這個 Email 已經註冊過了' });
   }
+  // 註冊後先不給 7 天試用、也不自動登入，要等點了信箱裡的驗證連結才開通，避免隨便註冊隨便用
   const id = randomUUID();
-  const trialEnds = new Date(Date.now() + TRIAL_DAYS * 86400_000).toISOString();
   db.prepare(
-    `INSERT INTO users (id, email, name, password_hash, plan, plan_source, plan_renews_at, plan_cancel_at_period_end, created_at)
-     VALUES (?, ?, ?, ?, 'pro', 'trial', ?, 1, ?)`,
-  ).run(id, email, name, hashPassword(password), trialEnds, now());
-  createSession(res, id);
-  res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(id)) });
+    `INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)`,
+  ).run(id, email, name, hashPassword(password), now());
+  await sendVerificationEmail(email, name, createEmailVerification(id));
+  res.json({ pending: true, email });
+});
+
+app.get('/api/auth/verify', async (req, res) => {
+  const token = String(req.query.token || '');
+  const row = db.prepare(`SELECT * FROM email_verifications WHERE token=?`).get(token);
+  if (!row || new Date(row.expires_at) < new Date()) {
+    return res.redirect(`${APP_URL}/login?verify=invalid`);
+  }
+  const user = db.prepare(`SELECT * FROM users WHERE id=?`).get(row.user_id);
+  db.prepare(`DELETE FROM email_verifications WHERE token=?`).run(token);
+  if (!user) return res.redirect(`${APP_URL}/login?verify=invalid`);
+  if (!user.email_verified_at) {
+    const trialEnds = new Date(Date.now() + TRIAL_DAYS * 86400_000).toISOString();
+    db.prepare(
+      `UPDATE users SET email_verified_at=?, plan='pro', plan_source='trial', plan_renews_at=?, plan_cancel_at_period_end=1 WHERE id=?`,
+    ).run(now(), trialEnds, user.id);
+  }
+  createSession(res, user.id);
+  res.redirect(`${APP_URL}/dashboard?verified=1`);
+});
+
+app.post('/api/auth/resend-verification', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const user = db.prepare(`SELECT * FROM users WHERE email=?`).get(email);
+  if (!user) return res.status(404).json({ error: '找不到這個帳號' });
+  if (user.email_verified_at) return res.status(400).json({ error: '這個帳號已經驗證過了，請直接登入' });
+  const last = db.prepare(`SELECT created_at FROM email_verifications WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).get(user.id);
+  if (last && Date.now() - new Date(last.created_at).getTime() < 60_000) {
+    return res.status(429).json({ error: '驗證信剛寄出不久，請稍後再試' });
+  }
+  await sendVerificationEmail(user.email, user.name, createEmailVerification(user.id));
+  res.json({ ok: true });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -288,6 +374,9 @@ app.post('/api/auth/login', (req, res) => {
   const user = db.prepare(`SELECT * FROM users WHERE email=?`).get(email);
   if (!user || !verifyPassword(String(req.body.password || ''), user.password_hash)) {
     return res.status(401).json({ error: 'Email 或密碼錯誤' });
+  }
+  if (!user.email_verified_at) {
+    return res.status(403).json({ error: '請先完成信箱驗證才能登入', code: 'EMAIL_NOT_VERIFIED' });
   }
   createSession(res, user.id);
   res.json({ user: publicUser(refreshPlan(user)) });

@@ -33,6 +33,10 @@ export default function Dashboard() {
   useEffect(() => {
     load();
     refresh();
+    if (new URLSearchParams(location.search).get('verified') === '1') {
+      toast('帳號已完成驗證，歡迎使用 7 天免費專業版試用！', 'success');
+      navigate('/dashboard', { replace: true });
+    }
   }, []);
 
   if (!user) return null;

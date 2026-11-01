@@ -27,8 +27,10 @@ const json = (method: string, data?: unknown): RequestInit => ({ method, body: d
 
 export const api = {
   me: () => request<{ user: User | null }>('/api/auth/me'),
-  register: (d: { name: string; email: string; password: string }) => request<{ user: User }>('/api/auth/register', json('POST', d)),
+  /** 註冊後要先去信箱點驗證連結才會開通（不會馬上登入） */
+  register: (d: { name: string; email: string; password: string }) => request<{ pending: true; email: string }>('/api/auth/register', json('POST', d)),
   login: (d: { email: string; password: string }) => request<{ user: User }>('/api/auth/login', json('POST', d)),
+  resendVerification: (email: string) => request<{ ok: true }>('/api/auth/resend-verification', json('POST', { email })),
   logout: () => request('/api/auth/logout', json('POST')),
   updateMe: (d: { name?: string; currentPassword?: string; newPassword?: string }) => request<{ user: User }>('/api/auth/me', json('PATCH', d)),
 

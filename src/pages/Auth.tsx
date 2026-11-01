@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { Check } from 'lucide-react';
+import { Check, MailCheck } from 'lucide-react';
 import { Button, Field, Logo, inputClass, useToast } from '../components/ui';
 
 export default function Auth({ mode }: { mode: 'login' | 'register' }) {
@@ -12,20 +12,45 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
   const navigate = useNavigate();
   const toast = useToast();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(params.get('verify') === 'invalid' ? '驗證連結已失效或過期，請重新登入後再寄一次驗證信' : '');
+  const [needsVerify, setNeedsVerify] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [resendBusy, setResendBusy] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (user) return <Navigate to={next} replace />;
 
+  const resend = async (email: string) => {
+    setResendBusy(true);
+    try {
+      await api.resendVerification(email);
+      toast('已經重新寄出驗證信，請查收', 'success');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setResendBusy(false);
+    }
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setNeedsVerify(false);
     setBusy(true);
     try {
-      const { user } = mode === 'login' ? await api.login(form) : await api.register(form);
-      setUser(user);
-      navigate(next, { replace: true });
+      if (mode === 'login') {
+        const { user } = await api.login(form);
+        setUser(user);
+        navigate(next, { replace: true });
+      } else {
+        const { email } = await api.register(form);
+        setPendingEmail(email);
+      }
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED') {
+        setNeedsVerify(true);
+        setPendingEmail(form.email);
+      }
       setError((err as Error).message);
     } finally {
       setBusy(false);
@@ -33,6 +58,32 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
   };
 
   const isLogin = mode === 'login';
+
+  if (pendingEmail && !isLogin) {
+    return (
+      <div className="grid min-h-screen place-items-center px-6">
+        <div className="w-full max-w-sm text-center">
+          <div className="flex justify-center">
+            <Logo />
+          </div>
+          <div className="mx-auto mt-6 grid size-14 place-items-center rounded-full bg-brand/10 text-brand">
+            <MailCheck className="size-7" />
+          </div>
+          <h1 className="mt-5 text-2xl font-black tracking-tight">請查收你的信箱</h1>
+          <p className="mt-2 text-ink-soft">
+            驗證信已經寄到 <span className="font-bold text-ink">{pendingEmail}</span>，點擊信裡的連結就能開通帳號（含 7 天免費專業版試用）。
+          </p>
+          <Button variant="secondary" className="mt-6 w-full" disabled={resendBusy} onClick={() => resend(pendingEmail)}>
+            {resendBusy ? '寄送中…' : '沒收到信？重新寄送'}
+          </Button>
+          <Link to="/login" className="mt-4 block text-sm font-bold text-ink-soft hover:text-ink">
+            返回登入
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="flex flex-col px-6 py-8 sm:px-12">
@@ -79,7 +130,16 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
                 autoComplete={isLogin ? 'current-password' : 'new-password'}
               />
             </Field>
-            {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">{error}</p>}
+            {error && (
+              <div className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                <p>{error}</p>
+                {needsVerify && (
+                  <button type="button" disabled={resendBusy} onClick={() => resend(pendingEmail)} className="mt-1 font-bold underline disabled:opacity-60">
+                    {resendBusy ? '寄送中…' : '重新寄送驗證信'}
+                  </button>
+                )}
+              </div>
+            )}
             <Button type="submit" size="lg" className="w-full" disabled={busy}>
               {busy ? '處理中…' : isLogin ? '登入' : '建立帳號'}
             </Button>

@@ -362,11 +362,7 @@ export default function Editor() {
   return (
     <div data-theme={layout.theme} className="flex h-screen min-w-[1024px] flex-col overflow-hidden bg-canvas">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
-        <Link
-          to="/dashboard"
-          className="rounded-lg p-2 text-ink-soft hover:bg-sunken hover:text-ink dark:bg-white dark:text-[#18191d] dark:hover:bg-white/90"
-          aria-label="回到我的專案"
-        >
+        <Link to="/dashboard" className="rounded-lg p-2 text-ink-soft hover:bg-sunken hover:text-ink" aria-label="回到我的專案">
           <ArrowLeft className="size-5" />
         </Link>
         <Logo to="/dashboard" compact />

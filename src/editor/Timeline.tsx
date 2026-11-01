@@ -824,7 +824,7 @@ function TrackLabel({
           aria-label={muted ? `取消靜音：${name}` : `靜音：${name}`}
           aria-pressed={!!muted}
           className={`grid size-5 shrink-0 place-items-center rounded-md transition ${
-            muted ? 'bg-brand-soft text-brand' : 'text-ink-mute opacity-0 group-hover/track:opacity-100 hover:bg-sunken hover:text-ink focus-visible:opacity-100'
+            muted ? 'bg-brand-soft text-brand' : 'text-ink-mute hover:bg-sunken hover:text-ink'
           } ${locked ? 'pointer-events-none' : ''}`}
         >
           {muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
@@ -836,7 +836,7 @@ function TrackLabel({
         aria-label={locked ? `解鎖${name}` : `鎖定${name}`}
         aria-pressed={locked}
         className={`grid size-5 shrink-0 place-items-center rounded-md transition ${
-          locked ? 'bg-brand-soft text-brand' : 'text-ink-mute opacity-0 group-hover/track:opacity-100 hover:bg-sunken hover:text-ink focus-visible:opacity-100'
+          locked ? 'bg-brand-soft text-brand' : 'text-ink-mute hover:bg-sunken hover:text-ink'
         }`}
       >
         {locked ? <Lock className="size-3" /> : <LockOpen className="size-3" />}

@@ -13,6 +13,7 @@ import Local from './pages/Local';
 import Features from './pages/Features';
 import Checkout from './pages/Checkout';
 import Dashboard from './pages/Dashboard';
+import Tutorial from './pages/Tutorial';
 import Account from './pages/Account';
 import NotFound from './pages/NotFound';
 import { applySeo } from './lib/seo';
@@ -51,6 +52,7 @@ function AppContent() {
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/checkout" element={<RequireAuth><Checkout /></RequireAuth>} />
                 <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+                <Route path="/tutorial" element={<RequireAuth><Tutorial /></RequireAuth>} />
                 <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
                 <Route path="/editor/:id" element={<RequireAuth><Editor /></RequireAuth>} />
                 <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />

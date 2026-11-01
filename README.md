@@ -4,7 +4,8 @@
 
 - **本機優先**：影片、圖片、音樂只存在使用者電腦的瀏覽器裡，不上傳到伺服器；帳戶只存專案（剪輯內容、字幕、設定）。
 - **在瀏覽器裡跑 AI**：語音辨識（Whisper）、翻譯、逐格匯出都在瀏覽器完成。
-- **會員與訂閱**：免費版（每月 3 個專案、720p、浮水印）／專業版 NT$399／月（不限專案、1080p、無浮水印、AI 功能）。新會員註冊送 7 天專業版。
+- **會員與訂閱**：免費版（每月 3 個專案、720p、浮水印）／專業版 NT$399／月（不限專案、1080p、無浮水印、AI 功能）。新會員註冊送 7 天專業版，正式金流用台灣的綠界 ECPay 信用卡定期定額。
+- **帳號安全**：註冊要完成 Email 驗證才能登入；也支援 Google 登入、忘記密碼自助重設，管理者可以直接幫使用者重設密碼。
 
 ## 快速開始
 
@@ -17,7 +18,19 @@ npm run dev
 
 打開 http://localhost:5173 。`npm run dev` 會同時啟動前端（Vite，5173）和後端 API（Node，8787），前端的 `/api` 會轉送到後端。
 
-第一次使用請到 `/register` 註冊帳號；要測試管理後台，見下方「管理後台」建立管理者。
+第一次使用請到 `/register` 註冊帳號；本機開發沒設定 `RESEND_API_KEY` 時，驗證信連結會直接印在後端 log，複製貼到瀏覽器就能完成驗證，不需要真的收信。要測試管理後台，見下方「管理後台」建立管理者。
+
+登入後 Header 有「功能介紹」（每個功能是什麼、能幫你做到什麼）和「使用教學」（怎麼操作，含示範圖）兩個頁籤，給還不熟悉介面的使用者看。
+
+## 會員帳戶
+
+| 功能 | 說明 |
+|---|---|
+| Email 註冊＋信箱驗證 | 註冊後不會馬上登入，要點驗證信裡的連結才開通帳號（含 7 天試用），避免隨便註冊 |
+| Google 登入／註冊 | 標準 OAuth2 授權碼流程，見下方「Google 登入」設定；Google 已驗證的 Email 視為已驗證，直接開通 |
+| 忘記密碼 | 寄重設信（1 小時內有效），回應訊息不透漏帳號是否存在；重設後會登出這個帳號其他裝置 |
+| 管理者重設密碼 | 管理後台「會員管理」可以直接幫使用者設一組新密碼（不需要使用者自己操作） |
+| 優惠碼 | 管理後台「優惠碼」可以產生兩種：免費升級 1～12 個月（不經過金流），或折抵 NT$1～300 的綠界實際扣款金額；同一組碼每人限用一次 |
 
 ## 功能
 
@@ -99,7 +112,8 @@ npm run dev
 網址 `/admin`，只有管理者帳號能進入。
 
 - **總覽**：會員數、付費比例、營收，以及每日付費、累計金額、新增會員圖表（近 7／30／90 天，可切換表格）。
-- **會員管理**：搜尋、篩選、開通專業版（不計入營收）、取消付費、刪除帳號（付款紀錄保留）。
+- **會員管理**：搜尋、篩選、開通專業版（不計入營收）、取消付費、重設密碼、刪除帳號（付款紀錄保留）。
+- **優惠碼**：產生免費月數或折扣金額的優惠碼，列表顯示已使用次數。
 
 建立管理者（已存在的會員會被升級）：
 
@@ -110,6 +124,41 @@ npm run create-admin -- --email admin@example.com --name 管理者
 沒有指定 `--password` 時會自動產生，寫在 `server/data/admin-credentials.txt`（已排除在 Git 之外）。
 
 示範資料（只用在本機，讓圖表有資料）：`npm run seed-demo` 產生、`npm run seed-demo -- --clean` 移除。示範會員的 Email 都是 `@demo.silhouette.test`。
+
+## 金流（綠界 ECPay）
+
+升級專業版走綠界信用卡定期定額。沒設定環境變數時，預設用綠界公開的測試環境帳號（只能測試，不會真的請款）：
+
+```bash
+# .env（參考 .env.example）
+APP_URL=https://你的網域            # 綠界的付款通知會打到 ${APP_URL}/api/billing/ecpay/...
+ECPAY_ENV=production                # 不設定就是 test（測試環境）
+ECPAY_MERCHANT_ID=你的特店編號
+ECPAY_HASH_KEY=你的 HashKey
+ECPAY_HASH_IV=你的 HashIV
+```
+
+正式上線要向綠界申請正式特店（需要公司或商業登記資料，審核需要時間）。後端沒有用 dotenv，要嘛在 shell 自己 export，要嘛用 `node --env-file=.env server/index.mjs` 啟動才會讀到。
+
+## 驗證信與密碼重設信（Resend）
+
+註冊信箱驗證、忘記密碼都透過 [Resend](https://resend.com) 寄信。沒設定 `RESEND_API_KEY` 時，信件連結只會印在後端 log，方便本機開發測試整個流程：
+
+```bash
+RESEND_API_KEY=你的 API Key
+RESEND_FROM=片刻剪趣 <你驗證過的網域>   # 正式環境建議用自己的網域，不要一直用 onboarding@resend.dev
+```
+
+## Google 登入
+
+到 [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 建立 OAuth 用戶端 ID（應用程式類型選「網頁應用程式」），「已授權的重新導向 URI」填 `${APP_URL}/api/auth/google/callback`：
+
+```bash
+GOOGLE_CLIENT_ID=你的 Client ID
+GOOGLE_CLIENT_SECRET=你的 Client Secret
+```
+
+沒設定這兩個值時，「使用 Google 帳號登入」按鈕會顯示「尚未設定」，不影響一般 Email 註冊。OAuth 同意畫面如果還在「測試中」狀態，記得把要測試的 Google 帳號加進「測試使用者」名單。
 
 ## 台灣腔 AI 人聲（BreezyVoice）
 
@@ -177,18 +226,20 @@ SITE_URL=https://你的網域 npm run build   # 或在 .env 設定 VITE_SITE_URL
 npm run server                              # 同一個服務提供 API 和建置好的網站
 ```
 
-- 首頁、價格頁在建置時預先產生靜態 HTML（`scripts/prerender.mjs`），搜尋引擎不執行 JavaScript 也讀得到內容。
+- 首頁、價格頁等公開頁面在建置時預先產生靜態 HTML（`scripts/prerender.mjs`），搜尋引擎不執行 JavaScript 也讀得到內容。
 - 每頁的標題、描述集中在 `src/lib/seo.ts`；登入後的頁面、登入頁和 404 加上 noindex。
-- 首頁含結構化資料（WebApplication 方案價格、FAQPage），內容與頁面一致。
-- 設定 `SITE_URL` 後才輸出 canonical、og:url、`sitemap.xml`，並在 `robots.txt` 加上 Sitemap。
-- 不存在的網址回傳 HTTP 404；改用其他靜態主機時，SPA 備援頁請指向 `dist/app.html`。
+- 首頁含結構化資料（`Organization`、`WebApplication` 方案價格、`FAQPage`），內容與頁面一致，給搜尋引擎和 AI 答案引擎（Google AI Overviews、ChatGPT、Perplexity 等）判讀。
+- 建置時會輸出 `llms.txt`（[llmstxt.org](https://llmstxt.org) 標準）：給 AI 聊天／搜尋引擎一份乾淨的 Markdown 摘要，內容跟首頁、常見問題同一份資料，不會跟網站內容兜不起來。
+- 設定 `SITE_URL` 後才輸出 canonical、og:url、`sitemap.xml`，並在 `robots.txt` 加上 Sitemap；`llms.txt` 沒設定 `SITE_URL` 時連結會改用相對路徑，一樣可用。
+- 不存在的網址回傳 HTTP 404；正式環境的「哪些網址算合法頁面」清單在 `server/index.mjs` 的 `APP_ROUTES`，新增登入後的頁面記得一併加進去，不然直接連結或重新整理會變 404。改用其他靜態主機時，SPA 備援頁請指向 `dist/app.html`。
 - 分享預覽圖：`public/og-image.png`（1200×630）。
 
 ## 上線前要補的
 
-- **金流**：把 `/api/billing/checkout` 換成正式金流（目前是本機模擬付款，不會扣款）。
-- **Google 登入**：設定 OAuth 用戶端 ID。
-- **文字朗讀**：系統語音依賴 macOS 的 `say`；部署到 Linux 需改用其他語音引擎或雲端 TTS。
+- **金流**：綠界目前用的是公開測試環境帳號，需要申請正式特店（見上方「金流」）。
+- **文字朗讀**：系統語音依賴 macOS 的 `say`；部署到 Linux 需改用其他語音引擎或雲端 TTS，或在非 macOS 環境隱藏系統語音選項。
+- **持久化儲存與備份**：資料庫是單一 SQLite 檔案＋本機磁碟存媒體，主機要選「有持久化磁碟」的平台（例如 Fly.io、Zeabur、Railway、自架 VPS），不適合 Vercel／Netlify 這類無狀態 serverless 平台；並排定期備份 `server/data/app.db`。
+- **法律頁面**：Footer 的服務條款、隱私權政策目前是佔位連結，上線前要換成真的內容。
 - **音樂、字型等公開檔案**：使用者變多時建議放 CDN，減少主機流量。
 - **舊素材清理**：決定伺服器上舊素材的保留期限。
 

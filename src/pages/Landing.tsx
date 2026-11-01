@@ -52,7 +52,8 @@ function Hero() {
           打開瀏覽器，<span className="text-site-red">一次剪好</span>一支短影音
         </h1>
         <p className="mx-auto mt-6 max-w-[36em] text-[18px] leading-[1.8] text-site-soft">
-          把手機拍的影片拖進來，片刻剪趣會剪掉沒人說話的空拍、上好繁體中文字幕，再依內容加上特寫、轉場和動畫。你只要挑版本、微調，就能發佈。影片留在你的電腦，不必上傳。
+          <strong className="font-bold text-site-ink">片刻剪趣是一個在瀏覽器執行的免費線上短影音剪輯工具</strong>
+          ，提供 AI 自動繁體中文字幕、智能口播（自動剪掉空拍與口誤）、台灣腔文字轉語音等功能。把手機拍的影片拖進來，片刻剪趣會剪掉沒人說話的空拍、上好字幕，再依內容加上特寫、轉場和動畫，你只要挑版本、微調就能發佈。影片留在你的電腦，不必上傳。
         </p>
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link to="/register" className={mkButton('red', 'lg')}>
@@ -863,6 +864,15 @@ const ORDERS: { title: string; who: string; lines: [string, string][]; total: st
 /** 結構化資料：只描述頁面上看得到的內容（方案價格、常見問題） */
 function StructuredData() {
   const abs = (p: string) => (SITE_URL ? SITE_URL + p : undefined);
+  const org = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: SITE_NAME,
+    url: abs('/'),
+    logo: abs('/favicon.svg'),
+    description: PUBLIC_ROUTES['/'].description,
+    sameAs: [],
+  };
   const app = {
     '@context': 'https://schema.org',
     '@type': 'WebApplication',
@@ -874,6 +884,7 @@ function StructuredData() {
     operatingSystem: 'Web',
     inLanguage: 'zh-Hant-TW',
     browserRequirements: '需要最新版 Chrome 或 Edge 瀏覽器',
+    publisher: { '@type': 'Organization', name: SITE_NAME },
     offers: [
       { '@type': 'Offer', name: '免費版', price: '0', priceCurrency: 'TWD' },
       { '@type': 'Offer', name: '專業版（月費）', price: '399', priceCurrency: 'TWD' },
@@ -886,6 +897,7 @@ function StructuredData() {
   };
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(org).replace(/</g, '\\u003c') }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(app).replace(/</g, '\\u003c') }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faq).replace(/</g, '\\u003c') }} />
     </>

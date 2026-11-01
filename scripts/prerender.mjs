@@ -28,7 +28,7 @@ const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g
 const setTag = (html, re, tag) => (re.test(html) ? html.replace(re, tag) : html.replace('</head>', `    ${tag}\n  </head>`));
 
 const entry = fs.readdirSync(SSR).find((f) => /^entry-server\.(m?js)$/.test(f));
-const { render, PUBLIC_ROUTES, PRERENDER_ROUTES } = await import(pathToFileURL(path.join(SSR, entry)).href);
+const { render, PUBLIC_ROUTES, PRERENDER_ROUTES, SITE_NAME, faqs } = await import(pathToFileURL(path.join(SSR, entry)).href);
 const template = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
 
 // 外殼：沒有預先產生的內容，前端載入後自己決定標題和 noindex
@@ -68,4 +68,35 @@ if (SITE_URL) {
   console.warn('⚠ 沒有設定 SITE_URL：不會輸出 canonical、og:url 和 sitemap.xml。正式上線前請用 SITE_URL=https://你的網域 npm run build');
 }
 fs.writeFileSync(path.join(DIST, 'robots.txt'), robots.join('\n') + '\n');
+
+// llms.txt（llmstxt.org 標準）：給 AI 聊天／搜尋引擎（ChatGPT、Perplexity、Claude 等）一份乾淨的網站摘要
+// 連結用相對路徑；有設定 SITE_URL 時才改成絕對網址
+const link = (p) => (SITE_URL ? SITE_URL + p : p);
+const llms = [
+  `# ${SITE_NAME}`,
+  '',
+  `> ${PUBLIC_ROUTES['/'].description}`,
+  '',
+  '## 產品頁面',
+  '',
+  ...Object.entries(PUBLIC_ROUTES).map(([route, meta]) => `- [${meta.title.split('｜')[0]}](${link(route)}): ${meta.description}`),
+  '',
+  '## 價格',
+  '',
+  '- 免費版：每月 3 個專案，匯出 720p（含浮水印）',
+  '- 專業版：新台幣 399 元／月，不限專案數量，匯出 1080p 無浮水印，AI 功能不限次數，不綁約可隨時取消',
+  '- 新會員註冊即享 7 天專業版試用，不需信用卡',
+  '',
+  '## 常見問題',
+  '',
+  ...faqs.flatMap(([q, a]) => [`Q: ${q}`, `A: ${a}`, '']),
+  '## 其他資訊',
+  '',
+  '- 僅支援最新版 Chrome 或 Edge 瀏覽器',
+  '- 影片、圖片與音樂留在使用者的瀏覽器裡，不會上傳到伺服器；帳戶只保存專案的剪輯內容、字幕與設定',
+  '- 語音辨識、翻譯、影片算圖與匯出都在使用者的瀏覽器裡執行',
+].join('\n');
+fs.writeFileSync(path.join(DIST, 'llms.txt'), llms + '\n');
+console.log('已產生 llms.txt');
+
 fs.rmSync(SSR, { recursive: true, force: true });

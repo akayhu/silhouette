@@ -11,7 +11,8 @@ import Ai from './pages/Ai';
 import Local from './pages/Local';
 import Features from './pages/Features';
 
-export { PUBLIC_ROUTES } from './lib/seo';
+export { PUBLIC_ROUTES, SITE_NAME } from './lib/seo';
+export { faqs } from './lib/faq';
 
 /** 要預先產生的頁面（只放不需要登入、內容固定的頁面） */
 export const PRERENDER_ROUTES = ['/', '/pricing', '/faq', '/ai', '/local', '/features'];

@@ -16,7 +16,7 @@ router.post('/api/billing/ecpay/checkout', requireAuth, (req, res) => {
   let amount = PRO_PRICE_TWD;
   let promoCode = null;
   if (req.body.code) {
-    const code = String(req.body.code).trim().toUpperCase();
+    const code = String(req.body.code).trim().slice(0, 20).toUpperCase();
     const promo = db.prepare(`SELECT * FROM promo_codes WHERE code=?`).get(code);
     if (!promo || promo.kind !== 'discount') return res.status(400).json({ error: '優惠碼不存在或已失效' });
     if (db.prepare(`SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?`).get(code, req.user.id)) {
@@ -152,7 +152,7 @@ router.get('/api/billing/payments', requireAuth, (req, res) => {
 
 // 查詢優惠碼：不會兌換，單純回傳這組碼是「免費月數」還是「折扣金額」，前端依類型決定接下來要怎麼做
 router.post('/api/billing/promo/check', requireAuth, (req, res) => {
-  const code = String(req.body.code || '').trim().toUpperCase();
+  const code = String(req.body.code || '').trim().slice(0, 20).toUpperCase();
   if (!code) return res.status(400).json({ error: '請輸入優惠碼' });
   const promo = db.prepare(`SELECT * FROM promo_codes WHERE code=?`).get(code);
   if (!promo) return res.status(400).json({ error: '優惠碼不存在或已失效' });
@@ -165,7 +165,7 @@ router.post('/api/billing/promo/check', requireAuth, (req, res) => {
 
 // 兌換「免費月數」優惠碼：直接升級，不用走綠界；同一組碼每個人都能用，但每人限用一次
 router.post('/api/billing/promo/redeem', requireAuth, (req, res) => {
-  const code = String(req.body.code || '').trim().toUpperCase();
+  const code = String(req.body.code || '').trim().slice(0, 20).toUpperCase();
   if (!code) return res.status(400).json({ error: '請輸入優惠碼' });
   const promo = db.prepare(`SELECT * FROM promo_codes WHERE code=?`).get(code);
   if (!promo || promo.kind !== 'months') return res.status(400).json({ error: '優惠碼不存在或已失效' });

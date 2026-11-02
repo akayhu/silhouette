@@ -25,7 +25,7 @@ const resetPasswordLimiter = rateLimit(15 * 60_000, 10);
 
 router.post('/api/auth/register', registerLimiter, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
-  const name = String(req.body.name || '').trim();
+  const name = String(req.body.name || '').trim().slice(0, 50);
   const password = String(req.body.password || '');
   if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Email 格式不正確' });
   if (!name) return res.status(400).json({ error: '請輸入名稱' });
@@ -196,7 +196,7 @@ router.post('/api/auth/logout', (req, res) => {
 router.get('/api/auth/me', (req, res) => res.json({ user: req.user ? publicUser(req.user) : null }));
 
 router.patch('/api/auth/me', requireAuth, (req, res) => {
-  const name = String(req.body.name ?? req.user.name).trim();
+  const name = String(req.body.name ?? req.user.name).trim().slice(0, 50);
   if (!name) return res.status(400).json({ error: '請輸入名稱' });
   db.prepare(`UPDATE users SET name=? WHERE id=?`).run(name, req.user.id);
   if (req.body.newPassword) {

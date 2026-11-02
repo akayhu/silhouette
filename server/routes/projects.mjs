@@ -31,7 +31,7 @@ router.post('/api/projects', requireAuth, (req, res) => {
   const id = randomUUID();
   const aspect = ['9:16', '16:9', '1:1'].includes(req.body.aspect) ? req.body.aspect : '9:16';
   const data = { aspect, media: [], clips: [], audio: [], captions: [], stickers: [], overlays: [], markers: [], duration: 0 };
-  const name = String(req.body.name || '').trim() || '未命名專案';
+  const name = String(req.body.name || '').trim().slice(0, 100) || '未命名專案';
   db.prepare(`INSERT INTO projects (id, user_id, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
     id, req.user.id, name, JSON.stringify(data), now(), now(),
   );
@@ -59,7 +59,7 @@ router.patch('/api/projects/:id', requireAuth, (req, res) => {
   if (req.body.expectedUpdatedAt !== undefined && req.body.expectedUpdatedAt !== row.updated_at) {
     return res.status(409).json({ error: '專案已被其他分頁或裝置更新', code: 'PROJECT_CONFLICT' });
   }
-  const name = req.body.name !== undefined ? String(req.body.name).trim() || row.name : row.name;
+  const name = req.body.name !== undefined ? String(req.body.name).trim().slice(0, 100) || row.name : row.name;
   const data = req.body.data !== undefined ? JSON.stringify(req.body.data) : row.data;
   const thumbnail = req.body.thumbnail !== undefined ? req.body.thumbnail : row.thumbnail;
   // Monotonic tokens also distinguish two writes received within the same millisecond.

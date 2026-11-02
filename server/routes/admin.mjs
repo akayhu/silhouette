@@ -62,6 +62,8 @@ router.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
+// 列表可選的每頁筆數；q 同時比對 email 和名稱
+const USER_PAGE_SIZES = [10, 20, 30, 50, 100];
 router.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const q = `%${String(req.query.q || '').trim()}%`;
   const filters = {
@@ -70,6 +72,10 @@ router.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
     free: `AND u.plan = 'free'`,
   };
   const planFilter = filters[req.query.plan] ?? '';
+  const pageSize = USER_PAGE_SIZES.includes(Number(req.query.pageSize)) ? Number(req.query.pageSize) : 20;
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+  const where = `WHERE (u.email LIKE ? OR u.name LIKE ?) ${planFilter}`;
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM users u ${where}`).get(q, q).n;
   const rows = db
     .prepare(
       `SELECT u.id, u.email, u.name, u.role, u.plan, u.plan_source AS planSource, u.plan_renews_at AS planRenewsAt,
@@ -78,11 +84,11 @@ router.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
               (SELECT COALESCE(SUM(amount),0) FROM payments y WHERE y.user_id = u.id) AS totalPaid,
               (SELECT MAX(created_at) FROM payments y WHERE y.user_id = u.id) AS lastPaymentAt
        FROM users u
-       WHERE (u.email LIKE ? OR u.name LIKE ?) ${planFilter}
-       ORDER BY u.created_at DESC LIMIT 500`,
+       ${where}
+       ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
     )
-    .all(q, q);
-  res.json({ users: rows.map((r) => ({ ...r, cancelAtPeriodEnd: Boolean(r.cancelAtPeriodEnd) })) });
+    .all(q, q, pageSize, (page - 1) * pageSize);
+  res.json({ users: rows.map((r) => ({ ...r, cancelAtPeriodEnd: Boolean(r.cancelAtPeriodEnd) })), total, page, pageSize });
 });
 
 // 管理者直接開通或取消付費：開通不會產生付款紀錄，到期自動回到免費版

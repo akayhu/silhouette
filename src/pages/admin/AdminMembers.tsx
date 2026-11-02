@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Crown, KeyRound, RefreshCw, Search, ShieldCheck, Trash2, UserMinus } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Copy, Crown, KeyRound, RefreshCw, Search, ShieldCheck, Trash2, UserMinus } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { formatDate } from '../../lib/format';
@@ -11,6 +11,7 @@ import { money } from './charts';
 type Filter = 'all' | 'pro' | 'trial' | 'free';
 /** 開通期間：0 代表永久（不過期），否則 1～12 個月 */
 const durationLabel = (months: number) => (months === 0 ? '永久' : `${months} 個月`);
+const PAGE_SIZES = [10, 20, 30, 50, 100] as const;
 
 /** 產生一組容易輸入、但夠隨機的新密碼，給管理者重設時預設帶入 */
 const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -24,6 +25,9 @@ export default function AdminMembers() {
   const toast = useToast();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(20);
+  const [total, setTotal] = useState(0);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [granting, setGranting] = useState<AdminMember | null>(null);
   const [months, setMonths] = useState(1);
@@ -34,11 +38,25 @@ export default function AdminMembers() {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const load = () => api.adminUsers(q, filter).then((r) => setMembers(r.users)).catch((e) => toast(e.message, 'error'));
+  // 輸入框先 debounce 成 debouncedQ，換字、換篩選、換每頁筆數都重設回第 1 頁；換頁本身不用再重設
+  const [debouncedQ, setDebouncedQ] = useState('');
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    const t = setTimeout(() => setDebouncedQ(q), 250);
     return () => clearTimeout(t);
-  }, [q, filter]);
+  }, [q]);
+  useEffect(() => setPage(1), [debouncedQ, filter, pageSize]);
+
+  const load = () =>
+    api
+      .adminUsers(debouncedQ, filter, page, pageSize)
+      .then((r) => {
+        setMembers(r.users);
+        setTotal(r.total);
+      })
+      .catch((e) => toast(e.message, 'error'));
+  useEffect(() => {
+    load();
+  }, [debouncedQ, filter, page, pageSize]);
 
   const act = async (fn: () => Promise<unknown>, done: string) => {
     setBusy(true);
@@ -175,7 +193,51 @@ export default function AdminMembers() {
             </tbody>
           </table>
         </div>
-        {members && members.length > 0 && <div className="border-t border-line px-4 py-2.5 text-xs text-ink-mute">共 {members.length} 位</div>}
+        {total > 0 && (
+          <div className="flex flex-col gap-3 border-t border-line px-4 py-3 text-xs text-ink-mute sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span>
+                第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 筆，共 {total} 位
+              </span>
+              <label className="flex items-center gap-1.5">
+                每頁
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value) as (typeof PAGE_SIZES)[number])}
+                  className="rounded-lg border border-line bg-surface px-2 py-1 text-xs font-semibold text-ink"
+                >
+                  {PAGE_SIZES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                筆
+              </label>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="grid size-7 place-items-center rounded-lg text-ink-soft hover:bg-sunken hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+                aria-label="上一頁"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <span className="tabular-nums">
+                第 {page} / {Math.max(1, Math.ceil(total / pageSize))} 頁
+              </span>
+              <button
+                onClick={() => setPage((p) => (p * pageSize < total ? p + 1 : p))}
+                disabled={page * pageSize >= total}
+                className="grid size-7 place-items-center rounded-lg text-ink-soft hover:bg-sunken hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+                aria-label="下一頁"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Modal open={!!granting} onClose={() => setGranting(null)}>

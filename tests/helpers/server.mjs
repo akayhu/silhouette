@@ -69,5 +69,5 @@ export async function startTestServer() {
     await rm(dataDir, { recursive: true, force: true });
   }
 
-  return { base, request, findLink, db, stop };
+  return { base, request, findLink, db, stop, get output() { return output; } };
 }

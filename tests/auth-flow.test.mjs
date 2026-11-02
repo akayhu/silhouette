@@ -41,9 +41,26 @@ test('註冊要先驗證信箱才能登入；忘記密碼可以重設並讓舊�
     const wrongPassword = await server.request('/api/auth/login', { email, password: 'wrong-password' });
     assert.equal(wrongPassword.status, 401);
 
-    // 重複註冊同一個 Email 會被擋
+    // 重複註冊同一個已驗證帳號的 Email：回應跟正常註冊一樣（不洩漏帳號是否存在），
+    // 但不會真的建立新帳號或改密碼，而是寄一封「帳號已存在」通知信給本人
     const duplicate = await server.request('/api/auth/register', { email, password: 'another-password-123', name: '重複註冊' });
-    assert.equal(duplicate.status, 409);
+    assert.equal(duplicate.status, 200);
+    assert.deepEqual(await duplicate.json(), { pending: true, email });
+    assert.ok(server.output.includes('帳號已存在通知信'));
+    const stillOldPassword = await server.request('/api/auth/login', { email, password: 'first-password-123' });
+    assert.equal(stillOldPassword.status, 200); // 密碼沒有被重複註冊的請求改掉
+    const userCount = server.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE email=?`).get(email).n;
+    assert.equal(userCount, 1); // 沒有建立出第二個帳號
+
+    // 重複註冊一個「還沒驗證過」的帳號：當作重新寄一次驗證信，對忘記自己註冊過的人比較有幫助
+    const unverifiedEmail = 'unverified-dup@example.test';
+    await server.request('/api/auth/register', { email: unverifiedEmail, password: 'first-try-password', name: '還沒驗證' });
+    const reRegister = await server.request('/api/auth/register', { email: unverifiedEmail, password: 'second-try-password', name: '再次註冊' });
+    assert.equal(reRegister.status, 200);
+    assert.deepEqual(await reRegister.json(), { pending: true, email: unverifiedEmail });
+    const unverifiedToken = await server.findLink('/api/auth/verify');
+    const unverifiedVerify = await server.request(`/api/auth/verify?token=${unverifiedToken}`);
+    assert.equal(unverifiedVerify.headers.get('location'), 'http://localhost:5173/dashboard?verified=1');
 
     // 忘記密碼：寄重設信，從輸出取得連結並設定新密碼
     const forgot = await server.request('/api/auth/forgot-password', { email });

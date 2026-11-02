@@ -12,7 +12,7 @@ import {
   requireAuth,
   rateLimit,
 } from '../helpers.mjs';
-import { sendVerificationEmail, sendPasswordResetEmail, createEmailVerification, createPasswordReset } from '../mail.mjs';
+import { sendVerificationEmail, sendPasswordResetEmail, sendAccountExistsEmail, createEmailVerification, createPasswordReset } from '../mail.mjs';
 import { APP_URL, COOKIE_SECURE, TRIAL_DAYS, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } from '../env.mjs';
 
 const router = Router();
@@ -30,9 +30,20 @@ router.post('/api/auth/register', registerLimiter, async (req, res) => {
   if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Email 格式不正確' });
   if (!name) return res.status(400).json({ error: '請輸入名稱' });
   if (password.length < 8) return res.status(400).json({ error: '密碼至少需要 8 個字元' });
-  if (db.prepare(`SELECT 1 FROM users WHERE email=?`).get(email)) {
-    return res.status(409).json({ error: '這個 Email 已經註冊過了' });
+
+  // 不管這個 Email 是不是已經註冊過，API 回應都一樣，避免被用來試探哪些 Email 已經有帳號
+  // （跟忘記密碼的設計一致）；真的已經有帳號的話，改成寄信通知本人，而不是透過回應內容洩漏
+  const existing = db.prepare(`SELECT * FROM users WHERE email=?`).get(email);
+  if (existing) {
+    if (existing.email_verified_at) {
+      await sendAccountExistsEmail(email, existing.name);
+    } else {
+      // 還沒驗證過的舊註冊：當作重新寄一次驗證信，對本人比較有幫助
+      await sendVerificationEmail(email, existing.name, createEmailVerification(existing.id));
+    }
+    return res.json({ pending: true, email });
   }
+
   // 註冊後先不給 7 天試用、也不自動登入，要等點了信箱裡的驗證連結才開通，避免隨便註冊隨便用
   const id = randomUUID();
   db.prepare(

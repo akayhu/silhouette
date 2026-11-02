@@ -55,6 +55,24 @@ export async function sendPasswordResetEmail(email, name, token) {
   );
 }
 
+// 註冊時這個 Email 已經有帳號（且已驗證過）：寄信告訴本人，不透過 API 回應洩漏帳號是否存在
+export async function sendAccountExistsEmail(email, name) {
+  const link = `${APP_URL}/forgot-password`;
+  await sendTransactionalEmail(
+    email,
+    '這個 Email 已經有「片刻剪趣」帳號了',
+    `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2>嗨 ${name}</h2>
+        <p>有人用這個 Email 嘗試註冊片刻剪趣，不過你已經有帳號了。如果是你本人，直接登入即可；忘記密碼的話可以點下方按鈕重設。</p>
+        <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#111;color:#fff;border-radius:999px;text-decoration:none;font-weight:bold">重設密碼</a></p>
+        <p style="color:#888;font-size:13px">如果不是你本人操作，請忽略這封信，你的帳號不會有任何改變。</p>
+      </div>`,
+    '帳號已存在通知信',
+    link,
+  );
+}
+
 export function createEmailVerification(userId) {
   const token = randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + EMAIL_VERIFICATION_HOURS * 3600_000).toISOString();

@@ -5,10 +5,19 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate } from '../lib/format';
 import { isTrial, trialDaysLeft, trialEnded } from '../lib/plan';
+import type { SessionInfo } from '../lib/types';
 import { AppLayout } from '../components/Layout';
 import { Button, Field, Modal, buttonClass, inputClass, useToast } from '../components/ui';
 
 type Payment = { id: string; amount: number; cardLast4: string | null; createdAt: string };
+
+/** 從 User-Agent 猜一個容易看懂的裝置描述；猜不出來就顯示「未知裝置」，不擋流程 */
+function describeDevice(ua: string | null) {
+  if (!ua) return '未知裝置';
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+  return [os, browser].filter(Boolean).join(' · ') || '未知裝置';
+}
 
 export default function Account() {
   const { user, setUser } = useAuth();
@@ -16,13 +25,28 @@ export default function Account() {
   const [name, setName] = useState(user?.name ?? '');
   const [pw, setPw] = useState({ current: '', next: '' });
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
     api.payments().then((r) => setPayments(r.payments));
   }, [user?.plan]);
 
+  useEffect(() => {
+    api.sessions().then((r) => setSessions(r.sessions));
+  }, []);
+
   if (!user) return null;
+
+  const revokeSession = async (id: string) => {
+    try {
+      await api.revokeSession(id);
+      setSessions((s) => s.filter((x) => x.id !== id));
+      toast('已登出該裝置', 'success');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  };
 
   const saveProfile = async () => {
     try {
@@ -142,6 +166,31 @@ export default function Account() {
                 ))}
               </ul>
             )}
+          </div>
+          <div className={card}>
+            <h2 className="text-lg font-extrabold">登入裝置</h2>
+            <p className="mt-1 text-xs text-ink-mute">目前有效登入的裝置，可以把不是自己的裝置登出。</p>
+            <ul className="mt-3 divide-y divide-line text-sm">
+              {sessions.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 font-bold">
+                      {describeDevice(s.userAgent)}
+                      {s.current && <span className="rounded-full bg-mint-soft px-2 py-0.5 text-xs font-bold text-mint">這台裝置</span>}
+                    </div>
+                    <div className="truncate text-xs text-ink-mute">
+                      {s.createdAt ? `${formatDate(s.createdAt)} 登入` : '登入時間不明'}
+                      {s.ip && `．${s.ip}`}
+                    </div>
+                  </div>
+                  {!s.current && (
+                    <Button variant="secondary" size="sm" className="shrink-0" onClick={() => revokeSession(s.id)}>
+                      登出
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
       </div>

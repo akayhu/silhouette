@@ -1,5 +1,6 @@
 // 資料庫：schema、舊資料庫補欄位的 migration，以及 db 實例本身
 import { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { DATA_DIR } from './env.mjs';
 
@@ -117,10 +118,25 @@ if (!userColumns.includes('email_verified_at')) {
 // 舊資料庫補欄位：Google 登入帳號的 Google 使用者 ID（用來比對是否已經綁過）
 if (!userColumns.includes('google_id')) db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT`);
 
+// 舊資料庫補欄位：session 加上裝置資訊，讓使用者自己能看到並登出「登入裝置」
+// id 是給前端識別、登出用的非機密代號（不是拿來驗證身分的 token，不怕外洩）
+const sessionColumns = db.prepare(`PRAGMA table_info(sessions)`).all().map((c) => c.name);
+if (!sessionColumns.includes('id')) {
+  db.exec(`ALTER TABLE sessions ADD COLUMN id TEXT`);
+  db.exec(`ALTER TABLE sessions ADD COLUMN user_agent TEXT`);
+  db.exec(`ALTER TABLE sessions ADD COLUMN ip TEXT`);
+  db.exec(`ALTER TABLE sessions ADD COLUMN created_at TEXT`);
+  for (const row of db.prepare(`SELECT token FROM sessions WHERE id IS NULL`).all()) {
+    db.prepare(`UPDATE sessions SET id=? WHERE token=?`).run(randomUUID(), row.token);
+  }
+}
+
 // 索引：配合各路由實際會用到的查詢條件（WHERE／ORDER BY），現在資料量小看不出差異，
 // 但使用者和訂單變多之後能避免全表掃描；CREATE INDEX IF NOT EXISTS 對新舊資料庫都安全，不需要 migration
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_id ON sessions(id);
   CREATE INDEX IF NOT EXISTS idx_projects_user_updated ON projects(user_id, updated_at);
   CREATE INDEX IF NOT EXISTS idx_project_creations_user_created ON project_creations(user_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_exports_project_user_created ON exports(project_id, user_id, created_at);

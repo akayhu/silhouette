@@ -1,5 +1,5 @@
 import type { ExportInfo, SavedExport } from './exportStore';
-import type { AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, PromoCode, User, Voice } from './types';
+import type { AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, PromoCode, SessionInfo, User, Voice } from './types';
 
 export interface TtsResult {
   url: string;
@@ -35,6 +35,8 @@ export const api = {
   resetPassword: (token: string, password: string) => request<{ user: User }>('/api/auth/reset-password', json('POST', { token, password })),
   logout: () => request('/api/auth/logout', json('POST')),
   updateMe: (d: { name?: string; currentPassword?: string; newPassword?: string }) => request<{ user: User }>('/api/auth/me', json('PATCH', d)),
+  sessions: () => request<{ sessions: SessionInfo[] }>('/api/auth/sessions'),
+  revokeSession: (id: string) => request(`/api/auth/sessions/${id}`, json('DELETE')),
 
   /** 建立綠界訂單：回傳收銀台網址和表單欄位，前端要組一個 <form> 用瀏覽器導頁過去（不是 fetch）；code 是折扣優惠碼 */
   ecpayCheckout: (code?: string) => request<{ actionUrl: string; fields: Record<string, string | number> }>('/api/billing/ecpay/checkout', json('POST', code ? { code } : undefined)),

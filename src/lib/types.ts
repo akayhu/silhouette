@@ -16,6 +16,14 @@ export interface User {
   usage: { projectsThisMonth: number; projectLimit: number | null };
 }
 
+export interface SessionInfo {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  createdAt: string | null;
+  current: boolean;
+}
+
 export interface PromoCode {
   code: string;
   kind: 'months' | 'discount';

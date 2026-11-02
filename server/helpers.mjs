@@ -1,5 +1,5 @@
 // 跨路由共用的工具函式與中介層：密碼、session、會員方案、限流
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { db, now } from './db.mjs';
 import { FREE_MONTHLY_PROJECTS, SESSION_DAYS, COOKIE_SECURE } from './env.mjs';
 
@@ -30,10 +30,16 @@ export function setSessionCookie(res, token) {
   );
 }
 
-export function createSession(res, userId) {
+// req 可以省略（目前沒有用到的地方），但有傳入的話會記下裝置資訊，讓使用者在帳戶設定能看到「登入裝置」
+export function createSession(res, userId, req) {
   const token = randomBytes(32).toString('hex');
+  const id = randomUUID();
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
-  db.prepare(`INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`).run(token, userId, expires);
+  const userAgent = req ? String(req.headers['user-agent'] || '').slice(0, 300) : null;
+  const ip = req?.ip || null;
+  db.prepare(`INSERT INTO sessions (token, id, user_id, expires_at, created_at, user_agent, ip) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+    token, id, userId, expires, now(), userAgent, ip,
+  );
   setSessionCookie(res, token);
 }
 

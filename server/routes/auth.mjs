@@ -57,7 +57,7 @@ router.get('/api/auth/verify', async (req, res) => {
       `UPDATE users SET email_verified_at=?, plan='pro', plan_source='trial', plan_renews_at=?, plan_cancel_at_period_end=1 WHERE id=?`,
     ).run(now(), trialEnds, user.id);
   }
-  createSession(res, user.id);
+  createSession(res, user.id, req);
   res.redirect(`${APP_URL}/dashboard?verified=1`);
 });
 
@@ -100,7 +100,7 @@ router.post('/api/auth/reset-password', resetPasswordLimiter, (req, res) => {
   // 重設密碼後，把這個帳號其他裝置的登入都登出，比較安全
   db.prepare(`DELETE FROM sessions WHERE user_id=?`).run(row.user_id);
   const user = db.prepare(`SELECT * FROM users WHERE id=?`).get(row.user_id);
-  createSession(res, user.id);
+  createSession(res, user.id, req);
   res.json({ user: publicUser(refreshPlan(user)) });
 });
 
@@ -113,7 +113,7 @@ router.post('/api/auth/login', loginLimiter, (req, res) => {
   if (!user.email_verified_at) {
     return res.status(403).json({ error: '請先完成信箱驗證才能登入', code: 'EMAIL_NOT_VERIFIED' });
   }
-  createSession(res, user.id);
+  createSession(res, user.id, req);
   res.json({ user: publicUser(refreshPlan(user)) });
 });
 
@@ -167,7 +167,7 @@ router.get('/api/auth/google/callback', async (req, res) => {
       db.prepare(`UPDATE users SET google_id=?, email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?`).run(payload.sub, now(), user.id);
       user = db.prepare(`SELECT * FROM users WHERE id=?`).get(user.id);
     }
-    createSession(res, user.id);
+    createSession(res, user.id, req);
     res.redirect(`${APP_URL}/dashboard${isNew ? '?verified=1' : ''}`);
   } catch (err) {
     console.error('Google 登入失敗', err);
@@ -196,6 +196,30 @@ router.patch('/api/auth/me', requireAuth, (req, res) => {
     db.prepare(`UPDATE users SET password_hash=? WHERE id=?`).run(hashPassword(String(req.body.newPassword)), req.user.id);
   }
   res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)) });
+});
+
+// ---------- 登入裝置：使用者自己能看到有效的登入紀錄，並登出其他裝置 ----------
+router.get('/api/auth/sessions', requireAuth, (req, res) => {
+  const { sid } = parseCookies(req.headers.cookie);
+  const rows = db
+    .prepare(
+      `SELECT id, token, user_agent AS userAgent, ip, created_at AS createdAt
+       FROM sessions WHERE user_id=? AND expires_at > ? ORDER BY created_at DESC`,
+    )
+    .all(req.user.id, now());
+  res.json({
+    sessions: rows.map((r) => ({ id: r.id, userAgent: r.userAgent, ip: r.ip, createdAt: r.createdAt, current: r.token === sid })),
+  });
+});
+
+router.delete('/api/auth/sessions/:id', requireAuth, (req, res) => {
+  const row = db.prepare(`SELECT token FROM sessions WHERE id=? AND user_id=?`).get(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ error: '找不到這個登入紀錄' });
+  db.prepare(`DELETE FROM sessions WHERE id=?`).run(req.params.id);
+  // 如果登出的剛好是自己目前這個裝置，順便把 cookie 清掉
+  const { sid } = parseCookies(req.headers.cookie);
+  if (row.token === sid) res.setHeader('Set-Cookie', `sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${COOKIE_SECURE}`);
+  res.json({ ok: true });
 });
 
 export default router;

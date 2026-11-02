@@ -52,8 +52,12 @@ export default function AdminMembers() {
       .then((r) => {
         setMembers(r.users);
         setTotal(r.total);
+        return r;
       })
-      .catch((e) => toast(e.message, 'error'));
+      .catch((e) => {
+        toast(e.message, 'error');
+        return null;
+      });
   useEffect(() => {
     load();
   }, [debouncedQ, filter, page, pageSize]);
@@ -63,9 +67,10 @@ export default function AdminMembers() {
     try {
       await fn();
       toast(done, 'success');
-      await load();
+      return await load();
     } catch (e) {
       toast((e as Error).message, 'error');
+      return null;
     } finally {
       setBusy(false);
     }
@@ -348,7 +353,9 @@ export default function AdminMembers() {
             onClick={async () => {
               const u = deleting!;
               setDeleting(null);
-              await act(() => api.adminDelete(u.id), `已刪除 ${u.name} 的帳號`);
+              const result = await act(() => api.adminDelete(u.id), `已刪除 ${u.name} 的帳號`);
+              // 刪掉目前頁面最後一位會員時，這一頁會變空，自動退回上一頁
+              if (result && result.users.length === 0 && page > 1) setPage((p) => Math.max(1, p - 1));
             }}
           >
             <Trash2 className="size-4" /> 永久刪除

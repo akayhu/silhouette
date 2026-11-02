@@ -85,7 +85,8 @@ export const api = {
   adminRevoke: (id: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'revoke' })),
   adminResetPassword: (id: string, password: string) => request(`/api/admin/users/${id}`, json('PATCH', { action: 'reset-password', password })),
   adminDelete: (id: string) => request(`/api/admin/users/${id}`, json('DELETE')),
-  adminPromoCodes: () => request<{ codes: PromoCode[] }>('/api/admin/promo-codes'),
+  adminPromoCodes: (page: number, pageSize: number) =>
+    request<{ codes: PromoCode[]; total: number; page: number; pageSize: number }>(`/api/admin/promo-codes?page=${page}&pageSize=${pageSize}`),
   adminCreatePromoCode: (d: { kind: 'months'; months: number } | { kind: 'discount'; discountAmount: number }) =>
     request<{ code: PromoCode }>('/api/admin/promo-codes', json('POST', d)),
   music: () => request<{ license: string; items: LibraryTrack[] }>('/api/music'),

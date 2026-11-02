@@ -62,8 +62,8 @@ router.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-// 列表可選的每頁筆數；q 同時比對 email 和名稱
-const USER_PAGE_SIZES = [10, 20, 30, 50, 100];
+// 會員、優惠碼列表共用的可選每頁筆數
+const ADMIN_PAGE_SIZES = [10, 20, 30, 50, 100];
 router.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const q = `%${String(req.query.q || '').trim()}%`;
   const filters = {
@@ -72,7 +72,7 @@ router.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
     free: `AND u.plan = 'free'`,
   };
   const planFilter = filters[req.query.plan] ?? '';
-  const pageSize = USER_PAGE_SIZES.includes(Number(req.query.pageSize)) ? Number(req.query.pageSize) : 20;
+  const pageSize = ADMIN_PAGE_SIZES.includes(Number(req.query.pageSize)) ? Number(req.query.pageSize) : 20;
   const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
   const where = `WHERE (u.email LIKE ? OR u.name LIKE ?) ${planFilter}`;
   const total = db.prepare(`SELECT COUNT(*) AS n FROM users u ${where}`).get(q, q).n;
@@ -141,14 +141,17 @@ router.post('/api/admin/promo-codes', requireAuth, requireAdmin, (req, res) => {
 });
 
 router.get('/api/admin/promo-codes', requireAuth, requireAdmin, (req, res) => {
+  const pageSize = ADMIN_PAGE_SIZES.includes(Number(req.query.pageSize)) ? Number(req.query.pageSize) : 20;
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM promo_codes`).get().n;
   const codes = db
     .prepare(
       `SELECT p.code, p.kind, p.months, p.discount_amount AS discountAmount, p.created_at AS createdAt,
               (SELECT COUNT(*) FROM promo_redemptions r WHERE r.code = p.code) AS redemptions
-       FROM promo_codes p ORDER BY p.created_at DESC`,
+       FROM promo_codes p ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
     )
-    .all();
-  res.json({ codes });
+    .all(pageSize, (page - 1) * pageSize);
+  res.json({ codes, total, page, pageSize });
 });
 
 // 刪除會員：連同專案、上傳檔案、自訂聲音與登入狀態；付款紀錄保留以維持營收報表正確

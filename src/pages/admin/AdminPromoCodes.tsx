@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Ticket } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Copy, Ticket } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import type { PromoCode } from '../../lib/types';
@@ -7,27 +7,40 @@ import { Button, useToast } from '../../components/ui';
 import { AdminLayout } from './AdminLayout';
 
 const MAX_DISCOUNT = 300;
+const PAGE_SIZES = [10, 20, 30, 50, 100] as const;
 
 export default function AdminPromoCodes() {
   const toast = useToast();
   const [codes, setCodes] = useState<PromoCode[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(20);
+  const [total, setTotal] = useState(0);
   const [kind, setKind] = useState<'months' | 'discount'>('months');
   const [months, setMonths] = useState(1);
   const [discountAmount, setDiscountAmount] = useState(100);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const load = () => api.adminPromoCodes().then((r) => setCodes(r.codes)).catch((e) => toast(e.message, 'error'));
+  const load = () =>
+    api
+      .adminPromoCodes(page, pageSize)
+      .then((r) => {
+        setCodes(r.codes);
+        setTotal(r.total);
+      })
+      .catch((e) => toast(e.message, 'error'));
   useEffect(() => {
     load();
-  }, []);
+  }, [page, pageSize]);
+  useEffect(() => setPage(1), [pageSize]);
 
   const create = async () => {
     setBusy(true);
     try {
       const { code } = await api.adminCreatePromoCode(kind === 'months' ? { kind, months } : { kind, discountAmount });
       toast(`已產生優惠碼 ${code.code}`, 'success');
-      await load();
+      if (page === 1) await load();
+      else setPage(1); // 新碼排在最前面，跳回第 1 頁才看得到
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
@@ -149,7 +162,51 @@ export default function AdminPromoCodes() {
             </tbody>
           </table>
         </div>
-        {codes && codes.length > 0 && <div className="border-t border-line px-4 py-2.5 text-xs text-ink-mute">共 {codes.length} 組</div>}
+        {total > 0 && (
+          <div className="flex flex-col gap-3 border-t border-line px-4 py-3 text-xs text-ink-mute sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span>
+                第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 組，共 {total} 組
+              </span>
+              <label className="flex items-center gap-1.5">
+                每頁
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value) as (typeof PAGE_SIZES)[number])}
+                  className="rounded-lg border border-line bg-surface px-2 py-1 text-xs font-semibold text-ink"
+                >
+                  {PAGE_SIZES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                組
+              </label>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="grid size-7 place-items-center rounded-lg text-ink-soft hover:bg-sunken hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+                aria-label="上一頁"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <span className="tabular-nums">
+                第 {page} / {Math.max(1, Math.ceil(total / pageSize))} 頁
+              </span>
+              <button
+                onClick={() => setPage((p) => (p * pageSize < total ? p + 1 : p))}
+                disabled={page * pageSize >= total}
+                className="grid size-7 place-items-center rounded-lg text-ink-soft hover:bg-sunken hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+                aria-label="下一頁"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

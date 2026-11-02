@@ -116,3 +116,33 @@ if (!userColumns.includes('email_verified_at')) {
 
 // 舊資料庫補欄位：Google 登入帳號的 Google 使用者 ID（用來比對是否已經綁過）
 if (!userColumns.includes('google_id')) db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT`);
+
+// 索引：配合各路由實際會用到的查詢條件（WHERE／ORDER BY），現在資料量小看不出差異，
+// 但使用者和訂單變多之後能避免全表掃描；CREATE INDEX IF NOT EXISTS 對新舊資料庫都安全，不需要 migration
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_projects_user_updated ON projects(user_id, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_project_creations_user_created ON project_creations(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_exports_project_user_created ON exports(project_id, user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
+  CREATE INDEX IF NOT EXISTS idx_payments_tw_day ON payments(date(created_at, '+8 hours'));
+  CREATE INDEX IF NOT EXISTS idx_ecpay_orders_user_created ON ecpay_orders(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_email_verifications_user_created ON email_verifications(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_email_verifications_expires_at ON email_verifications(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_password_resets_user_created ON password_resets(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_password_resets_expires_at ON password_resets(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_voices_user_created ON voices(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+  CREATE INDEX IF NOT EXISTS idx_users_tw_day ON users(date(created_at, '+8 hours'));
+`);
+
+// 定期清掉過期資料：session 過期後、信箱驗證信與密碼重設信超過有效期限的 token，
+// 不會再被用到（查詢時本來就會被 expires_at 擋掉），留著只是讓資料庫越長越大
+function cleanupExpired() {
+  const nowIso = now();
+  db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).run(nowIso);
+  db.prepare(`DELETE FROM email_verifications WHERE expires_at < ?`).run(nowIso);
+  db.prepare(`DELETE FROM password_resets WHERE expires_at < ?`).run(nowIso);
+}
+cleanupExpired();
+setInterval(cleanupExpired, 60 * 60_000).unref();

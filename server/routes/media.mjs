@@ -14,6 +14,10 @@ import { ownProject } from './projects.mjs';
 const run = promisify(execFile);
 const router = Router();
 
+// 自訂聲音的錄音上限：10 秒左右的 16kHz 單聲道 WAV 大約 320KB，20MB 已經很寬裕，
+// 避免有人（或用壞的前端）上傳超大檔案把磁碟塞滿
+const MAX_VOICE_BYTES = 20 * 1024 * 1024;
+
 // 只讓本人讀取自己的檔案；express.static 會處理 Range，影片才能拖曳播放
 router.use('/uploads/:userId', (req, res, next) => {
   if (req.user?.id !== req.params.userId) return res.status(403).end();
@@ -88,18 +92,40 @@ router.post('/api/voices', requireAuth, requirePro, (req, res) => {
   const name = decodeURIComponent(String(req.headers['x-voice-name'] || '')).trim().slice(0, 20);
   const text = decodeURIComponent(String(req.headers['x-voice-text'] || '')).trim().slice(0, 200);
   if (!name || !text) return res.status(400).json({ error: '請輸入聲音名稱' });
+  if (Number(req.headers['content-length']) > MAX_VOICE_BYTES) return res.status(413).json({ error: '錄音檔太大，請錄短一點' });
   const count = db.prepare(`SELECT COUNT(*) AS n FROM voices WHERE user_id=?`).get(req.user.id).n;
   if (count >= 10) return res.status(400).json({ error: '最多可以建立 10 個聲音' });
   const id = randomUUID();
   const dir = path.join(UPLOAD_DIR, req.user.id, 'voices');
   fs.mkdirSync(dir, { recursive: true });
-  const out = fs.createWriteStream(path.join(dir, `${id}.wav`));
+  const temp = path.join(dir, `.${id}.part`);
+  const out = fs.createWriteStream(temp);
+  let size = 0;
+  let failed = false;
+  const abort = (status, error) => {
+    if (failed) return;
+    failed = true;
+    out.destroy();
+    fs.rmSync(temp, { force: true });
+    if (!res.headersSent) res.status(status).json({ error });
+  };
+  req.on('data', (chunk) => {
+    size += chunk.length;
+    if (size > MAX_VOICE_BYTES) {
+      abort(413, '錄音檔太大，請錄短一點');
+      req.destroy();
+    }
+  });
+  req.on('aborted', () => abort(400, '上傳中斷'));
   req.pipe(out);
+  out.on('error', () => abort(500, '上傳失敗'));
   out.on('finish', () => {
+    if (failed) return;
+    if (!size) return abort(400, '沒有收到錄音');
+    fs.renameSync(temp, path.join(dir, `${id}.wav`));
     db.prepare(`INSERT INTO voices (id, user_id, name, prompt_text, file, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, req.user.id, name, text, `${id}.wav`, now());
     res.json({ voice: { id: `custom-${id}`, name, desc: '我的聲音', locale: 'zh_TW', engine: 'breezy', custom: true } });
   });
-  out.on('error', () => res.status(500).json({ error: '上傳失敗' }));
 });
 
 router.delete('/api/voices/:id', requireAuth, (req, res) => {

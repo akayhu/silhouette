@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { db, now } from '../db.mjs';
 import { requireAuth, publicUser, grantProMonths } from '../helpers.mjs';
-import { ecpayCheckMacValue, ecpayDate, ecpayPeriodAction } from '../ecpay.mjs';
+import { ecpayCheckMacValue, ecpayVerifyMac, ecpayDate, ecpayPeriodAction } from '../ecpay.mjs';
 import { PRO_PRICE_TWD, APP_URL, ECPAY_MERCHANT_ID, ECPAY_HOST, ECPAY_PERIOD_MONTHS } from '../env.mjs';
 
 const router = Router();
@@ -63,7 +63,7 @@ router.post('/api/billing/ecpay/notify', (req, res) => {
   const body = { ...req.body };
   const receivedMac = body.CheckMacValue;
   delete body.CheckMacValue;
-  if (receivedMac !== ecpayCheckMacValue(body)) {
+  if (!ecpayVerifyMac(body, receivedMac)) {
     console.error('[ecpay] notify 檢查碼不符', body);
     return res.status(400).send('0|CheckMacValue error');
   }
@@ -101,7 +101,7 @@ router.post('/api/billing/ecpay/period-notify', (req, res) => {
   const body = { ...req.body };
   const receivedMac = body.CheckMacValue;
   delete body.CheckMacValue;
-  if (receivedMac !== ecpayCheckMacValue(body)) {
+  if (!ecpayVerifyMac(body, receivedMac)) {
     console.error('[ecpay] period-notify 檢查碼不符', body);
     return res.status(400).send('0|CheckMacValue error');
   }

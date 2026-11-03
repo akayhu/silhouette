@@ -1,5 +1,5 @@
 // 綠界 ECPay 檢查碼、下單工具函式與「信用卡定期定額訂單作業」API
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { ECPAY_HASH_KEY, ECPAY_HASH_IV, ECPAY_HOST, ECPAY_MERCHANT_ID } from './env.mjs';
 
 // 把字串編碼成跟 .NET UrlEncode 一致的格式：JS 的 encodeURIComponent 本來就不會
@@ -20,6 +20,14 @@ export function ecpayCheckMacValue(data) {
   const wrapped = `HashKey=${ECPAY_HASH_KEY}&${raw}&HashIV=${ECPAY_HASH_IV}`;
   const encoded = ecpayUrlEncode(wrapped).toLowerCase();
   return createHash('sha256').update(encoded).digest('hex').toUpperCase();
+}
+
+// 驗證綠界送回的 CheckMacValue：一般字串比對（!==）會在第一個不同字元就提前返回，
+// 理論上可被時序攻擊猜出正確簽章，跟驗密碼一樣要用 constant-time 比對
+export function ecpayVerifyMac(data, receivedMac) {
+  const expected = Buffer.from(ecpayCheckMacValue(data));
+  const received = Buffer.from(String(receivedMac || ''));
+  return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
 // yyyy/MM/dd HH:mm:ss（綠界要求的時間格式，用本機時間）

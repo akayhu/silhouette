@@ -9,18 +9,29 @@ import { UPLOAD_DIR, FREE_MONTHLY_PROJECTS } from '../env.mjs';
 
 const router = Router();
 
-const projectRow = (r, withData = false) => ({
-  id: r.id,
-  name: r.name,
-  thumbnail: r.thumbnail,
-  createdAt: r.created_at,
-  updatedAt: r.updated_at,
-  ...(withData ? { data: JSON.parse(r.data) } : { aspect: JSON.parse(r.data).aspect, duration: JSON.parse(r.data).duration ?? 0 }),
-});
+const projectRow = (r, withData = false) => {
+  const data = JSON.parse(r.data);
+  return {
+    id: r.id,
+    name: r.name,
+    thumbnail: r.thumbnail,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    ...(withData ? { data } : { aspect: data.aspect, duration: data.duration ?? 0 }),
+  };
+};
 
+// 專案列表只需要 aspect／duration，不用把每個專案完整的 data（可能很大的 JSON，含所有
+// 素材/字幕/特效資料）整個撈出來解析；用 SQLite 的 json_extract 直接在資料庫端取出這兩個欄位
 router.get('/api/projects', requireAuth, (req, res) => {
-  const rows = db.prepare(`SELECT * FROM projects WHERE user_id=? ORDER BY updated_at DESC`).all(req.user.id);
-  res.json({ projects: rows.map((r) => projectRow(r)) });
+  const rows = db
+    .prepare(
+      `SELECT id, name, thumbnail, created_at AS createdAt, updated_at AS updatedAt,
+              json_extract(data, '$.aspect') AS aspect, COALESCE(json_extract(data, '$.duration'), 0) AS duration
+       FROM projects WHERE user_id=? ORDER BY updated_at DESC`,
+    )
+    .all(req.user.id);
+  res.json({ projects: rows });
 });
 
 router.post('/api/projects', requireAuth, (req, res) => {

@@ -3,22 +3,30 @@ import { randomBytes } from 'node:crypto';
 import { db, now } from './db.mjs';
 import { RESEND_API_KEY, RESEND_FROM, APP_URL, EMAIL_VERIFICATION_HOURS, PASSWORD_RESET_HOURS } from './env.mjs';
 
-// 用 Resend 寄出交易型通知信；沒設定 RESEND_API_KEY 時改印連結在 log，方便本機開發測試整個流程
+// 用 Resend 寄出交易型通知信；沒設定 RESEND_API_KEY 時改印連結在 log，方便本機開發測試整個流程。
+// 失敗了不會讓呼叫端整個請求跟著失敗（註冊、忘記密碼本來就不該因為信件商暫時出狀況而擋住），
+// 但原本完全沒有重試，網路或 Resend 短暫不穩就會直接漏信、使用者永遠收不到；
+// 失敗重試一次，兩次都失敗才放棄，並用好找的關鍵字記下來方便事後排查
 async function sendTransactionalEmail(email, subject, html, devLogPrefix, link) {
   if (!RESEND_API_KEY) {
     console.log(`[${devLogPrefix}：尚未設定 RESEND_API_KEY，僅印出連結] ${email} -> ${link}`);
     return;
   }
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: RESEND_FROM, to: email, subject, html }),
-    });
-    if (!res.ok) console.error(`寄送${devLogPrefix}失敗`, res.status, await res.text());
-  } catch (err) {
-    console.error(`寄送${devLogPrefix}失敗`, err);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: RESEND_FROM, to: email, subject, html }),
+      });
+      if (res.ok) return;
+      console.error(`[mail] 寄送${devLogPrefix}失敗（第 ${attempt} 次）`, res.status, await res.text());
+    } catch (err) {
+      console.error(`[mail] 寄送${devLogPrefix}失敗（第 ${attempt} 次）`, err);
+    }
+    if (attempt === 1) await new Promise((r) => setTimeout(r, 1000));
   }
+  console.error(`[mail] 寄送${devLogPrefix}最終失敗，已重試過一次，請檢查 Resend 狀態與設定：${email}`);
 }
 
 export async function sendVerificationEmail(email, name, token) {

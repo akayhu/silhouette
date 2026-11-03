@@ -1,6 +1,7 @@
 // 資料庫：schema、舊資料庫補欄位的 migration，以及 db 實例本身
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from './env.mjs';
 
@@ -173,3 +174,22 @@ function cleanupExpired() {
 }
 cleanupExpired();
 setInterval(cleanupExpired, 60 * 60_000).unref();
+
+// 定期備份：資料庫只存在單一 app.db 檔案，磁碟壞掉或檔案損毀就會整個遺失，
+// 用 serialize() 把當下內容寫成一份獨立快照（跟 WAL 模式無關，是完整一致的快照），
+// 只保留最近 BACKUP_KEEP 份，避免備份資料夾無限長大
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const BACKUP_KEEP = 14;
+function backupDatabase() {
+  try {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const file = path.join(BACKUP_DIR, `app-${now().replace(/[:.]/g, '-')}.db`);
+    fs.writeFileSync(file, db.serialize());
+    const old = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.db')).sort();
+    for (const f of old.slice(0, -BACKUP_KEEP)) fs.rmSync(path.join(BACKUP_DIR, f), { force: true });
+  } catch (err) {
+    console.error('[db] 備份資料庫失敗', err);
+  }
+}
+backupDatabase();
+setInterval(backupDatabase, 24 * 60 * 60_000).unref();

@@ -12,6 +12,12 @@ import adminRoutes from './routes/admin.mjs';
 import projectRoutes from './routes/projects.mjs';
 import mediaRoutes from './routes/media.mjs';
 
+// 路由 handler 之外（例如背景任務）出現沒攔截的例外時，不要讓整個行程直接崩潰、
+// 中斷所有使用者的連線：記下來讓人看得到，執行環境（systemd／pm2／容器）之後還是會
+// 重啟行程，這裡只是避免一個無關緊要的例外就讓服務立刻斷線
+process.on('uncaughtException', (err) => console.error('[process] 未攔截的例外', err));
+process.on('unhandledRejection', (reason) => console.error('[process] 未處理的 Promise rejection', reason));
+
 const app = express();
 // 正式環境部署在反向代理（Fly.io／Zeabur／Railway／nginx）後面時，相信第一層代理加的
 // X-Forwarded-For，req.ip 才會是使用者真正的 IP，而不是全部都變成代理自己的 IP

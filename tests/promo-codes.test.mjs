@@ -101,6 +101,16 @@ test('優惠碼產生與兌換、管理者重設密碼與刪除帳號', async ()
     const adminId = server.db.prepare(`SELECT id FROM users WHERE email=?`).get('admin@example.test').id;
     const deleteSelf = await server.request(`/api/admin/users/${adminId}`, undefined, 'DELETE');
     assert.equal(deleteSelf.status, 400);
+
+    // 管理者不能重設「另一個管理者」的密碼（也不能開通／撤銷），避免被盜用的管理者帳號鎖死別人
+    await registerAndVerify(server, 'other-admin@example.test');
+    const otherAdminId = server.db.prepare(`SELECT id FROM users WHERE email=?`).get('other-admin@example.test').id;
+    server.db.prepare(`UPDATE users SET role='admin' WHERE id=?`).run(otherAdminId);
+    await server.request('/api/auth/login', { email: 'admin@example.test', password: 'test-password-123' });
+    const resetOtherAdmin = await server.request(`/api/admin/users/${otherAdminId}`, { action: 'reset-password', password: 'brand-new-password-123' }, 'PATCH');
+    assert.equal(resetOtherAdmin.status, 400);
+    const grantOtherAdmin = await server.request(`/api/admin/users/${otherAdminId}`, { action: 'grant', months: 1 }, 'PATCH');
+    assert.equal(grantOtherAdmin.status, 400);
   } finally {
     await server.stop();
   }

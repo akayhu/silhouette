@@ -95,6 +95,9 @@ router.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
 router.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   const user = db.prepare(`SELECT * FROM users WHERE id=?`).get(req.params.id);
   if (!user) return res.status(404).json({ error: '找不到這個會員' });
+  // 跟刪除會員一樣擋掉其他管理者帳號：不然管理者（或被盜用的 session）能改掉另一個
+  // 管理者的密碼、順便登出對方所有裝置，等於鎖死對方帳號
+  if (user.role === 'admin' && user.id !== req.user.id) return res.status(400).json({ error: '不能對其他管理者帳號執行這個操作' });
   if (req.body.action === 'grant') {
     const months = Number(req.body.months);
     if (!Number.isInteger(months) || months < 0 || months > 12) return res.status(400).json({ error: '開通期間不正確' });

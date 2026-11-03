@@ -3,7 +3,7 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, now } from '../db.mjs';
-import { requireAuth, requireAdmin, grantProMonths, generatePromoCode, hashPassword } from '../helpers.mjs';
+import { requireAuth, requireAdmin, grantProMonths, generatePromoCode, hashPassword, logAdminAction } from '../helpers.mjs';
 import { UPLOAD_DIR, MAX_PROMO_DISCOUNT_TWD, PRO_PRICE_TWD } from '../env.mjs';
 
 const router = Router();
@@ -103,14 +103,17 @@ router.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
     } else {
       grantProMonths(user, months, 'admin');
     }
+    logAdminAction(req.user, 'grant', user, { months });
   } else if (req.body.action === 'revoke') {
     db.prepare(`UPDATE users SET plan='free', plan_source=NULL, plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
+    logAdminAction(req.user, 'revoke', user);
   } else if (req.body.action === 'reset-password') {
     const password = String(req.body.password || '');
     if (password.length < 8) return res.status(400).json({ error: '密碼至少需要 8 個字元' });
     db.prepare(`UPDATE users SET password_hash=? WHERE id=?`).run(hashPassword(password), user.id);
     // 管理者改密碼後，把這個帳號目前的登入都登出，確保新密碼立刻生效
     db.prepare(`DELETE FROM sessions WHERE user_id=?`).run(user.id);
+    logAdminAction(req.user, 'reset-password', user);
   } else {
     return res.status(400).json({ error: '不支援的操作' });
   }
@@ -137,6 +140,7 @@ router.post('/api/admin/promo-codes', requireAuth, requireAdmin, (req, res) => {
   db.prepare(`INSERT INTO promo_codes (code, kind, months, discount_amount, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
     code, kind, months, discountAmount, req.user.id, createdAt,
   );
+  logAdminAction(req.user, 'create-promo-code', null, { code, kind, months, discountAmount });
   res.json({ code: { code, kind, months, discountAmount, createdAt, redemptions: 0 } });
 });
 
@@ -171,7 +175,26 @@ router.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
     return res.status(500).json({ error: '刪除失敗：' + err.message });
   }
   fs.rmSync(path.join(UPLOAD_DIR, user.id), { recursive: true, force: true });
+  logAdminAction(req.user, 'delete-user', user);
   res.json({ ok: true });
+});
+
+router.get('/api/admin/audit-log', requireAuth, requireAdmin, (req, res) => {
+  const pageSize = ADMIN_PAGE_SIZES.includes(Number(req.query.pageSize)) ? Number(req.query.pageSize) : 20;
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM admin_audit_log`).get().n;
+  const rows = db
+    .prepare(
+      `SELECT id, admin_email AS adminEmail, action, target_user_id AS targetUserId, target_email AS targetEmail, detail, created_at AS createdAt
+       FROM admin_audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    )
+    .all(pageSize, (page - 1) * pageSize);
+  res.json({
+    entries: rows.map((r) => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null })),
+    total,
+    page,
+    pageSize,
+  });
 });
 
 export default router;

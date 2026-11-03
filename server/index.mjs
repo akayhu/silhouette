@@ -41,7 +41,7 @@ const APP_ROUTES = [
   /^\/account\/?$/,
   /^\/checkout\/?$/,
   /^\/editor\/[^/]+\/?$/,
-  /^\/admin(\/members|\/promo-codes)?\/?$/,
+  /^\/admin(\/members|\/promo-codes|\/audit-log)?\/?$/,
 ];
 if (fs.existsSync(path.join(DIST, 'app.html'))) {
   app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '1y', immutable: true }));

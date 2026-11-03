@@ -103,6 +103,15 @@ export function publicUser(user) {
   };
 }
 
+// 管理後台的操作稽核紀錄：誰（admin）在什麼時候對誰（targetUser，可以沒有，例如產生優惠碼）做了什麼。
+// detail 是跟這個動作相關、非機密的補充資訊（例如開通的月數、優惠碼內容），絕對不要放密碼
+export function logAdminAction(admin, action, targetUser, detail) {
+  db.prepare(
+    `INSERT INTO admin_audit_log (id, admin_id, admin_email, action, target_user_id, target_email, detail, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(randomUUID(), admin.id, admin.email, action, targetUser?.id ?? null, targetUser?.email ?? null, detail ? JSON.stringify(detail) : null, now());
+}
+
 // 從 cookie 讀 session，把使用者掛到 req.user 上；要掛在所有路由之前
 export function attachUser(req, _res, next) {
   const { sid } = parseCookies(req.headers.cookie);

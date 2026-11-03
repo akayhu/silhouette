@@ -24,6 +24,18 @@ export interface SessionInfo {
   current: boolean;
 }
 
+export type AdminAuditAction = 'grant' | 'revoke' | 'reset-password' | 'delete-user' | 'create-promo-code';
+
+export interface AdminAuditEntry {
+  id: string;
+  adminEmail: string;
+  action: AdminAuditAction;
+  targetUserId: string | null;
+  targetEmail: string | null;
+  detail: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface PromoCode {
   code: string;
   kind: 'months' | 'discount';

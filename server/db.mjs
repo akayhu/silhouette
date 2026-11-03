@@ -93,6 +93,16 @@ db.exec(`
     file TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id TEXT PRIMARY KEY,
+    admin_id TEXT NOT NULL,
+    admin_email TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_user_id TEXT,
+    target_email TEXT,
+    detail TEXT,
+    created_at TEXT NOT NULL
+  );
 `);
 
 export const now = () => new Date().toISOString();
@@ -150,6 +160,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_voices_user_created ON voices(user_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
   CREATE INDEX IF NOT EXISTS idx_users_tw_day ON users(date(created_at, '+8 hours'));
+  CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created_at ON admin_audit_log(created_at);
 `);
 
 // 定期清掉過期資料：session 過期後、信箱驗證信與密碼重設信超過有效期限的 token，

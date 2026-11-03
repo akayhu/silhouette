@@ -1,5 +1,5 @@
 import type { ExportInfo, SavedExport } from './exportStore';
-import type { AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, PromoCode, SessionInfo, User, Voice } from './types';
+import type { AdminAuditEntry, AdminMember, AdminStats, LibraryTrack, Project, ProjectData, ProjectSummary, PromoCode, SessionInfo, User, Voice } from './types';
 
 export interface TtsResult {
   url: string;
@@ -89,6 +89,8 @@ export const api = {
     request<{ codes: PromoCode[]; total: number; page: number; pageSize: number }>(`/api/admin/promo-codes?page=${page}&pageSize=${pageSize}`),
   adminCreatePromoCode: (d: { kind: 'months'; months: number } | { kind: 'discount'; discountAmount: number }) =>
     request<{ code: PromoCode }>('/api/admin/promo-codes', json('POST', d)),
+  adminAuditLog: (page: number, pageSize: number) =>
+    request<{ entries: AdminAuditEntry[]; total: number; page: number; pageSize: number }>(`/api/admin/audit-log?page=${page}&pageSize=${pageSize}`),
   music: () => request<{ license: string; items: LibraryTrack[] }>('/api/music'),
   voices: () => request<{ voices: Voice[]; breezy: boolean }>('/api/tts/voices'),
   createVoice: (wav: Blob, name: string, text: string) =>

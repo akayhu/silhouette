@@ -160,7 +160,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </Link>
             )}
             <div className="relative">
-              <button onClick={() => setMenu(!menu)} className="flex items-center gap-2 rounded-xl py-1 pr-2 pl-1 hover:bg-sunken">
+              <button
+                onClick={() => setMenu(!menu)}
+                className="flex items-center gap-2 rounded-xl py-1 pr-2 pl-1 hover:bg-sunken"
+                aria-label="帳戶選單"
+                aria-haspopup="menu"
+                aria-expanded={menu}
+              >
                 <span className="grid size-8 place-items-center rounded-full bg-brand-soft text-sm font-bold text-brand">{user.name.slice(0, 1)}</span>
                 <ChevronDown className="size-4 text-ink-mute" />
               </button>

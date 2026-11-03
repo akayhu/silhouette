@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Crown, X } from 'lucide-react';
 
@@ -54,19 +54,25 @@ export const inputClass =
   'w-full h-11 rounded-xl border border-line bg-surface px-3.5 text-[15px] text-ink placeholder:text-ink-mute/70 outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10';
 
 export function Modal({ open, onClose, children, width = 'max-w-md' }: { open: boolean; onClose: () => void; children: ReactNode; width?: string }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
+    // 開啟時把焦點移進對話框，不然鍵盤使用者的焦點還停在背景內容上；
+    // 裡面的欄位有自己的 autoFocus 的話尊重它，不要搶走焦點
+    if (dialogRef.current && !dialogRef.current.contains(document.activeElement)) dialogRef.current.focus();
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/25 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal
-        className={`relative max-h-[calc(100dvh-2rem)] w-full ${width} animate-fade-up overflow-y-auto rounded-3xl bg-surface p-6 shadow-pop`}
+        tabIndex={-1}
+        className={`relative max-h-[calc(100dvh-2rem)] w-full ${width} animate-fade-up overflow-y-auto rounded-3xl bg-surface p-6 shadow-pop outline-none`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button onClick={onClose} className="absolute top-4 right-4 rounded-lg p-1.5 text-ink-mute hover:bg-sunken hover:text-ink" aria-label="關閉">

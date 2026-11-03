@@ -35,6 +35,7 @@ export default function AdminOverview() {
               <button
                 key={d}
                 onClick={() => setDays(d)}
+                aria-pressed={days === d}
                 className={`rounded-[10px] px-3 py-1.5 text-xs font-bold transition ${days === d ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'}`}
               >
                 近 {d} 天

@@ -73,6 +73,7 @@ export default function AdminPromoCodes() {
             <button
               key={id}
               onClick={() => setKind(id)}
+              aria-pressed={kind === id}
               className={`rounded-[10px] px-4 py-2 text-xs font-bold transition ${kind === id ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'}`}
             >
               {label}

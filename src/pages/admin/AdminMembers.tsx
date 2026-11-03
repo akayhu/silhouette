@@ -81,7 +81,13 @@ export default function AdminMembers() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <label className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3 focus-within:border-brand">
           <Search className="size-4 text-ink-mute" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜尋名稱或 Email" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="搜尋名稱或 Email"
+            aria-label="搜尋名稱或 Email"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
         </label>
         <div className="flex rounded-xl bg-sunken p-0.5" role="group" aria-label="方案篩選">
           {(
@@ -95,6 +101,7 @@ export default function AdminMembers() {
             <button
               key={id}
               onClick={() => setFilter(id)}
+              aria-pressed={filter === id}
               className={`rounded-[10px] px-4 py-2 text-xs font-bold transition ${filter === id ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'}`}
             >
               {label}

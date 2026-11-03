@@ -187,6 +187,7 @@ export default function Dashboard() {
                 <button
                   key={a.id}
                   onClick={() => setAspect(a.id)}
+                  aria-pressed={aspect === a.id}
                   className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-3 text-center transition ${aspect === a.id ? 'border-brand bg-brand-soft/50' : 'border-line hover:border-ink-mute/40'}`}
                 >
                   <span className="grid h-14 place-items-center">
@@ -206,7 +207,7 @@ export default function Dashboard() {
 
       <Modal open={!!renaming} onClose={() => setRenaming(null)}>
         <h2 className="text-xl font-extrabold">重新命名</h2>
-        <input className={`${inputClass} mt-4`} value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+        <input className={`${inputClass} mt-4`} value={newName} onChange={(e) => setNewName(e.target.value)} aria-label="專案名稱" autoFocus />
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setRenaming(null)}>
             取消

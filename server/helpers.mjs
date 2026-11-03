@@ -1,7 +1,7 @@
 // 跨路由共用的工具函式與中介層：密碼、session、會員方案、限流
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { db, now } from './db.mjs';
-import { FREE_MONTHLY_PROJECTS, SESSION_DAYS, COOKIE_SECURE } from './env.mjs';
+import { FREE_MONTHLY_PROJECTS, SESSION_DAYS, COOKIE_SECURE, APP_URL } from './env.mjs';
 
 export function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
@@ -121,6 +121,26 @@ export function attachUser(req, _res, next) {
       .get(sid, now());
     if (row) req.user = refreshPlan(row);
   }
+  next();
+}
+
+// CSRF 防護（多一層保險）：SameSite=Lax 的 session cookie 已經擋掉絕大多數跨站請求，
+// 這裡額外檢查 Origin／Referer 是不是本站，只在「這個請求會動用已登入身分」時檢查——
+// 註冊、登入這類本來就沒有 session 的請求，跟綠界伺服器對伺服器的 webhook 通知，都不受影響。
+// 瀏覽器對 POST／PATCH／DELETE 這類請求一定會帶 Origin，缺少時放行（非瀏覽器用戶端或被代理拿掉），
+// 真的跨站偽造請求的 Origin 一定存在、而且是攻擊者網站，才是要擋的情況。
+const APP_ORIGIN = APP_URL;
+export function verifyOrigin(req, res, next) {
+  if (!req.user || !/^(POST|PUT|PATCH|DELETE)$/.test(req.method)) return next();
+  let origin = req.headers.origin || null;
+  if (!origin && req.headers.referer) {
+    try {
+      origin = new URL(req.headers.referer).origin;
+    } catch {
+      origin = null;
+    }
+  }
+  if (origin && origin !== APP_ORIGIN) return res.status(403).json({ error: '請求來源不正確' });
   next();
 }
 

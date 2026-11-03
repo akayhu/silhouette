@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import './db.mjs'; // 建立資料庫、跑 migration（有 side effect，要在掛路由前先載入）
 import { PORT, ROOT } from './env.mjs';
-import { attachUser } from './helpers.mjs';
+import { attachUser, verifyOrigin } from './helpers.mjs';
 import authRoutes from './routes/auth.mjs';
 import billingRoutes from './routes/billing.mjs';
 import adminRoutes from './routes/admin.mjs';
@@ -20,6 +20,7 @@ app.use(express.json({ limit: '10mb' }));
 // 綠界的付款通知是用 application/x-www-form-urlencoded POST 回來的
 app.use(express.urlencoded({ extended: false }));
 app.use(attachUser);
+app.use(verifyOrigin);
 
 app.use(authRoutes);
 app.use(billingRoutes);

@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, now } from '../db.mjs';
-import { requireAuth, requirePro } from '../helpers.mjs';
+import { requireAuth, requirePro, rateLimit } from '../helpers.mjs';
 import { ROOT, UPLOAD_DIR } from '../env.mjs';
 import { ownProject } from './projects.mjs';
 
@@ -17,6 +17,11 @@ const router = Router();
 // 自訂聲音的錄音上限：10 秒左右的 16kHz 單聲道 WAV 大約 320KB，20MB 已經很寬裕，
 // 避免有人（或用壞的前端）上傳超大檔案把磁碟塞滿
 const MAX_VOICE_BYTES = 20 * 1024 * 1024;
+
+// 朗讀合成跟聲音上傳都會耗用運算資源（呼叫 BreezyVoice／macOS say，或寫入檔案），
+// 只靠 requirePro／10 個聲音上限把關的話，帳號被盜用或濫用時可以無限次觸發，加一層限流
+const voiceUploadLimiter = rateLimit(15 * 60_000, 10);
+const ttsLimiter = rateLimit(15 * 60_000, 20);
 
 // 只讓本人讀取自己的檔案；express.static 會處理 Range，影片才能拖曳播放
 router.use('/uploads/:userId', (req, res, next) => {
@@ -87,7 +92,7 @@ router.get('/api/tts/voices', requireAuth, async (req, res) => {
 });
 
 // 建立自己的聲音：上傳 16kHz 單聲道 WAV（前端錄音後轉檔），附上朗讀的句子
-router.post('/api/voices', requireAuth, requirePro, (req, res) => {
+router.post('/api/voices', requireAuth, requirePro, voiceUploadLimiter, (req, res) => {
   if (!breezyAvailable()) return res.status(501).json({ error: '尚未安裝台灣腔 AI 語音' });
   const name = decodeURIComponent(String(req.headers['x-voice-name'] || '')).trim().slice(0, 20);
   const text = decodeURIComponent(String(req.headers['x-voice-text'] || '')).trim().slice(0, 200);
@@ -282,7 +287,7 @@ async function runBreezyJob(job, voice, parts, dir, fileName, userId, projectId)
  * 文字朗讀。傳入 segments（已切好的句子）時逐句合成再接成一個檔案，並回傳每句的起訖秒數。
  * 系統語音直接回傳結果；AI 人聲回傳 jobId，用 GET /api/tts/jobs/:id 查進度。
  */
-router.post('/api/projects/:id/tts', requireAuth, requirePro, async (req, res) => {
+router.post('/api/projects/:id/tts', requireAuth, requirePro, ttsLimiter, async (req, res) => {
   const row = ownProject(req, res);
   if (!row) return;
   const parts = (Array.isArray(req.body.segments) ? req.body.segments : [req.body.text])

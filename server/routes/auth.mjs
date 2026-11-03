@@ -22,6 +22,7 @@ const registerLimiter = rateLimit(60 * 60_000, 5);
 const forgotPasswordLimiter = rateLimit(60 * 60_000, 5);
 const resendVerificationLimiter = rateLimit(60 * 60_000, 5);
 const resetPasswordLimiter = rateLimit(15 * 60_000, 10);
+const updateMeLimiter = rateLimit(15 * 60_000, 10);
 
 router.post('/api/auth/register', registerLimiter, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -195,7 +196,9 @@ router.post('/api/auth/logout', (req, res) => {
 
 router.get('/api/auth/me', (req, res) => res.json({ user: req.user ? publicUser(req.user) : null }));
 
-router.patch('/api/auth/me', requireAuth, (req, res) => {
+// 跟登入、reset-password 一樣限流：要驗證 currentPassword，沒有限流的話 session 被竊或有 XSS 時
+// 就能無限次線上暴力猜目前密碼
+router.patch('/api/auth/me', requireAuth, updateMeLimiter, (req, res) => {
   const name = String(req.body.name ?? req.user.name).trim().slice(0, 50);
   if (!name) return res.status(400).json({ error: '請輸入名稱' });
   db.prepare(`UPDATE users SET name=? WHERE id=?`).run(name, req.user.id);

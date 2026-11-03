@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Crown } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -21,12 +21,16 @@ function describeDevice(ua: string | null) {
 
 export default function Account() {
   const { user, setUser } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const [name, setName] = useState(user?.name ?? '');
   const [pw, setPw] = useState({ current: '', next: '' });
   const [payments, setPayments] = useState<Payment[]>([]);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteEmail, setDeleteEmail] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     api.payments().then((r) => setPayments(r.payments));
@@ -67,6 +71,18 @@ export default function Account() {
     }
   };
 
+  const deleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteAccount(deleteEmail);
+      setUser(null);
+      navigate('/');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+      setDeleting(false);
+    }
+  };
+
   const card = 'rounded-3xl border border-line bg-surface p-6 shadow-card';
   return (
     <AppLayout>
@@ -96,6 +112,19 @@ export default function Account() {
             <Button variant="secondary" onClick={savePassword} disabled={!pw.current || pw.next.length < 8}>
               更新密碼
             </Button>
+          </div>
+
+          <h2 className="mt-10 text-lg font-extrabold">資料與帳號</h2>
+          <div className="mt-5 space-y-3">
+            <a href={api.exportDataUrl} download className={buttonClass('secondary', 'md')}>
+              下載我的所有資料
+            </a>
+            <div>
+              <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+                刪除帳號
+              </Button>
+              <p className="mt-2 text-xs text-ink-mute">會永久刪除你的帳號、所有專案與朗讀聲音，無法復原。</p>
+            </div>
           </div>
         </section>
 
@@ -213,6 +242,28 @@ export default function Account() {
             }}
           >
             確定取消
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={confirmDelete} onClose={() => { setConfirmDelete(false); setDeleteEmail(''); }}>
+        <h2 className="text-xl font-extrabold">確定要刪除帳號嗎？</h2>
+        <p className="mt-2 text-sm text-ink-soft">
+          這個動作無法復原：你的帳號、所有專案、朗讀聲音與登入紀錄都會被永久刪除。請輸入你的 Email「{user.email}」確認。
+        </p>
+        <input
+          className={`${inputClass} mt-4`}
+          value={deleteEmail}
+          onChange={(e) => setDeleteEmail(e.target.value)}
+          placeholder={user.email}
+          autoComplete="off"
+        />
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => { setConfirmDelete(false); setDeleteEmail(''); }}>
+            取消
+          </Button>
+          <Button variant="danger" onClick={deleteAccount} disabled={deleteEmail.trim().toLowerCase() !== user.email || deleting}>
+            永久刪除
           </Button>
         </div>
       </Modal>

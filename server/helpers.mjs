@@ -1,5 +1,7 @@
 // 跨路由共用的工具函式與中介層：密碼、session、會員方案、限流
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { db, now } from './db.mjs';
 import { FREE_MONTHLY_PROJECTS, SESSION_DAYS, COOKIE_SECURE, APP_URL } from './env.mjs';
 
@@ -79,6 +81,22 @@ export function generatePromoCode() {
     if (!db.prepare(`SELECT 1 FROM promo_codes WHERE code=?`).get(code)) return code;
   }
   throw new Error('無法產生唯一的優惠碼，請再試一次');
+}
+
+// 徹底刪除一個會員：連同專案、上傳檔案、自訂聲音與登入狀態；付款紀錄保留以維持營收報表正確。
+// 管理者刪除會員、使用者自己刪除帳號共用同一套清除邏輯，呼叫端自己負責權限檢查（能不能刪這個人）
+export function deleteUserCompletely(user, { uploadDir }) {
+  db.exec('BEGIN');
+  try {
+    for (const t of ['sessions', 'projects', 'voices', 'project_creations', 'exports', 'email_verifications', 'password_resets', 'promo_redemptions'])
+      db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(user.id);
+    db.prepare(`DELETE FROM users WHERE id=?`).run(user.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  fs.rmSync(path.join(uploadDir, user.id), { recursive: true, force: true });
 }
 
 export function publicUser(user) {

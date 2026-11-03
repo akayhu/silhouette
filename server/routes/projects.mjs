@@ -166,6 +166,9 @@ router.post('/api/projects/:id/exports', requireAuth, (req, res) => {
   if (!row) return;
   const meta = exportMeta(req.headers['x-export-meta']);
   if (!meta) return res.status(400).json({ error: '匯出資訊不完整' });
+  // 1080p 高畫質是專業版功能：前端 UI 雖然鎖了 720p，但這支 API 本身原本完全沒檢查方案，
+  // 繞過前端（直接打 API）就能把免費版帳號也存進 1080p 影片，等於方案分級形同虛設
+  if (meta.quality === 1080 && req.user.plan !== 'pro') return res.status(402).json({ error: '1080p 高畫質匯出是專業版功能', code: 'UPGRADE_REQUIRED' });
   if (Number(req.headers['content-length']) > MAX_EXPORT_BYTES) return res.status(413).json({ error: '影片太大，無法存到帳戶' });
   const id = randomUUID();
   const dir = path.join(UPLOAD_DIR, req.user.id, row.id, 'exports');

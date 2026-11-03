@@ -11,9 +11,10 @@ import {
   publicUser,
   requireAuth,
   rateLimit,
+  deleteUserCompletely,
 } from '../helpers.mjs';
 import { sendVerificationEmail, sendPasswordResetEmail, sendAccountExistsEmail, createEmailVerification, createPasswordReset } from '../mail.mjs';
-import { APP_URL, COOKIE_SECURE, TRIAL_DAYS, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } from '../env.mjs';
+import { APP_URL, COOKIE_SECURE, TRIAL_DAYS, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, UPLOAD_DIR } from '../env.mjs';
 
 const router = Router();
 
@@ -23,6 +24,7 @@ const forgotPasswordLimiter = rateLimit(60 * 60_000, 5);
 const resendVerificationLimiter = rateLimit(60 * 60_000, 5);
 const resetPasswordLimiter = rateLimit(15 * 60_000, 10);
 const updateMeLimiter = rateLimit(15 * 60_000, 10);
+const deleteAccountLimiter = rateLimit(15 * 60_000, 10);
 
 router.post('/api/auth/register', registerLimiter, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -233,6 +235,33 @@ router.delete('/api/auth/sessions/:id', requireAuth, (req, res) => {
   // 如果登出的剛好是自己目前這個裝置，順便把 cookie 清掉
   const { sid } = parseCookies(req.headers.cookie);
   if (row.token === sid) res.setHeader('Set-Cookie', `sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${COOKIE_SECURE}`);
+  res.json({ ok: true });
+});
+
+// ---------- 自助下載個人資料、刪除帳號：原本只有管理者能代為刪除會員，使用者自己沒有管道 ----------
+// 下載自己的所有資料（帳號、專案、朗讀聲音、付款紀錄）：不含密碼雜湊等機密欄位
+router.get('/api/auth/export-data', requireAuth, (req, res) => {
+  const projects = db.prepare(`SELECT id, name, data, created_at AS createdAt, updated_at AS updatedAt FROM projects WHERE user_id=?`).all(req.user.id)
+    .map((p) => ({ ...p, data: JSON.parse(p.data) }));
+  const voices = db.prepare(`SELECT id, name, prompt_text AS text, created_at AS createdAt FROM voices WHERE user_id=?`).all(req.user.id);
+  const payments = db.prepare(`SELECT id, amount, card_last4 AS cardLast4, created_at AS createdAt FROM payments WHERE user_id=?`).all(req.user.id);
+  res.setHeader('Content-Disposition', 'attachment; filename="pianke-jianqu-my-data.json"');
+  res.json({ account: publicUser(req.user), exportedAt: now(), projects, voices, payments });
+});
+
+// 使用者自己刪除帳號：連同專案、上傳檔案、自訂聲音與登入狀態。
+// 確認方式是輸入自己的 Email（不用密碼）：Google 登入的帳號沒有使用者自己知道的真正密碼
+// （註冊時是系統隨機產生的），要求輸入密碼反而會讓這些帳號完全無法自助刪除
+router.delete('/api/auth/me', requireAuth, deleteAccountLimiter, (req, res) => {
+  if (String(req.body.confirmEmail || '').trim().toLowerCase() !== req.user.email) {
+    return res.status(400).json({ error: '請輸入你帳號的 Email 以確認刪除' });
+  }
+  try {
+    deleteUserCompletely(req.user, { uploadDir: UPLOAD_DIR });
+  } catch (err) {
+    return res.status(500).json({ error: '刪除失敗：' + err.message });
+  }
+  res.setHeader('Set-Cookie', `sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${COOKIE_SECURE}`);
   res.json({ ok: true });
 });
 

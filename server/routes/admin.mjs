@@ -1,9 +1,7 @@
 // ---------- 管理後台 ----------
 import { Router } from 'express';
-import fs from 'node:fs';
-import path from 'node:path';
 import { db, now } from '../db.mjs';
-import { requireAuth, requireAdmin, grantProMonths, generatePromoCode, hashPassword, logAdminAction } from '../helpers.mjs';
+import { requireAuth, requireAdmin, grantProMonths, generatePromoCode, hashPassword, logAdminAction, deleteUserCompletely } from '../helpers.mjs';
 import { UPLOAD_DIR, MAX_PROMO_DISCOUNT_TWD, PRO_PRICE_TWD } from '../env.mjs';
 
 const router = Router();
@@ -167,17 +165,11 @@ router.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   if (!user) return res.status(404).json({ error: '找不到這個會員' });
   if (user.id === req.user.id) return res.status(400).json({ error: '不能刪除自己的帳號' });
   if (user.role === 'admin') return res.status(400).json({ error: '不能刪除管理者帳號' });
-  db.exec('BEGIN');
   try {
-    for (const t of ['sessions', 'projects', 'voices', 'project_creations', 'exports', 'email_verifications', 'password_resets', 'promo_redemptions'])
-      db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(user.id);
-    db.prepare(`DELETE FROM users WHERE id=?`).run(user.id);
-    db.exec('COMMIT');
+    deleteUserCompletely(user, { uploadDir: UPLOAD_DIR });
   } catch (err) {
-    db.exec('ROLLBACK');
     return res.status(500).json({ error: '刪除失敗：' + err.message });
   }
-  fs.rmSync(path.join(UPLOAD_DIR, user.id), { recursive: true, force: true });
   logAdminAction(req.user, 'delete-user', user);
   res.json({ ok: true });
 });

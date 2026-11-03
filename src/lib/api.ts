@@ -37,6 +37,9 @@ export const api = {
   updateMe: (d: { name?: string; currentPassword?: string; newPassword?: string }) => request<{ user: User }>('/api/auth/me', json('PATCH', d)),
   sessions: () => request<{ sessions: SessionInfo[] }>('/api/auth/sessions'),
   revokeSession: (id: string) => request(`/api/auth/sessions/${id}`, json('DELETE')),
+  /** 下載自己所有資料：是個會觸發瀏覽器下載的網址，不是要 fetch 解析的 API，直接用 <a href> 連過去就好 */
+  exportDataUrl: '/api/auth/export-data',
+  deleteAccount: (confirmEmail: string) => request('/api/auth/me', json('DELETE', { confirmEmail })),
 
   /** 建立綠界訂單：回傳收銀台網址和表單欄位，前端要組一個 <form> 用瀏覽器導頁過去（不是 fetch）；code 是折扣優惠碼 */
   ecpayCheckout: (code?: string) => request<{ actionUrl: string; fields: Record<string, string | number> }>('/api/billing/ecpay/checkout', json('POST', code ? { code } : undefined)),

@@ -120,9 +120,11 @@ router.post('/api/billing/ecpay/period-notify', (req, res) => {
   res.send('1|OK');
 });
 
-// 使用者付款完刷卡後，瀏覽器被導回這裡（綠界用 POST 導回，跟上面的伺服器通知是分開的兩條路徑）
-router.post('/api/billing/ecpay/result', (_req, res) => {
-  res.redirect('/account?upgraded=1');
+// 使用者付款完刷卡後，瀏覽器被導回這裡（綠界用 POST 導回，跟上面的伺服器通知是分開的兩條路徑）。
+// 真正的升級是由上面的 /notify 非同步處理，這裡只是把「付款當下」成功或失敗的結果轉告前端顯示，
+// 不然刷卡失敗時介面會安靜地停在帳戶頁、方案也沒升級，使用者會搞不清楚是不是系統壞掉
+router.post('/api/billing/ecpay/result', (req, res) => {
+  res.redirect(`/account?upgraded=${req.body.RtnCode === '1' ? '1' : '0'}`);
 });
 
 router.post('/api/billing/cancel', requireAuth, async (req, res) => {

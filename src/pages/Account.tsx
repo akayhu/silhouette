@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Crown } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -20,8 +20,9 @@ function describeDevice(ua: string | null) {
 }
 
 export default function Account() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, refresh } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const toast = useToast();
   const [name, setName] = useState(user?.name ?? '');
   const [pw, setPw] = useState({ current: '', next: '' });
@@ -38,6 +39,21 @@ export default function Account() {
 
   useEffect(() => {
     api.sessions().then((r) => setSessions(r.sessions));
+  }, []);
+
+  // 刷卡完成後綠界會把瀏覽器導回這裡，告訴我們這次付款當下成功還是失敗；
+  // 真正的升級是靠另一條非同步的伺服器通知處理，這裡只是讓使用者看到清楚的回饋，
+  // 不然刷卡失敗時畫面會安靜地停在這頁，看起來像系統卡住
+  useEffect(() => {
+    if (!params.has('upgraded')) return;
+    if (params.get('upgraded') === '1') {
+      toast('付款成功，已升級專業版！', 'success');
+      refresh();
+    } else {
+      toast('付款未完成，請重新嘗試或改用其他卡片', 'error');
+    }
+    navigate('/account', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!user) return null;

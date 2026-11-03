@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { deleteLocalFiles } from '../lib/localMedia';
 import { Link, useNavigate } from 'react-router-dom';
-import { Clapperboard, Crown, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Clapperboard, Copy, Crown, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatTime, relativeTime } from '../lib/format';
@@ -47,6 +47,20 @@ export default function Dashboard() {
     if (atLimit) return upgrade(`免費版每月可以建立 ${projectLimit} 個專案，這個月已經用完了。`);
     setNewName('');
     setCreating(true);
+  };
+
+  const duplicate = async (p: ProjectSummary) => {
+    setMenu(null);
+    try {
+      const { project } = await api.duplicateProject(p.id);
+      toast('已複製專案');
+      load();
+      refresh();
+      navigate(`/editor/${project.id}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'UPGRADE_REQUIRED') upgrade(err.message);
+      else toast((err as Error).message, 'error');
+    }
   };
 
   const create = async () => {
@@ -163,6 +177,9 @@ export default function Dashboard() {
                 <div className="absolute right-3 bottom-12 z-10 w-36 animate-fade-up rounded-2xl border border-line bg-surface p-1.5 shadow-pop" onMouseLeave={() => setMenu(null)}>
                   <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-sunken" onClick={() => (setRenaming(p), setNewName(p.name), setMenu(null))}>
                     <Pencil className="size-4" /> 重新命名
+                  </button>
+                  <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-sunken" onClick={() => duplicate(p)}>
+                    <Copy className="size-4" /> 複製
                   </button>
                   <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-600 hover:bg-red-50" onClick={() => (setDeleting(p), setMenu(null))}>
                     <Trash2 className="size-4" /> 刪除

@@ -61,6 +61,40 @@ router.get('/api/projects/:id', requireAuth, (req, res) => {
   if (row) res.json({ project: projectRow(row, true) });
 });
 
+// 複製專案：跟新增專案一樣算一次本月額度。使用者的影片/圖片只存在自己電腦（data.media 裡
+// 標了 local 的項目），複製時原樣保留 id 共用即可；只有伺服器端儲存的檔案（例如朗讀產生的
+// 音訊）需要真的複製一份到新專案的資料夾，並把網址改指過去，不然原專案被刪除時這份複製也會壞掉
+router.post('/api/projects/:id/duplicate', requireAuth, (req, res) => {
+  const row = ownProject(req, res);
+  if (!row) return;
+  const user = publicUser(req.user);
+  if (user.usage.projectLimit !== null && user.usage.projectsThisMonth >= user.usage.projectLimit) {
+    return res.status(402).json({ error: `免費版每月最多建立 ${FREE_MONTHLY_PROJECTS} 個專案`, code: 'UPGRADE_REQUIRED' });
+  }
+  const id = randomUUID();
+  const data = JSON.parse(row.data);
+  const oldPrefix = `/uploads/${req.user.id}/${row.id}/`;
+  const copyIntoNewProject = (url) => {
+    if (typeof url !== 'string' || !url.startsWith(oldPrefix)) return url;
+    const rel = url.slice(oldPrefix.length);
+    try {
+      const dest = path.join(UPLOAD_DIR, req.user.id, id, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(path.join(UPLOAD_DIR, req.user.id, row.id, rel), dest);
+      return `/uploads/${req.user.id}/${id}/${rel}`;
+    } catch {
+      return url; // 複製不到就保留舊網址，至少不會讓整個複製失敗
+    }
+  };
+  for (const m of data.media ?? []) if (!m.local) m.url = copyIntoNewProject(m.url);
+  const name = `${row.name}（複製）`.slice(0, 100);
+  db.prepare(`INSERT INTO projects (id, user_id, name, data, thumbnail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+    id, req.user.id, name, JSON.stringify(data), row.thumbnail, now(), now(),
+  );
+  db.prepare(`INSERT INTO project_creations (user_id, created_at) VALUES (?, ?)`).run(req.user.id, now());
+  res.json({ project: projectRow(db.prepare(`SELECT * FROM projects WHERE id=?`).get(id), true) });
+});
+
 router.patch('/api/projects/:id', requireAuth, (req, res) => {
   const row = ownProject(req, res);
   if (!row) return;

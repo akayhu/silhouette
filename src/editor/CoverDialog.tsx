@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Film, ImageIcon, Loader2, Trash2 } from 'lucide-react';
+import { Download, Film, ImageIcon, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { COVER_PRESETS, coverSize, coverThumb, defaultCover, renderCover } from '../lib/cover';
+import { suggestCoverTimes } from '../lib/coverSuggest';
 import { captionBox, drawCaption } from '../lib/engine';
 import { formatTime } from '../lib/format';
 import type { Caption, VideoCover } from '../lib/types';
@@ -25,6 +26,8 @@ export function CoverDialog({ onClose }: { onClose: () => void }) {
   const previewRef = useRef<HTMLCanvasElement>(null);
   const dragging = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ time: number; thumb: string }[] | null>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const image = cover.mediaId ? data.media.find((m) => m.id === cover.mediaId) : undefined;
   const images = data.media.filter((m) => m.kind === 'image' && m.url);
@@ -98,6 +101,31 @@ export function CoverDialog({ onClose }: { onClose: () => void }) {
   };
 
   const full = () => renderCover(useEditor.getState().data, cover, width, height);
+
+  // 推薦精彩畫面：純前端取樣評分，不用任何 AI 模型；挑出候選時間後各自畫一張小縮圖給使用者選
+  const suggest = async () => {
+    setSuggesting(true);
+    setSuggestions(null);
+    try {
+      const candidates = await suggestCoverTimes(data);
+      if (!candidates.length) {
+        toast('影片太短，沒辦法推薦畫面', 'error');
+        return;
+      }
+      const tw = Math.max(1, Math.round(pw / 3));
+      const th = Math.max(1, Math.round(ph / 3));
+      // 依序畫（不是 Promise.all 平行畫）：好幾個 Engine 同時搶同一段影片解碼容易出現畫面來不及就緒的情形
+      const thumbs: { time: number; thumb: string }[] = [];
+      for (const c of candidates) {
+        thumbs.push({ time: c.time, thumb: coverThumb(await renderCover(data, { ...cover, time: c.time, title: '' }, tw, th)) });
+      }
+      setSuggestions(thumbs);
+    } catch (e) {
+      toast('推薦畫面失敗：' + (e as Error).message, 'error');
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const save = async () => {
     setBusy('儲存中…');
@@ -216,6 +244,31 @@ export function CoverDialog({ onClose }: { onClose: () => void }) {
               <button className="mt-2 text-xs font-bold text-brand hover:underline" onClick={() => set({ time: Math.min(useEditor.getState().time, Math.max(0, data.duration - 0.05)) })}>
                 用目前播放頭的畫面
               </button>
+
+              <div className="mt-3 rounded-xl border border-brand/20 bg-brand-soft/20 p-2.5">
+                <button
+                  onClick={() => void suggest()}
+                  disabled={suggesting}
+                  className="flex items-center gap-1.5 text-xs font-bold text-brand hover:underline disabled:no-underline"
+                >
+                  {suggesting ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                  {suggesting ? '分析畫面中…' : '幫我挑幾個精彩畫面'}
+                </button>
+                {suggestions && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.time}
+                        onClick={() => set({ time: s.time })}
+                        className={`relative size-14 overflow-hidden rounded-lg border-2 ${Math.abs(cover.time - s.time) < 0.02 ? 'border-brand' : 'border-line'}`}
+                        aria-label={`用 ${formatTime(s.time, true)} 這格畫面`}
+                      >
+                        <img src={s.thumb} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div>

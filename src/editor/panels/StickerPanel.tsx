@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { uid } from '../../lib/format';
 import { STICKER_CATEGORIES, STICKERS, stickerUrl, type StickerCategory, type StickerDef } from '../../lib/stickers';
+import { recommendStickers } from '../../lib/stickerRecommend';
 import type { StickerItem } from '../../lib/types';
 import { useToast } from '../../components/ui';
 import { useEditor } from '../store';
@@ -34,12 +36,40 @@ function addSticker(def: StickerDef) {
 export function StickerPanel() {
   const toast = useToast();
   const [cat, setCat] = useState<StickerCategory>('face');
+  const captions = useEditor((s) => s.data.captions);
   const list = STICKERS.filter((s) => s.category === cat);
+  // 為你推薦：規則式比對字幕內容，不呼叫任何 AI API
+  const recommended = useMemo(() => recommendStickers(captions), [captions]);
+
+  const add = (s: StickerDef) => {
+    if (addSticker(s)) toast(`已加入「${s.name}」`, 'success');
+  };
 
   return (
     <div className="p-4">
       <h2 className="text-sm font-extrabold">貼紙</h2>
       <p className="mt-1 text-xs text-ink-mute">原創設計，無版權問題，可用於個人與商業影片。點一下加入，會從播放頭開始顯示 3 秒。</p>
+
+      {recommended.length > 0 && (
+        <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
+          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
+            <Sparkles className="size-3.5" /> 為你推薦
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {recommended.map(({ sticker, reason }) => (
+              <button
+                key={sticker.id}
+                onClick={() => add(sticker)}
+                className="group flex flex-col items-center rounded-2xl border border-line bg-surface p-2 transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-card"
+                title={reason}
+              >
+                <img src={stickerUrl(sticker)} alt={sticker.name} className="size-14 transition group-hover:scale-110" draggable={false} />
+                <span className="mt-1 truncate text-[11px] font-semibold text-ink-soft">{sticker.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-4 rounded-xl bg-sunken p-0.5">
         {STICKER_CATEGORIES.map((c) => (
@@ -57,9 +87,7 @@ export function StickerPanel() {
         {list.map((s) => (
           <button
             key={s.id}
-            onClick={() => {
-              if (addSticker(s)) toast(`已加入「${s.name}」`, 'success');
-            }}
+            onClick={() => add(s)}
             className="group flex flex-col items-center rounded-2xl border border-line bg-surface p-2 transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-card"
             title={s.name}
           >

@@ -4,10 +4,27 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
-import type { LibraryTrack } from '../../lib/types';
+import type { LibraryTrack, ProjectData } from '../../lib/types';
 import { StylePreview } from '../../components/StylePreview';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { useEditor } from '../store';
+
+const MAX_COMPARE = 3;
+
+function summaryLines(c: SmartEditResult['counts']) {
+  return [
+    c.cuts > 0 && `剪掉 ${c.cuts} 段空拍，共 ${c.removed.toFixed(1)} 秒`,
+    c.subtitles > 0 && `自動字幕 ${c.subtitles} 句`,
+    c.captionStyled > 0 && `${c.captionStyled} 句字幕換上模板樣式`,
+    c.flowers > 0 && `花字 ${c.flowers} 個`,
+    c.music && `配樂「${c.music}」`,
+    c.sfx > 0 && `音效 ${c.sfx} 個`,
+    c.filter && `濾鏡「${c.filter}」`,
+    c.punch + c.shake > 0 && `重點特寫 ${c.punch + c.shake} 個`,
+    c.transitions > 0 && `轉場 ${c.transitions} 個`,
+    c.stickers > 0 && `貼紙 ${c.stickers} 個`,
+  ].filter(Boolean) as string[];
+}
 
 export function SmartEditPanel() {
   const { user } = useAuth();
@@ -17,31 +34,64 @@ export function SmartEditPanel() {
   const hasClips = useEditor((s) => s.data.clips.length > 0);
   const captionCount = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower').length);
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
-  const [pick, setPick] = useState<SmartTemplate>(SMART_TEMPLATES[0]);
+  const [selected, setSelected] = useState<SmartTemplate[]>([SMART_TEMPLATES[0]]);
   const [regen, setRegen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [done, setDone] = useState<{ tpl: SmartTemplate; counts: SmartEditResult['counts'] } | null>(null);
+  // 選 2-3 個模板時，先把每個模板實際跑過一次（真正的剪輯結果，不是猜的），
+  // 列出來比較之後再選一個套用；只選 1 個就跟以前一樣直接套用，不用多一次確認
+  const [candidates, setCandidates] = useState<{ tpl: SmartTemplate; result: SmartEditResult }[] | null>(null);
 
   useEffect(() => {
     api.music().then((r) => setLibrary(r.items)).catch(() => setLibrary([]));
   }, []);
+
+  const toggle = (t: SmartTemplate) => {
+    setDone(null);
+    setCandidates(null);
+    setSelected((s) => {
+      if (s.some((x) => x.id === t.id)) return s.filter((x) => x.id !== t.id);
+      if (s.length >= MAX_COMPARE) return s; // 最多比較 3 個，避免要跑太多次分析
+      return [...s, t];
+    });
+  };
+
+  const applyResult = (tpl: SmartTemplate, result: SmartEditResult, base: ProjectData) => {
+    // 分析期間又改了專案就不套用，避免蓋掉修改
+    if (useEditor.getState().data !== base) {
+      toast('剪輯期間專案有變動，請再試一次', 'info');
+      return;
+    }
+    useEditor.getState().commit(() => result.data);
+    setDone({ tpl, counts: result.counts });
+    setCandidates(null);
+    toast(`已套用「${tpl.name}」模板`, 'success');
+  };
 
   const run = async () => {
     if (!isPro) return upgrade('智能剪輯是專業版功能，一鍵完成剪輯、字幕、花字、配樂和音效。');
     const base = useEditor.getState().data;
     if (!base.clips.length) return toast('主軌上還沒有影片', 'error');
     setDone(null);
-    setStatus('分析影片內容');
+    setCandidates(null);
     try {
-      const result = await runSmartEdit(base, pick, library, { regenerateCaptions: regen }, setStatus);
-      // 分析期間又改了專案就不套用，避免蓋掉修改
-      if (useEditor.getState().data !== base) {
-        toast('剪輯期間專案有變動，請再按一次', 'info');
+      if (selected.length === 1) {
+        setStatus('分析影片內容');
+        const result = await runSmartEdit(base, selected[0], library, { regenerateCaptions: regen }, setStatus);
+        applyResult(selected[0], result, base);
         return;
       }
-      useEditor.getState().commit(() => result.data);
-      setDone({ tpl: pick, counts: result.counts });
-      toast(`已套用「${pick.name}」模板`, 'success');
+      // 2-3 個模板依序實際跑一次，不會互相干擾（runSmartEdit 不會動到目前的專案，只是算出結果）
+      const results: { tpl: SmartTemplate; result: SmartEditResult }[] = [];
+      for (const tpl of selected) {
+        setStatus(`分析「${tpl.name}」`);
+        results.push({ tpl, result: await runSmartEdit(base, tpl, library, { regenerateCaptions: regen }, setStatus) });
+      }
+      if (useEditor.getState().data !== base) {
+        toast('剪輯期間專案有變動，請再試一次', 'info');
+        return;
+      }
+      setCandidates(results);
     } catch (e) {
       toast('智能剪輯失敗：' + (e as Error).message, 'error');
     } finally {
@@ -54,21 +104,7 @@ export function SmartEditPanel() {
     setDone(null);
   };
 
-  const c = done?.counts;
-  const lines = c
-    ? [
-        c.cuts > 0 && `剪掉 ${c.cuts} 段空拍，共 ${c.removed.toFixed(1)} 秒`,
-        c.subtitles > 0 && `自動字幕 ${c.subtitles} 句`,
-        c.captionStyled > 0 && `${c.captionStyled} 句字幕換上模板樣式`,
-        c.flowers > 0 && `花字 ${c.flowers} 個`,
-        c.music && `配樂「${c.music}」`,
-        c.sfx > 0 && `音效 ${c.sfx} 個`,
-        c.filter && `濾鏡「${c.filter}」`,
-        c.punch + c.shake > 0 && `重點特寫 ${c.punch + c.shake} 個`,
-        c.transitions > 0 && `轉場 ${c.transitions} 個`,
-        c.stickers > 0 && `貼紙 ${c.stickers} 個`,
-      ].filter(Boolean)
-    : [];
+  const lines = done ? summaryLines(done.counts) : [];
 
   return (
     <div className="p-4">
@@ -76,20 +112,26 @@ export function SmartEditPanel() {
         <h2 className="text-sm font-extrabold">智能剪輯</h2>
         {!isPro && <ProBadge />}
       </div>
-      <p className="mt-1 text-xs leading-relaxed text-ink-mute">選一個模板，一鍵剪掉空拍、配上字幕、花字、音樂和音效。完成後每一項都能再調整，也能一鍵復原。</p>
+      <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+        選 1 個模板直接套用，或選 2-3 個先比較結果再決定。一鍵剪掉空拍、配上字幕、花字、音樂和音效，完成後每一項都能再調整，也能一鍵復原。
+      </p>
 
-      <div className="mt-4 grid grid-cols-3 gap-2" role="radiogroup" aria-label="模板">
+      <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="模板（可多選比較）">
         {SMART_TEMPLATES.map((t) => {
-          const on = pick.id === t.id;
+          const on = selected.some((x) => x.id === t.id);
           const song = library.find((s) => s.id === t.music);
           return (
             <button
               key={t.id}
-              role="radio"
-              aria-checked={on}
-              onClick={() => setPick(t)}
-              className={`overflow-hidden rounded-2xl border-2 text-left transition ${on ? 'border-brand' : 'border-line hover:border-ink-mute/40'}`}
+              aria-pressed={on}
+              onClick={() => toggle(t)}
+              className={`relative overflow-hidden rounded-2xl border-2 text-left transition ${on ? 'border-brand' : 'border-line hover:border-ink-mute/40'}`}
             >
+              {on && (
+                <span className="absolute top-1.5 right-1.5 z-10 grid size-5 place-items-center rounded-full bg-brand text-[10px] font-bold text-white">
+                  {selected.findIndex((x) => x.id === t.id) + 1}
+                </span>
+              )}
               <div className="relative grid h-20 place-items-center gap-0.5 px-1" style={{ background: t.swatch }}>
                 <StylePreview style={t.flower} text="超好吃！" size={17} />
                 <StylePreview style={t.caption} text="字幕長這樣" size={10} />
@@ -104,7 +146,9 @@ export function SmartEditPanel() {
           );
         })}
       </div>
-      <p className="mt-3 text-xs leading-relaxed text-ink-soft">{pick.desc}</p>
+      <p className="mt-3 text-xs leading-relaxed text-ink-soft">
+        {selected.length === 1 ? selected[0].desc : selected.length > 1 ? `已選 ${selected.length} 個模板，跑完後可以比較實際結果再選一個套用。` : '請選至少 1 個模板。'}
+      </p>
 
       {captionCount > 0 && (
         <label className="mt-3 flex items-start gap-2 text-xs">
@@ -116,12 +160,31 @@ export function SmartEditPanel() {
         </label>
       )}
 
-      {done ? (
+      {candidates ? (
+        <div className="mt-4 space-y-2.5">
+          {candidates.map(({ tpl, result }) => (
+            <div key={tpl.id} className="rounded-2xl border border-line bg-surface p-3">
+              <div className="text-sm font-extrabold">{tpl.name}</div>
+              <ul className="mt-1.5 space-y-0.5 text-xs text-ink-soft">
+                {summaryLines(result.counts).map((l) => (
+                  <li key={l}>・{l}</li>
+                ))}
+              </ul>
+              <Button size="sm" className="mt-2.5 w-full" onClick={() => applyResult(tpl, result, useEditor.getState().data)}>
+                套用「{tpl.name}」
+              </Button>
+            </div>
+          ))}
+          <Button variant="secondary" size="sm" className="w-full" onClick={() => setCandidates(null)}>
+            重新選擇模板
+          </Button>
+        </div>
+      ) : done ? (
         <div className="mt-4 rounded-2xl bg-brand-soft/60 p-3">
           <div className="text-sm font-extrabold text-brand">已套用「{done.tpl.name}」</div>
           <ul className="mt-1.5 space-y-0.5 text-xs text-ink-soft">
             {lines.map((l) => (
-              <li key={l as string}>・{l}</li>
+              <li key={l}>・{l}</li>
             ))}
           </ul>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -134,9 +197,9 @@ export function SmartEditPanel() {
           </div>
         </div>
       ) : (
-        <Button className="mt-4 w-full" onClick={run} disabled={!!status || !hasClips}>
+        <Button className="mt-4 w-full" onClick={run} disabled={!!status || !hasClips || selected.length === 0}>
           {status ? <Loader2 className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}
-          {status ?? (hasClips ? '一鍵智能剪輯' : '先把影片加到主軌')}
+          {status ?? (!hasClips ? '先把影片加到主軌' : selected.length > 1 ? `比較這 ${selected.length} 個模板` : '一鍵智能剪輯')}
         </Button>
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-ink-mute">再套用一次會換掉上一次的花字、模板配樂和音效；你自己上傳的音樂不會被動到。之後會陸續新增模板。</p>

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveLocalFile } from '../../lib/localMedia';
-import { Check, Loader2, Music2, Pause, Play, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
+import { Check, Loader2, Music2, Pause, Play, Plus, Search, Sparkles, Trash2, UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatTime, uid } from '../../lib/format';
 import { audioPeaks, probe } from '../../lib/media';
+import { recommendMusic } from '../../lib/musicRecommend';
 import { mainDuration } from '../../lib/timeline';
 import type { LibraryTrack, MediaItem } from '../../lib/types';
 import { useToast } from '../../components/ui';
@@ -76,6 +77,8 @@ export function MusicPanel() {
   const projectId = useEditor((s) => s.projectId);
   const allMedia = useEditor((s) => s.data.media);
   const audioClips = useEditor((s) => s.data.audio);
+  const captions = useEditor((s) => s.data.captions);
+  const videoClips = useEditor((s) => s.data.clips);
   const mine = useMemo(() => allMedia.filter((m) => m.kind === 'audio' && m.origin === 'upload'), [allMedia]);
   const usedAudio = useMemo(() => new Set(audioClips.map((a) => a.mediaId)), [audioClips]);
   const [uploading, setUploading] = useState<string[]>([]);
@@ -93,6 +96,11 @@ export function MusicPanel() {
     return () => audio.current?.pause();
   }, []);
 
+  // 為你推薦：規則式比對字幕內容猜氣氛、用語速猜節奏，不呼叫任何 AI API，只在「配樂」分類顯示
+  const recommended = useMemo(
+    () => (tab === 'music' ? recommendMusic({ captions, clips: videoClips }, items ?? []) : []),
+    [tab, captions, videoClips, items],
+  );
   const inTab = useMemo(() => (items ?? []).filter((t) => t.category === tab), [items, tab]);
   const moods = useMemo(() => ['全部', ...new Set(inTab.map((t) => t.mood))], [inTab]);
   const list = inTab.filter((t) => (mood === '全部' || t.mood === mood) && (!query || `${t.title}${t.desc}${t.mood}`.includes(query)));
@@ -247,6 +255,40 @@ export function MusicPanel() {
         </div>
       ) : (
         <>
+          {recommended.length > 0 && (
+            <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
+              <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
+                <Sparkles className="size-3.5" /> 為你推薦
+              </div>
+              <ul className="mt-2 space-y-1.5">
+                {recommended.map(({ track: t, reason }) => {
+                  const active = playing === t.id;
+                  return (
+                    <li key={t.id} className="flex items-center gap-2.5 rounded-xl bg-surface p-2">
+                      <button
+                        onClick={() => toggle(t)}
+                        className={`grid size-8 shrink-0 place-items-center rounded-full transition ${active ? 'bg-brand text-white' : 'bg-sunken text-ink hover:bg-brand-soft hover:text-brand'}`}
+                        aria-label={active ? `暫停 ${t.title}` : `試聽 ${t.title}`}
+                      >
+                        {active ? <Pause className="size-3.5" fill="currentColor" /> : <Play className="ml-0.5 size-3.5" fill="currentColor" />}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-bold">{t.title}</div>
+                        <div className="truncate text-[11px] text-ink-mute">{reason}</div>
+                      </div>
+                      <button
+                        onClick={() => add(t)}
+                        className={`grid size-7 shrink-0 place-items-center rounded-full text-white transition ${added === t.id ? 'bg-mint' : 'bg-brand hover:bg-brand-hover'}`}
+                        aria-label={`把 ${t.title} 加到音訊軌`}
+                      >
+                        {added === t.id ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           <label className="mt-3 flex h-9 items-center gap-2 rounded-xl border border-line bg-surface px-3 focus-within:border-brand">
             <Search className="size-4 text-ink-mute" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜尋名稱或風格" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />

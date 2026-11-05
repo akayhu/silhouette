@@ -210,17 +210,21 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
       useEditor.getState().live((d) => ({ ...d, overlays: d.overlays.map((o) => (ids.has(o.id) ? { ...o, volume: 0 } : o)) }));
     }
   };
+  // 重疊的字幕（含花字）分到不同列，不會互相蓋住；沒有重疊時永遠是 1 列，跟原本行為一樣
+  const capRows = useMemo(() => captionLanes(data.captions), [data.captions]);
+  const capLaneCount = Math.max(1, ...capRows.map((r) => r.lane + 1));
+  const CAP_ROW = 40;
   const ovLanes = overlayLaneCount(data.overlays);
   const OV_ROW = 48;
-  const OV_TOP = 80;
+  const OV_TOP = capLaneCount * CAP_ROW + 40; // 字幕（可能多列）＋ 貼紙固定一列
   const MAIN_TOP = OV_TOP + ovLanes * OV_ROW;
   // 疊加軌畫面上最上面一列是最高層
   const ovRowTop = (lane: number) => OV_TOP + (ovLanes - 1 - lane) * OV_ROW;
 
-  /** 每個項目在軌道區內的位置（框選判斷用）：字幕 0–40、貼紙 40–80、主軌 80–148、音訊從 148 開始 */
+  /** 每個項目在軌道區內的位置（框選判斷用）：字幕從 0 開始（可能多列）、接著貼紙 40、主軌、音訊從 OV_TOP 之後開始 */
   const itemBoxes = () => [
-    ...data.captions.map((c) => ({ item: { type: 'caption', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: 5, y1: 35 })),
-    ...data.stickers.map((st) => ({ item: { type: 'sticker', id: st.id } as SelItem, x0: x(st.start), x1: x(st.end), y0: 45, y1: 75 })),
+    ...capRows.map(({ c, lane }) => ({ item: { type: 'caption', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: 5 + lane * CAP_ROW, y1: 35 + lane * CAP_ROW })),
+    ...data.stickers.map((st) => ({ item: { type: 'sticker', id: st.id } as SelItem, x0: x(st.start), x1: x(st.end), y0: capLaneCount * CAP_ROW + 5, y1: capLaneCount * CAP_ROW + 35 })),
     ...data.overlays.map((o) => ({ item: { type: 'overlay', id: o.id } as SelItem, x0: x(o.start), x1: x(overlayEnd(o)), y0: ovRowTop(o.lane) + 5, y1: ovRowTop(o.lane) + 43 })),
     ...placed.map((c) => ({ item: { type: 'clip', id: c.id } as SelItem, x0: x(c.start), x1: x(c.end), y0: MAIN_TOP + 6, y1: MAIN_TOP + 62 })),
     ...audioRows.rows.flatMap((row) =>
@@ -542,7 +546,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
         <div className="flex w-[112px] shrink-0 flex-col border-r border-line bg-canvas text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
           <div className="h-7 shrink-0 border-b border-line bg-surface" />
           <div ref={labelsRef} className="min-h-0 flex-1 overflow-hidden">
-          <TrackLabel track="caption" locked={locked('caption')} icon={<Type className="size-3.5" />} label="字幕" h="h-10" />
+          <TrackLabel track="caption" locked={locked('caption')} icon={<Type className="size-3.5" />} label="字幕" h="" style={{ height: capLaneCount * CAP_ROW }} />
           <TrackLabel track="sticker" locked={locked('sticker')} icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
           {Array.from({ length: ovLanes }, (_, i) => ovLanes - i).map((n) => (
             <TrackLabel
@@ -626,10 +630,21 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
               }}
             />
             <div ref={tracksRef} className="relative" onPointerDown={onBackground}>
-              {/* 字幕軌 */}
-              <div className={`relative h-10 border-b border-line/60 ${lockedRow('caption')}`}>
-                {data.captions.map((c) => (
-                  <CaptionBlock key={c.id} c={c} left={x(c.start)} width={(c.end - c.start) * zoom} selected={selIds.has(c.id)} onDown={(e, mode) => startSpan(e, 'caption', c.id, mode)} />
+              {/* 字幕軌：重疊的字幕（含花字）會自動分到不同列，不會互相蓋住 */}
+              <div className={`relative border-b border-line/60 ${lockedRow('caption')}`} style={{ height: capLaneCount * CAP_ROW }}>
+                {Array.from({ length: capLaneCount - 1 }, (_, i) => (
+                  <div key={i} className="pointer-events-none absolute inset-x-0 border-b border-dashed border-line/60" style={{ top: (i + 1) * CAP_ROW }} />
+                ))}
+                {capRows.map(({ c, lane }) => (
+                  <CaptionBlock
+                    key={c.id}
+                    c={c}
+                    left={x(c.start)}
+                    width={(c.end - c.start) * zoom}
+                    top={5 + lane * CAP_ROW}
+                    selected={selIds.has(c.id)}
+                    onDown={(e, mode) => startSpan(e, 'caption', c.id, mode)}
+                  />
                 ))}
               </div>
               {/* 貼紙軌 */}
@@ -785,12 +800,39 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
 
 }
 
-function CaptionBlock({ c, left, width, selected, onDown }: { c: Caption; left: number; width: number; selected: boolean; onDown: (e: RPointerEvent, mode: 'move' | 'left' | 'right') => void }) {
+function CaptionBlock({
+  c,
+  left,
+  width,
+  top,
+  selected,
+  onDown,
+}: {
+  c: Caption;
+  left: number;
+  width: number;
+  top: number;
+  selected: boolean;
+  onDown: (e: RPointerEvent, mode: 'move' | 'left' | 'right') => void;
+}) {
   return (
-    <Block left={left} width={width} top={5} height={30} selected={selected} className="border-track-caption-edge bg-track-caption" onDown={onDown}>
+    <Block left={left} width={width} top={top} height={30} selected={selected} className="border-track-caption-edge bg-track-caption" onDown={onDown}>
       <span className="truncate text-[11px] font-bold text-[#b2432a]">{c.text || '（空白字幕）'}</span>
     </Block>
   );
+}
+
+/** 重疊的字幕（含花字）分到不同列，不會互相蓋住 */
+function captionLanes(captions: Caption[]) {
+  const ends: number[] = [];
+  return [...captions]
+    .sort((a, b) => a.start - b.start)
+    .map((c) => {
+      let lane = ends.findIndex((e) => e <= c.start + 0.001);
+      if (lane < 0) lane = ends.length;
+      ends[lane] = c.end;
+      return { c, lane };
+    });
 }
 
 function TrackLabel({

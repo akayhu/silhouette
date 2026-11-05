@@ -391,8 +391,10 @@ export class Engine {
       ctx.restore();
     }
 
-    for (const c of this.data.captions) {
-      if (this.time >= c.start && this.time < c.end) drawCaption(ctx, c, this.time, W, H, this.playing || this.offline);
+    const activeCaptions = this.data.captions.filter((c) => this.time >= c.start && this.time < c.end);
+    const yOffsets = activeCaptions.length > 1 ? resolveCaptionOverlap(activeCaptions, W, H) : null;
+    for (const c of activeCaptions) {
+      drawCaption(ctx, c, this.time, W, H, this.playing || this.offline, yOffsets?.get(c.id) ?? 0);
     }
     if (this.opts.watermark) drawWatermark(ctx, W, H);
     ctx.restore();
@@ -905,6 +907,37 @@ export function captionBox(c: Caption, W: number, H: number) {
   return { cx: l.cx, cy: l.cy, w, h, minX: Math.min(0.5, hx), maxX: Math.max(0.5, 1 - hx), minY: Math.min(0.5, hy), maxY: Math.max(0.5, 1 - hy) };
 }
 
+/**
+ * 同一時刻有好幾句字幕要顯示時（例如一般字幕跟花字剛好重疊），各自的 y 位置可能很接近，
+ * 畫面上會疊在一起看不清楚。依陣列順序（後面的字幕讓開前面的）把真的會疊到的往下推開，
+ * 沒有疊到的字幕完全不動，保留使用者自己調整過的位置。
+ */
+export function resolveCaptionOverlap(active: Caption[], W: number, H: number): Map<string, number> {
+  const offsets = new Map<string, number>();
+  const placed: { top: number; bottom: number }[] = [];
+  const GAP = 6;
+  for (const c of active) {
+    const box = captionBox(c, W, H);
+    let top = box.cy - box.h / 2;
+    let bottom = box.cy + box.h / 2;
+    for (const r of placed) {
+      if (top < r.bottom + GAP && bottom > r.top - GAP) {
+        const push = r.bottom + GAP - top;
+        top += push;
+        bottom += push;
+      }
+    }
+    if (bottom > H) {
+      const back = bottom - H;
+      top -= back;
+      bottom -= back;
+    }
+    offsets.set(c.id, top - (box.cy - box.h / 2));
+    placed.push({ top, bottom });
+  }
+  return offsets;
+}
+
 export const DEFAULT_HIGHLIGHT = '#ffe14a';
 
 /**
@@ -932,8 +965,11 @@ export function spokenChars(c: Caption, t: number) {
   return Math.min(chars.length, Math.max(0, ((t - c.start) / span) * chars.length));
 }
 
-/** animate 為 false（暫停編輯中）時直接顯示完整字幕，方便調整樣式；卡拉 OK 例外，照播放頭位置顯示進度 */
-export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number, W: number, H: number, animate = true) {
+/**
+ * animate 為 false（暫停編輯中）時直接顯示完整字幕，方便調整樣式；卡拉 OK 例外，照播放頭位置顯示進度。
+ * yOffset：跟其他同時顯示的字幕畫面上疊在一起時，由呼叫端算好要往下挪開多少像素（見 resolveCaptionOverlap）。
+ */
+export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number, W: number, H: number, animate = true, yOffset = 0) {
   const s = c.style;
   const scale = Math.min(W, H) / 1080;
   const size = s.size * scale;
@@ -969,7 +1005,7 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
   const lineY = (i: number) => top + lh * (i + 0.5);
   const tY = (k: number) => top + layout.mainH + layout.gap + layout.tLh * (k + 0.5);
   ctx.globalAlpha = alpha;
-  ctx.translate(layout.cx, layout.cy + dy);
+  ctx.translate(layout.cx, layout.cy + dy + yOffset);
   ctx.scale(zoom, zoom);
 
   // 陰影：有底色時投在底色框上；沒有底色時先畫一次文字外形只留陰影，再正常畫文字，避免描邊和字各投一次

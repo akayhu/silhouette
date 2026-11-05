@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveLocalFile } from '../../lib/localMedia';
-import { AudioLines, Loader2, Mic, Play, Sparkles, Square, Trash2 } from 'lucide-react';
+import { AudioLines, Lightbulb, Loader2, Mic, Play, Sparkles, Square, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { ASR_MODELS, transcribe } from '../../lib/asr';
 import { denoiseRecording } from '../../lib/denoise';
 import { uid } from '../../lib/format';
 import { audioPeaks, decodeAudio, probe, sliceMono } from '../../lib/media';
+import { formatOutline, inferOutline } from '../../lib/outline';
 import { splitSentences } from '../../lib/sentences';
 import { captionFromWords, newCaption } from '../../lib/timeline';
 import { progressLabel, runTts, type TtsProgress } from '../../lib/tts';
@@ -62,6 +63,8 @@ export function VoicePanel() {
   const toast = useToast();
   const projectId = useEditor((s) => s.projectId)!;
   const captionCount = useEditor((s) => s.data.captions.length);
+  const clips = useEditor((s) => s.data.clips);
+  const allCaptions = useEditor((s) => s.data.captions);
   const [voices, setVoices] = useState<Voice[]>([]);
   const [breezy, setBreezy] = useState(false);
   const [voice, setVoice] = useState('');
@@ -104,6 +107,15 @@ export function VoicePanel() {
       return false;
     }
     return true;
+  };
+
+  // 用時間軸上已經有的資訊（片段數量、長度、已經下過的字幕）猜一個開頭／中段／結尾的骨架當起點，
+  // 不做任何影像辨識，純粹是規則式整理，不呼叫任何 AI 服務
+  const suggestOutline = () => {
+    const sections = inferOutline({ clips, captions: allCaptions });
+    if (!sections.length) return toast('主軌上還沒有影片，沒辦法建議大綱', 'error');
+    if (text.trim() && !confirm('目前文字框裡已經有內容，要換成大綱建議嗎？')) return;
+    setText(formatOutline(sections));
   };
 
   const tts = (segments: string[]) => {
@@ -195,6 +207,9 @@ export function VoicePanel() {
         {!isPro && <ProBadge />}
       </div>
       <p className="mt-1 text-xs text-ink-mute">輸入文字，選一個聲音，產生中文配音放進音訊軌。</p>
+      <button onClick={suggestOutline} className="mt-2 flex items-center gap-1 text-xs font-bold text-brand hover:underline">
+        <Lightbulb className="size-3.5" /> 用素材內容建議大綱
+      </button>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}

@@ -4,6 +4,7 @@ import { Check, Loader2, Music2, Pause, Play, Plus, Search, Sparkles, Trash2, Up
 import { api } from '../../lib/api';
 import { formatTime, uid } from '../../lib/format';
 import { audioPeaks, probe } from '../../lib/media';
+import { alignedTrackOffset } from '../../lib/musicAlign';
 import { recommendMusic } from '../../lib/musicRecommend';
 import { mainDuration } from '../../lib/timeline';
 import type { LibraryTrack, MediaItem } from '../../lib/types';
@@ -38,7 +39,7 @@ const TABS: { id: Tab; label: string }[] = [
 /** 把音樂庫的曲目加到音訊軌：同一首只建立一次素材 */
 function addTrack(track: LibraryTrack) {
   const existing = useEditor.getState().data.media.find((m) => m.url === track.url);
-  const media: MediaItem = existing ?? { id: uid(), name: track.title, kind: 'audio', url: track.url, duration: track.duration, origin: 'library' };
+  const media: MediaItem = existing ?? { id: uid(), name: track.title, kind: 'audio', url: track.url, duration: track.duration, origin: 'library', peaks: track.peaks };
   return placeAudio(media, track.category === 'music');
 }
 
@@ -48,16 +49,20 @@ function placeAudio(media: MediaItem, isMusic: boolean) {
   const { data, time, commit, select } = useEditor.getState();
   const existing = data.media.some((m) => m.id === media.id);
   const remaining = mainDuration(data.clips) - time;
-  const out = isMusic && remaining > 1 ? Math.min(media.duration, remaining) : media.duration;
+  // 配樂且有波形資料時，讓配樂的高潮對齊影片下一個智能剪輯標記的重點特寫；
+  // 還沒跑過智能剪輯、沒有重點特寫可以對齊時回傳 0，維持原本從頭播放
+  const inOffset = isMusic && media.peaks ? alignedTrackOffset({ peaks: media.peaks, duration: media.duration }, data.clips, time) : 0;
+  const available = media.duration - inOffset;
+  const placedDuration = isMusic && remaining > 1 ? Math.min(available, remaining) : available;
   const clip = {
     id: uid(),
     mediaId: media.id,
     start: time,
-    in: 0,
-    out,
+    in: inOffset,
+    out: inOffset + placedDuration,
     volume: isMusic ? 0.5 : 1,
     fadeIn: isMusic ? 0.5 : 0,
-    fadeOut: isMusic ? Math.min(2, out / 4) : 0,
+    fadeOut: isMusic ? Math.min(2, placedDuration / 4) : 0,
   };
   commit((d) => ({ ...d, media: existing ? d.media : [...d.media, media], audio: [...d.audio, clip] }));
   select({ type: 'audio', id: clip.id });

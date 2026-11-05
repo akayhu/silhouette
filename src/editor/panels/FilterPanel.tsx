@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { DEFAULT_CLIP_FILTER, FILTER_PRESETS, filterThumbnail, type ClipFilter, type FilterId } from '../../lib/filters';
+import { recommendFilters, type FilterRecommendation } from '../../lib/filterRecommend';
 import { clipAt, layoutMain } from '../../lib/timeline';
 import type { ProjectData, TrackKey } from '../../lib/types';
 import { Button, useToast } from '../../components/ui';
@@ -23,6 +25,7 @@ export function FilterPanel() {
   const selection = useEditor((s) => s.selection);
   const { commit, live, checkpoint } = useEditor.getState();
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [recommended, setRecommended] = useState<FilterRecommendation[]>([]);
 
   // 處理對象：選取中的疊加片段或主軌片段，否則是播放頭所在的主軌片段
   const placed = layoutMain(data.clips);
@@ -35,12 +38,14 @@ export function FilterPanel() {
 
   // 用這段素材的縮圖產生每個濾鏡的預覽圖
   useEffect(() => {
-    if (!media?.thumb) return setThumbs({});
+    if (!media?.thumb) return (setThumbs({}), setRecommended([]));
     const img = new Image();
     img.onload = () => {
       const out: Record<string, string> = {};
       for (const p of FILTER_PRESETS) out[p.id] = filterThumbnail(img, img.naturalWidth, img.naturalHeight, { ...DEFAULT_CLIP_FILTER, preset: p.id });
       setThumbs(out);
+      // 用同一張縮圖分析色調推薦濾鏡，不用另外解碼
+      setRecommended(recommendFilters(img, img.naturalWidth, img.naturalHeight));
     };
     img.src = media.thumb;
   }, [media?.id, media?.thumb]);
@@ -97,6 +102,27 @@ export function FilterPanel() {
           <div className="text-ink-mute">目前：{FILTER_PRESETS.find((p) => p.id === filter.preset)?.name}</div>
         </div>
       </div>
+
+      {recommended.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
+          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
+            <Sparkles className="size-3.5" /> 為你推薦
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {recommended.map((r) => {
+              const active = filter.preset === r.id;
+              return (
+                <button key={r.id} onClick={() => pick(r.id)} className="group text-center" title={r.reason}>
+                  <div className={`aspect-square overflow-hidden rounded-xl border-2 bg-sunken transition ${active ? 'border-brand' : 'border-transparent group-hover:border-brand/40'}`}>
+                    {thumbs[r.id] ? <img src={thumbs[r.id]} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full animate-pulse bg-sunken" />}
+                  </div>
+                  <div className={`mt-1 truncate text-[11px] font-bold ${active ? 'text-brand' : 'text-ink-soft'}`}>{r.name}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         {FILTER_PRESETS.map((p) => {

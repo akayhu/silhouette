@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
+import { Loader2, Music2, RotateCcw, Sparkles, WandSparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { checkOpeningHook, swapToOpening } from '../../lib/hookCheck';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
 import type { LibraryTrack, ProjectData } from '../../lib/types';
 import { StylePreview } from '../../components/StylePreview';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { useEditor } from '../store';
+import { ensureUnlocked } from '../locks';
 
 const MAX_COMPARE = 3;
 
@@ -33,6 +35,7 @@ export function SmartEditPanel() {
   const toast = useToast();
   const hasClips = useEditor((s) => s.data.clips.length > 0);
   const captionCount = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower').length);
+  const clipsKey = useEditor((s) => s.data.clips.map((c) => `${c.id}:${c.mediaId}:${c.in}:${c.out}`).join('|'));
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
   const [selected, setSelected] = useState<SmartTemplate[]>([SMART_TEMPLATES[0]]);
   const [regen, setRegen] = useState(false);
@@ -41,10 +44,33 @@ export function SmartEditPanel() {
   // 選 2-3 個模板時，先把每個模板實際跑過一次（真正的剪輯結果，不是猜的），
   // 列出來比較之後再選一個套用；只選 1 個就跟以前一樣直接套用，不用多一次確認
   const [candidates, setCandidates] = useState<{ tpl: SmartTemplate; result: SmartEditResult }[] | null>(null);
+  const [weakOpening, setWeakOpening] = useState<string | null>(null);
 
   useEffect(() => {
     api.music().then((r) => setLibrary(r.items)).catch(() => setLibrary([]));
   }, []);
+
+  // 開場強度檢查：畫面動態分析要逐格讀取影片，只在主軌片段真的變動時才重新算一次
+  useEffect(() => {
+    setWeakOpening(null);
+    if (!clipsKey) return;
+    let cancelled = false;
+    const base = useEditor.getState().data;
+    checkOpeningHook(base).then((r) => {
+      if (!cancelled && useEditor.getState().data === base && r.weak && r.betterClipId) setWeakOpening(r.betterClipId);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clipsKey]);
+
+  const applyBetterOpening = () => {
+    if (!weakOpening) return;
+    if (!ensureUnlocked('main')) return;
+    useEditor.getState().commit((d) => swapToOpening(d, weakOpening));
+    setWeakOpening(null);
+    toast('已把動態較大的片段換到開場', 'success');
+  };
 
   const toggle = (t: SmartTemplate) => {
     setDone(null);
@@ -115,6 +141,18 @@ export function SmartEditPanel() {
       <p className="mt-1 text-xs leading-relaxed text-ink-mute">
         選 1 個模板直接套用，或選 2-3 個先比較結果再決定。一鍵剪掉空拍、配上字幕、花字、音樂和音效，完成後每一項都能再調整，也能一鍵復原。
       </p>
+
+      {weakOpening && (
+        <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
+          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
+            <Sparkles className="size-3.5" /> 開場有點靜
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-soft">開場前幾秒畫面變化不大，容易被滑掉；後面有一段動態明顯更強，建議換成開場。</p>
+          <Button size="sm" className="mt-2 w-full" onClick={applyBetterOpening}>
+            換成開場
+          </Button>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="模板（可多選比較）">
         {SMART_TEMPLATES.map((t) => {

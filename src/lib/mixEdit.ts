@@ -77,40 +77,37 @@ function capRanges(ranges: Range[], cap: number): Range[] {
   return out.length ? out : [ranges[0]];
 }
 
-/** 抓畫面動態最大的一段固定長度：逐格比對灰階差異，滑動視窗找總和最大的位置 */
-async function pickMotionWindow(media: MediaItem, windowSec: number): Promise<Range | null> {
+/** 載入一支影片素材準備逐格分析；讀取失敗或拿不到尺寸回傳 null */
+async function loadVideoForAnalysis(media: MediaItem): Promise<{ video: HTMLVideoElement; duration: number } | null> {
   if (media.kind !== 'video' || !media.url) return null;
   const video = document.createElement('video');
   video.muted = true;
   video.preload = 'auto';
   video.src = media.url;
-  await new Promise<void>((res, rej) => {
-    video.onloadeddata = () => res();
-    video.onerror = () => rej(new Error('無法讀取影片'));
-  });
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-  if (!vw || !vh) {
+  try {
+    await new Promise<void>((res, rej) => {
+      video.onloadeddata = () => res();
+      video.onerror = () => rej(new Error('無法讀取影片'));
+    });
+  } catch {
+    return null;
+  }
+  if (!video.videoWidth || !video.videoHeight) {
     video.removeAttribute('src');
     return null;
   }
-  const W = MOTION_WORK_W;
-  const H = Math.max(2, Math.round((W * vh) / vw));
+  return { video, duration: Math.max(0.5, Math.min(media.duration, video.duration || media.duration)) };
+}
+
+/** 在影片的 [from, from+dur) 內取樣 n 格畫面轉灰階，供動態分數計算共用 */
+async function sampleGrayFrames(video: HTMLVideoElement, from: number, dur: number, n: number, W: number, H: number): Promise<Float32Array[]> {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-
-  const duration = Math.max(0.5, Math.min(media.duration, video.duration || media.duration));
-  if (duration <= windowSec + 0.3) {
-    video.removeAttribute('src');
-    return [0, duration];
-  }
-  const n = Math.max(4, Math.min(80, Math.floor(duration / MOTION_STEP)));
-  let prevGray: Float32Array | null = null;
-  const scores: number[] = [];
+  const out: Float32Array[] = [];
   for (let i = 0; i < n; i++) {
-    const t = Math.min(duration - 0.05, (i / n) * duration);
+    const t = Math.min(from + dur - 0.05, from + (i / n) * dur);
     await new Promise<void>((res) => {
       video.onseeked = () => res();
       video.currentTime = t;
@@ -119,16 +116,32 @@ async function pickMotionWindow(media: MediaItem, windowSec: number): Promise<Ra
     const px = ctx.getImageData(0, 0, W, H).data;
     const gray = new Float32Array(W * H);
     for (let p = 0; p < W * H; p++) gray[p] = px[p * 4] * 0.299 + px[p * 4 + 1] * 0.587 + px[p * 4 + 2] * 0.114;
-    if (prevGray) {
-      let diff = 0;
-      for (let p = 0; p < W * H; p++) diff += Math.abs(gray[p] - prevGray[p]);
-      scores.push(diff / (W * H));
-    } else {
-      scores.push(0);
-    }
-    prevGray = gray;
+    out.push(gray);
   }
+  return out;
+}
+
+const grayDiff = (a: Float32Array, b: Float32Array) => {
+  let diff = 0;
+  for (let p = 0; p < a.length; p++) diff += Math.abs(a[p] - b[p]);
+  return diff / a.length;
+};
+
+/** 抓畫面動態最大的一段固定長度：逐格比對灰階差異，滑動視窗找總和最大的位置 */
+async function pickMotionWindow(media: MediaItem, windowSec: number): Promise<Range | null> {
+  const loaded = await loadVideoForAnalysis(media);
+  if (!loaded) return null;
+  const { video, duration } = loaded;
+  if (duration <= windowSec + 0.3) {
+    video.removeAttribute('src');
+    return [0, duration];
+  }
+  const W = MOTION_WORK_W;
+  const H = Math.max(2, Math.round((W * video.videoHeight) / video.videoWidth));
+  const n = Math.max(4, Math.min(80, Math.floor(duration / MOTION_STEP)));
+  const frames = await sampleGrayFrames(video, 0, duration, n, W, H);
   video.removeAttribute('src');
+  const scores = frames.map((g, i) => (i === 0 ? 0 : grayDiff(g, frames[i - 1])));
 
   const dt = duration / n;
   const winN = Math.max(1, Math.round(windowSec / dt));
@@ -145,6 +158,23 @@ async function pickMotionWindow(media: MediaItem, windowSec: number): Promise<Ra
   }
   const start = Math.max(0, Math.min(duration - windowSec, best * dt));
   return [start, Math.min(duration, start + windowSec)];
+}
+
+/** 一支素材某個時間範圍內的畫面動態平均分數（灰階差異），開場強度檢查用：只要固定一段的分數，不用找最佳位置 */
+export async function motionScoreAt(media: MediaItem, from: number, windowSec: number): Promise<number> {
+  const loaded = await loadVideoForAnalysis(media);
+  if (!loaded) return 0;
+  const { video, duration } = loaded;
+  const dur = Math.max(0.1, Math.min(windowSec, duration - from));
+  const W = MOTION_WORK_W;
+  const H = Math.max(2, Math.round((W * video.videoHeight) / video.videoWidth));
+  const n = Math.max(3, Math.min(8, Math.round(dur / 0.3)));
+  const frames = await sampleGrayFrames(video, from, dur, n, W, H);
+  video.removeAttribute('src');
+  if (frames.length < 2) return 0;
+  let sum = 0;
+  for (let i = 1; i < frames.length; i++) sum += grayDiff(frames[i], frames[i - 1]);
+  return sum / (frames.length - 1);
 }
 
 /** 把混剪結果依序接到主軌最後面，講話的段落順便帶字幕；片段之間加一個淡入轉場，接起來不會太生硬 */

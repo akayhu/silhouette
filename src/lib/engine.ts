@@ -7,6 +7,7 @@ import { applyErase } from './erase';
 import { applyBeauty, isBeautyOn } from './beauty';
 import { createDenoiseChain, type DenoiseChain } from './denoise';
 import { captionWords } from './captions';
+import { matchEmphasisRanges } from './captionEmphasis';
 import { activeClips, audioCategoryOf, clipLength, duckGainAt, layoutMain, overlayEnd, overlayTransform, totalDuration, transformOf, voiceActivityRanges, type PlacedClip } from './timeline';
 
 interface MediaNode {
@@ -1086,9 +1087,24 @@ export function drawCaption(ctx: CanvasRenderingContext2D, c: Caption, t: number
     }
     ctx.fillStyle = s.color;
     ctx.fillText(line, 0, y);
+    const chars = [...line];
+    if (s.emphasisColor) {
+      // 數字、「最」「超」「限時」等重點字詞：只在那幾個字的寬度範圍上蓋一層強調色
+      const left = -ctx.measureText(line).width / 2;
+      for (const [start, end] of matchEmphasisRanges(line)) {
+        const before = ctx.measureText(chars.slice(0, start).join('')).width;
+        const width = ctx.measureText(chars.slice(start, end).join('')).width;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(left + before - size * 0.04, y - lh / 2, width + size * 0.08, lh);
+        ctx.clip();
+        ctx.fillStyle = s.emphasisColor;
+        ctx.fillText(line, 0, y);
+        ctx.restore();
+      }
+    }
     if (s.animation === 'karaoke' && spoken > 0) {
       // 已唸到的部分用亮色從左往右覆蓋，唸到一半的字也只亮一半，看起來是連續掃過去
-      const chars = [...line];
       const whole = Math.min(chars.length, Math.floor(spoken));
       const partial = whole < chars.length ? spoken - whole : 0;
       const left = -ctx.measureText(line).width / 2;

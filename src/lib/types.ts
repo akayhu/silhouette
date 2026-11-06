@@ -181,6 +181,8 @@ export interface CaptionStyle {
   highlight?: string;
   /** 沒有設定 = 無陰影 */
   shadow?: CaptionShadow | null;
+  /** 自動偵測數字、「最」「超」「限時」等重點字詞變色；沒有設定 = 不強調 */
+  emphasisColor?: string;
 }
 
 /** 字幕裡每個字（或詞）在時間軸上的位置，語音辨識產生；用來「改文字就剪影片」 */

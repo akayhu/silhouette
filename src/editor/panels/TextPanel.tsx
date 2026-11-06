@@ -41,6 +41,8 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
   const [page, setPage] = useState(0);
   const [offset, setOffset] = useState('0');
   const [preset, setPreset] = useState(0);
+  const [emphasisOn, setEmphasisOn] = useState(false);
+  const [emphasisColor, setEmphasisColor] = useState('#ffd43b');
   const [rulesText, setRulesText] = useState('');
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [incoming, setIncoming] = useState<ReturnType<typeof parseSubtitles> | null>(null);
@@ -176,6 +178,24 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
       }, `已平移 ${targets.length} 句；影片與音訊不變。`)}>平移秒數</Button></div>
       <p className="mt-1 text-[10px] text-ink-mute">正數延後、負數提前；超過影片結尾會延長專案。</p>
       <div className="mt-3 flex gap-2"><select aria-label="批次字幕樣式" className={field} value={preset} onChange={(e) => setPreset(Number(e.target.value))}>{presets.map((p, i) => <option key={p.name} value={i}>{p.name}</option>)}</select><Button size="sm" disabled={locked || !targets.length} onClick={() => apply((d) => ({ ...d, captions: d.captions.map((c) => targetIds.has(c.id) ? { ...c, style: { ...defaultCaptionStyle(), ...presets[preset].style } } : c) }), `已套用樣式至 ${targets.length} 句。`)}>套用樣式</Button></div>
+      <div className="mt-3 flex items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[11px] text-ink-soft">
+          <input type="checkbox" className="accent-brand" checked={emphasisOn} onChange={(e) => setEmphasisOn(e.target.checked)} />
+          關鍵字自動變色
+        </label>
+        <input aria-label="強調色" type="color" className="h-6 w-8 rounded disabled:opacity-40" value={emphasisColor} onChange={(e) => setEmphasisColor(e.target.value)} disabled={!emphasisOn} />
+        <Button
+          size="sm"
+          disabled={locked || !targets.length}
+          onClick={() => apply(
+            (d) => ({ ...d, captions: d.captions.map((c) => (targetIds.has(c.id) ? { ...c, style: { ...c.style, emphasisColor: emphasisOn ? emphasisColor : undefined } } : c)) }),
+            emphasisOn ? `已為 ${targets.length} 句套用關鍵字變色。` : `已移除 ${targets.length} 句的關鍵字變色。`,
+          )}
+        >
+          套用
+        </Button>
+      </div>
+      <p className="mt-1 text-[10px] text-ink-mute">自動偵測數字、百分比、「最」「超」「限時」「免費」等重點字詞變色，不用自己挑字。</p>
     </details>
     <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
       <button disabled={locked || !filtered.length} className="font-bold text-brand disabled:opacity-40" onClick={() => useEditor.getState().setSelected(filtered.map((c) => ({ type: 'caption', id: c.id })))}>勾選列表全部</button>

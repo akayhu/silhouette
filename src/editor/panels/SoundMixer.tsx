@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, Loader2, Volume2, VolumeX, Wand2 } from 'lucide-react';
 import type { AudioClip, MediaItem, ProjectData, TrackKey } from '../../lib/types';
 import { audioCategoryOf } from '../../lib/timeline';
+import { applyLevelMatch, matchVoiceLevels } from '../../lib/levelMatch';
+import { Button, useToast } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 
@@ -99,7 +101,9 @@ function VolumeRow({
 
 export function SoundMixer() {
   const data = useEditor((s) => s.data);
+  const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [leveling, setLeveling] = useState(false);
   // 記住靜音前的音量，取消靜音時還原
   const before = useRef(new Map<string, number>());
   const { checkpoint, live, select } = useEditor.getState();
@@ -123,6 +127,21 @@ export function SoundMixer() {
       before.current.set(key, value);
       setGroup(g, 0);
     } else setGroup(g, before.current.get(key) ?? (g === 'music' ? 0.5 : 1));
+  };
+  const voiceCount = tracks.filter((a) => groupOfAudio(media.get(a.mediaId)) === 'voice').length;
+  const levelMatchVoices = async () => {
+    if (!ensureUnlocked(trackKeyOf('voice'))) return;
+    setLeveling(true);
+    try {
+      const base = useEditor.getState().data;
+      const result = await matchVoiceLevels(base);
+      if (useEditor.getState().data !== base) return toast('分析期間專案有變動，請再試一次', 'info');
+      if (!result.volumes.size) return toast('沒有分析出可以拉齊的朗讀段落', 'info');
+      useEditor.getState().commit((d) => applyLevelMatch(d, result));
+      toast(`已拉齊 ${result.volumes.size} 段朗讀的音量`, 'success');
+    } finally {
+      setLeveling(false);
+    }
   };
   const setTrack = (id: string, v: number) => live((d) => ({ ...d, audio: d.audio.map((a) => (a.id === id ? { ...a, volume: v } : a)) }));
   const toggleTrack = (a: AudioClip) => {
@@ -154,6 +173,12 @@ export function SoundMixer() {
           />
         ))}
       </div>
+      {voiceCount > 1 && (
+        <Button variant="secondary" size="sm" className="mt-3 w-full" disabled={leveling} onClick={levelMatchVoices}>
+          {leveling ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
+          {leveling ? '分析音量中…' : `朗讀音量自動拉齊（${voiceCount} 段）`}
+        </Button>
+      )}
       {tracks.length > 0 && (
         <>
           <button onClick={() => setOpen(!open)} aria-expanded={open} className="mt-4 flex w-full items-center justify-between border-t border-line pt-3 text-xs font-bold text-ink-soft hover:text-ink">

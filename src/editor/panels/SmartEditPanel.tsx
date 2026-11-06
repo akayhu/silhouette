@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Music2, RotateCcw, Sparkles, WandSparkles } from 'lucide-react';
+import { Images, Loader2, Music2, RotateCcw, Sparkles, WandSparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { checkOpeningHook, swapToOpening } from '../../lib/hookCheck';
+import { findSimilarAdjacentShots, type SimilarShotPair } from '../../lib/shotSimilarity';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
 import type { LibraryTrack, ProjectData } from '../../lib/types';
@@ -28,7 +29,7 @@ function summaryLines(c: SmartEditResult['counts']) {
   ].filter(Boolean) as string[];
 }
 
-export function SmartEditPanel() {
+export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const { user } = useAuth();
   const isPro = user?.plan === 'pro';
   const upgrade = useUpgrade();
@@ -45,19 +46,25 @@ export function SmartEditPanel() {
   // 列出來比較之後再選一個套用；只選 1 個就跟以前一樣直接套用，不用多一次確認
   const [candidates, setCandidates] = useState<{ tpl: SmartTemplate; result: SmartEditResult }[] | null>(null);
   const [weakOpening, setWeakOpening] = useState<string | null>(null);
+  const [similarPairs, setSimilarPairs] = useState<SimilarShotPair[]>([]);
 
   useEffect(() => {
     api.music().then((r) => setLibrary(r.items)).catch(() => setLibrary([]));
   }, []);
 
-  // 開場強度檢查：畫面動態分析要逐格讀取影片，只在主軌片段真的變動時才重新算一次
+  // 開場強度檢查、連續鏡頭相似度檢查：都要逐格讀取畫面，只在主軌片段真的變動時才重新算一次
   useEffect(() => {
     setWeakOpening(null);
+    setSimilarPairs([]);
     if (!clipsKey) return;
     let cancelled = false;
     const base = useEditor.getState().data;
     checkOpeningHook(base).then((r) => {
       if (!cancelled && useEditor.getState().data === base && r.weak && r.betterClipId) setWeakOpening(r.betterClipId);
+    });
+    const mediaById = new Map(base.media.map((m) => [m.id, m]));
+    findSimilarAdjacentShots(base.clips, mediaById).then((pairs) => {
+      if (!cancelled && useEditor.getState().data === base && pairs.length) setSimilarPairs(pairs);
     });
     return () => {
       cancelled = true;
@@ -151,6 +158,22 @@ export function SmartEditPanel() {
           <Button size="sm" className="mt-2 w-full" onClick={applyBetterOpening}>
             換成開場
           </Button>
+        </div>
+      )}
+
+      {similarPairs.length > 0 && (
+        <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
+          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
+            <Images className="size-3.5" /> 有 {similarPairs.length} 處銜接畫面很像
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-soft">兩段接起來色調、畫面都很接近，可能看不太出來有剪接；可以跳過去看看要不要加轉場或換個鏡位。</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {similarPairs.map((p, i) => (
+              <button key={p.nextId} className="rounded-lg border border-brand/30 px-2 py-1 text-[11px] font-bold text-brand hover:bg-brand-soft" onClick={() => seek(p.at)}>
+                接點 {i + 1}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

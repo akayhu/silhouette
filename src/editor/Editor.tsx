@@ -272,7 +272,7 @@ export default function Editor() {
   const toolsContent = (
     <div className="min-h-0 flex-1 overflow-y-auto">
       {tab === 'media' && <MediaPanel />}
-      {tab === 'smart' && <SmartEditPanel />}
+      {tab === 'smart' && <SmartEditPanel seek={seek} />}
       {tab === 'mix' && <MixPanel />}
       {tab === 'music' && <MusicPanel />}
       {tab === 'text' && <TextPanel seek={seek} />}

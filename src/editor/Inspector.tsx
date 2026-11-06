@@ -1,13 +1,14 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { DEFAULT_HIGHLIGHT } from '../lib/engine';
 import { captionWords } from '../lib/captions';
-import { ArrowDown, ArrowUp, AudioLines, Copy, Film, Layers, MousePointerClick, RotateCcw, Smile, Trash2, Type } from 'lucide-react';
+import { ArrowDown, ArrowUp, AudioLines, Copy, Film, Layers, Loader2, MousePointerClick, RotateCcw, Smile, Trash2, Type, Wand2 } from 'lucide-react';
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
+import { suggestReframeX } from '../lib/reframe';
 import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, layoutMain, overlayEnd, overlayLaneCount, placeOverlayLane, removeItems, removeMainClip, transformOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipMotion, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
-import { Button } from '../components/ui';
+import { Button, useToast } from '../components/ui';
 import { ColorPicker } from '../components/ColorPicker';
 import { useEditor } from './store';
 import { TranslationField } from './TranslationField';
@@ -357,6 +358,8 @@ function FrameSection({ clipId, kind = 'clip' }: { clipId: string; kind?: 'clip'
   const media = useEditor((s) => s.data.media.find((m) => m.id === clip?.mediaId));
   const aspect = useEditor((s) => s.data.aspect);
   const { live, commit, checkpoint } = useEditor.getState();
+  const toast = useToast();
+  const [reframing, setReframing] = useState(false);
   if (!clip) return null;
   const DEFAULT = isOverlay ? DEFAULT_OVERLAY_TRANSFORM : DEFAULT_TRANSFORM;
   const tf = { ...DEFAULT, ...clip.transform };
@@ -375,6 +378,19 @@ function FrameSection({ clipId, kind = 'clip' }: { clipId: string; kind?: 'clip'
   const edgeX = (1 - (sw * base * tf.scale) / W) / 2;
   const edgeY = (1 - (sh * base * tf.scale) / H) / 2;
   const isDefault = JSON.stringify(tf) === JSON.stringify(DEFAULT);
+  const canReframe = tf.fit === 'cover' && media?.kind === 'video';
+  const reframe = async () => {
+    if (!clip || !media) return;
+    setReframing(true);
+    try {
+      const result = await suggestReframeX(media, clip.in, clip.out, { fit: tf.fit, scale: tf.scale, W, H });
+      if (!result) return toast('沒有偵測到畫面重點明顯偏向一邊，維持目前的取景就好', 'info');
+      set({ x: result.x }, true);
+      toast('已依畫面重點調整水平位置，可以再手動微調', 'success');
+    } finally {
+      setReframing(false);
+    }
+  };
 
   return (
     <Section
@@ -423,7 +439,13 @@ function FrameSection({ clipId, kind = 'clip' }: { clipId: string; kind?: 'clip'
         <Slider label="垂直位置" value={Math.round(tf.y * 100)} min={-100} max={100} format={(v) => (v === 0 ? '置中' : v > 0 ? `下 ${v}` : `上 ${-v}`)} onStart={checkpoint} onChange={(v) => set({ y: v / 100 })} />
         <Slider label="旋轉" value={tf.rotation} min={-180} max={180} format={(v) => `${v}°`} onStart={checkpoint} onChange={(v) => set({ rotation: v })} />
       </div>
-      <p className="mt-3 text-[11px] text-ink-mute">也可以直接在預覽畫面上拖曳影片調整位置。</p>
+      {canReframe && (
+        <Button variant="secondary" size="sm" className="mt-3 w-full" disabled={reframing} onClick={reframe}>
+          {reframing ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
+          {reframing ? '分析畫面中…' : '智能取景'}
+        </Button>
+      )}
+      <p className="mt-3 text-[11px] text-ink-mute">也可以直接在預覽畫面上拖曳影片調整位置。{canReframe && '智能取景會依畫面動態自動找出重點位置，裁成「填滿畫面」時不再永遠置中。'}</p>
     </Section>
   );
 }

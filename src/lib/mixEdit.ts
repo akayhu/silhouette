@@ -177,6 +177,33 @@ export async function motionScoreAt(media: MediaItem, from: number, windowSec: n
   return sum / (frames.length - 1);
 }
 
+/** 一段畫面依水平位置分成幾欄，各欄的動態能量（灰階差異總和）；重新取景用來找「畫面重點在哪一邊」 */
+export async function columnMotionEnergy(media: MediaItem, from: number, windowSec: number, columns: number): Promise<number[] | null> {
+  const loaded = await loadVideoForAnalysis(media);
+  if (!loaded) return null;
+  const { video, duration } = loaded;
+  const dur = Math.max(0.1, Math.min(windowSec, duration - from));
+  const W = MOTION_WORK_W;
+  const H = Math.max(2, Math.round((W * video.videoHeight) / video.videoWidth));
+  const n = Math.max(3, Math.min(8, Math.round(dur / 0.3)));
+  const frames = await sampleGrayFrames(video, from, dur, n, W, H);
+  video.removeAttribute('src');
+  if (frames.length < 2) return null;
+  const colW = W / columns;
+  const energy = new Array(columns).fill(0);
+  for (let i = 1; i < frames.length; i++) {
+    const a = frames[i - 1];
+    const b = frames[i];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const col = Math.min(columns - 1, Math.floor(x / colW));
+        energy[col] += Math.abs(a[y * W + x] - b[y * W + x]);
+      }
+    }
+  }
+  return energy;
+}
+
 /** 把混剪結果依序接到主軌最後面，講話的段落順便帶字幕；片段之間加一個淡入轉場，接起來不會太生硬 */
 export function applyMixEdit(d: ProjectData, plan: MixPlanItem[], opts: { withCaptions: boolean; style?: CaptionStyle }): ProjectData {
   let clips: VideoClip[] = [...d.clips];

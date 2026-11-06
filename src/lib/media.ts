@@ -89,17 +89,22 @@ export interface SilenceOptions {
   minSilence: number;
   /** 剪掉後前後保留的緩衝 */
   padding: number;
+  /** 想知道這段音訊本身的噪音基準（dBFS，估算門檻前的原始值）時用，例如依噪音挑辨識模型 */
+  onNoiseFloor?: (floorDb: number) => void;
 }
 
-/** 依噪音基準自動估算門檻：抓最安靜一成窗格的 RMS 中位數當「背景音量」，加一點餘量當門檻；
- * 吵雜環境（風扇聲、環境噪音偏高）跟安靜室內收音都能抓到合理的門檻，不用手動調 */
-function estimateThresholdDb(rmsList: number[]) {
-  if (!rmsList.length) return -38;
+/** 抓最安靜一成窗格的 RMS 中位數當「背景音量」（dBFS），風扇聲、環境噪音偏高的吵雜環境這個值會偏高 */
+function noiseFloorDb(rmsList: number[]) {
+  if (!rmsList.length) return -80;
   const sorted = [...rmsList].sort((a, b) => a - b);
   const quietCount = Math.max(1, Math.round(sorted.length * 0.1));
   const floor = sorted[Math.floor(quietCount / 2)];
-  const floorDb = floor > 0 ? 20 * Math.log10(floor) : -80;
-  return Math.max(-50, Math.min(-20, floorDb + 12));
+  return floor > 0 ? 20 * Math.log10(floor) : -80;
+}
+
+/** 依噪音基準自動估算靜音門檻：噪音基準加一點餘量；吵雜跟安靜環境都能抓到合理的門檻，不用手動調 */
+function estimateThresholdDb(rmsList: number[]) {
+  return Math.max(-50, Math.min(-20, noiseFloorDb(rmsList) + 12));
 }
 
 /** 回傳來源檔案時間（秒）中的靜音區段 */
@@ -114,6 +119,7 @@ export async function detectSilence(buffer: AudioBuffer, from: number, to: numbe
     return Math.sqrt(sum / win);
   };
   const rmsList = Array.from({ length: windows }, (_, w) => rmsAt(w));
+  opts.onNoiseFloor?.(noiseFloorDb(rmsList));
   const thresholdDb = opts.thresholdDb ?? estimateThresholdDb(rmsList);
   const threshold = Math.pow(10, thresholdDb / 20);
   const silent: [number, number][] = [];

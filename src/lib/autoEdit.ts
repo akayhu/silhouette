@@ -46,12 +46,15 @@ function subtract(ranges: Range[], cut: Range[]): Range[] {
 }
 
 /** 分析素材的某一段（素材時間 from–to）：要保留的人聲段落與字幕，時間都是素材時間 */
+/** 噪音基準超過這個值（dBFS）就視為吵雜環境，辨識改用較精準但較慢的模型 */
+const NOISY_FLOOR_DB = -30;
+
 export async function analyzeRange(
   media: MediaItem,
   from: number,
   to: number,
   onStage: (stage: AutoEditStage, progress?: number) => void,
-  model: string = ASR_MODELS[0].id,
+  model?: string,
 ): Promise<{ keeps: Range[]; segments: Segment[]; hasSpeech: boolean }> {
   onStage('audio');
   const buffer = await decodeAudio(media.url);
@@ -59,12 +62,16 @@ export async function analyzeRange(
 
   onStage('silence');
   // 不給固定的 thresholdDb：依這段素材本身的噪音基準自動估算，吵雜或安靜的收音環境都能抓到合理的門檻
-  const silences = await detectSilence(buffer, from, end, { minSilence: 0.5, padding: 0.12 });
+  let noiseFloorDb = -80;
+  const silences = await detectSilence(buffer, from, end, { minSilence: 0.5, padding: 0.12, onNoiseFloor: (db) => (noiseFloorDb = db) });
   const sound = complement(silences, from, end);
+
+  // 沒有手動指定模型（自動流程）時，吵雜環境自動升級用較精準的模型，安靜環境維持快速模型
+  const pickedModel = model ?? (noiseFloorDb > NOISY_FLOOR_DB ? ASR_MODELS[1].id : ASR_MODELS[0].id);
 
   onStage('speech');
   const samples = await sliceMono(buffer, from, end, 16000);
-  const raw = await transcribe(samples, model, (p) => (p.phase === 'download' ? onStage('download', p.progress) : onStage('speech')), { words: true });
+  const raw = await transcribe(samples, pickedModel, (p) => (p.phase === 'download' ? onStage('download', p.progress) : onStage('speech')), { words: true });
   const all = raw.map((s) => ({
     ...s,
     start: from + s.start,

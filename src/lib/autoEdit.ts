@@ -58,7 +58,8 @@ export async function analyzeRange(
   const end = Math.min(to, buffer.duration);
 
   onStage('silence');
-  const silences = await detectSilence(buffer, from, end, { thresholdDb: -38, minSilence: 0.5, padding: 0.12 });
+  // 不給固定的 thresholdDb：依這段素材本身的噪音基準自動估算，吵雜或安靜的收音環境都能抓到合理的門檻
+  const silences = await detectSilence(buffer, from, end, { minSilence: 0.5, padding: 0.12 });
   const sound = complement(silences, from, end);
 
   onStage('speech');

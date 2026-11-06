@@ -83,12 +83,23 @@ export async function sliceMono(buffer: AudioBuffer, from: number, to: number, s
 }
 
 export interface SilenceOptions {
-  /** 低於此音量（dBFS）視為靜音 */
-  thresholdDb: number;
+  /** 低於此音量（dBFS）視為靜音；省略時依這段音訊本身的噪音基準自動估算，不用手動調 */
+  thresholdDb?: number;
   /** 靜音至少持續多久才剪 */
   minSilence: number;
   /** 剪掉後前後保留的緩衝 */
   padding: number;
+}
+
+/** 依噪音基準自動估算門檻：抓最安靜一成窗格的 RMS 中位數當「背景音量」，加一點餘量當門檻；
+ * 吵雜環境（風扇聲、環境噪音偏高）跟安靜室內收音都能抓到合理的門檻，不用手動調 */
+function estimateThresholdDb(rmsList: number[]) {
+  if (!rmsList.length) return -38;
+  const sorted = [...rmsList].sort((a, b) => a - b);
+  const quietCount = Math.max(1, Math.round(sorted.length * 0.1));
+  const floor = sorted[Math.floor(quietCount / 2)];
+  const floorDb = floor > 0 ? 20 * Math.log10(floor) : -80;
+  return Math.max(-50, Math.min(-20, floorDb + 12));
 }
 
 /** 回傳來源檔案時間（秒）中的靜音區段 */
@@ -96,17 +107,19 @@ export async function detectSilence(buffer: AudioBuffer, from: number, to: numbe
   const sr = 8000;
   const samples = await sliceMono(buffer, from, to, sr);
   const win = Math.round(sr * 0.02);
-  const threshold = Math.pow(10, opts.thresholdDb / 20);
+  const windows = Math.floor(samples.length / win);
+  const rmsAt = (w: number) => {
+    let sum = 0;
+    for (let i = w * win; i < (w + 1) * win; i++) sum += samples[i] * samples[i];
+    return Math.sqrt(sum / win);
+  };
+  const rmsList = Array.from({ length: windows }, (_, w) => rmsAt(w));
+  const thresholdDb = opts.thresholdDb ?? estimateThresholdDb(rmsList);
+  const threshold = Math.pow(10, thresholdDb / 20);
   const silent: [number, number][] = [];
   let runStart = -1;
-  const windows = Math.floor(samples.length / win);
   for (let w = 0; w <= windows; w++) {
-    let rms = 1;
-    if (w < windows) {
-      let sum = 0;
-      for (let i = w * win; i < (w + 1) * win; i++) sum += samples[i] * samples[i];
-      rms = Math.sqrt(sum / win);
-    }
+    const rms = w < windows ? rmsList[w] : 1;
     const t = (w * win) / sr;
     if (rms < threshold) {
       if (runStart < 0) runStart = t;

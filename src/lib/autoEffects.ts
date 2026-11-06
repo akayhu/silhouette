@@ -1,8 +1,11 @@
 import { decodeAudio, sliceMono } from './media';
-import { captionFromWords, clipLength, isLocked, layoutMain, remap, rippleRemove, strip } from './timeline';
+import { captionFromWords, captionTrackKeys, clipLength, isLocked, layoutMain, remap, rippleRemove, strip } from './timeline';
 import { analyzeRange, complement, type Range } from './autoEdit';
 import { uid } from './format';
 import type { Caption, CaptionWord, ClipMotion, MediaItem, ProjectData, StickerItem, TransitionType, VideoClip } from './types';
+
+/** 字幕依重疊分成好幾列時，整批新增/改寫字幕的流程只要有任何一列被鎖定就不要動，避免蓋過使用者鎖定某一列的用意 */
+const anyCaptionLocked = (d: Pick<ProjectData, 'locks' | 'captions'>) => captionTrackKeys(d.captions).some((t) => isLocked(d, t));
 
 /**
  * AI 自動剪輯：依影片內容加上運鏡（放大／縮小／特寫／震動）、轉場、字幕動畫和貼紙。
@@ -82,7 +85,7 @@ function shiftAfter(junctions: { at: number; overlap: number }[], t: number) {
 /** 第 0 步：分析每段影片的人聲，剪掉空拍、產生字幕 */
 async function cutAndCaption(d: ProjectData, opts: AutoEffectOptions, counts: AutoEffectPlan['counts'], onProgress?: (text: string) => void): Promise<ProjectData> {
   const doCut = opts.cut && !isLocked(d, 'main');
-  const doSubs = opts.subtitles && !isLocked(d, 'caption');
+  const doSubs = opts.subtitles && !anyCaptionLocked(d);
   if (!doCut && !doSubs) return d;
   const media = new Map(d.media.map((m) => [m.id, m]));
   const placed = layoutMain(d.clips);
@@ -280,7 +283,7 @@ export async function planAutoEffects(input: ProjectData, opts: AutoEffectOption
   const audio = junctions.length ? d.audio.map((a) => ({ ...a, start: shift(a.start) })) : d.audio;
 
   // ---------- 4. 字幕動畫：驚嘆彈出、問句上滑、其他淡入 ----------
-  if (opts.captions && !isLocked(d, 'caption')) {
+  if (opts.captions && !anyCaptionLocked(d)) {
     captions = captions.map((c) => {
       const animation = EXCLAIM.test(c.text) ? 'pop' : QUESTION.test(c.text) ? 'slide' : 'fade';
       if (c.style.animation === animation) return c;

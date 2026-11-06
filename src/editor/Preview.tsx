@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Grid3x3, Loader2, Maximize2, Pause, Play, SeparatorHorizontal, SeparatorVertical, SkipBack, ZoomIn, ZoomOut } from 'lucide-react';
 import { formatTime } from '../lib/format';
-import { clipAt, layoutMain, overlayEnd, overlayTransform, transformOf } from '../lib/timeline';
+import { captionLocked, clipAt, layoutMain, overlayEnd, overlayTransform, transformOf } from '../lib/timeline';
 import { CenterLine, GuidesOverlay, usePreviewGuides } from './PreviewGuides';
 import { EraseOverlay } from './EraseOverlay';
 import { captionBox, drawnRect, stickerPose } from '../lib/engine';
@@ -53,7 +53,6 @@ export function Preview({
   // 點到字幕就選取並拖曳到想要的位置；靠近水平中央會自動吸附置中。回傳 false 代表沒點到字幕
   const dragCaption = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const st = useEditor.getState();
-    if (st.data.locks?.caption) return false;
     const canvas = e.currentTarget;
     const rect = canvas.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * canvas.width;
@@ -63,7 +62,7 @@ export function Preview({
       const b = captionBox(c, canvas.width, canvas.height);
       return Math.abs(px - b.cx) < b.w / 2 && Math.abs(py - b.cy) < b.h / 2;
     });
-    if (!hit) return false;
+    if (!hit || captionLocked(st.data, hit.id)) return false;
     st.select({ type: 'caption', id: hit.id });
     const box = captionBox(hit, canvas.width, canvas.height);
     // 從目前畫出來的位置開始拖（原本的值可能超出可移動範圍）

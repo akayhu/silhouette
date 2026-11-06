@@ -1,7 +1,7 @@
 import { isEmphasis, planAutoEffects, type AutoEffectPlan } from './autoEffects';
 import { DEFAULT_CLIP_FILTER, FILTER_PRESETS } from './filters';
 import { uid } from './format';
-import { isLocked, layoutMain, mainDuration, newCaption } from './timeline';
+import { captionTrackKeys, isLocked, layoutMain, mainDuration, newCaption } from './timeline';
 import type { SmartTemplate } from './templates';
 import type { AudioClip, Caption, LibraryTrack, MediaItem, ProjectData } from './types';
 
@@ -50,7 +50,8 @@ export async function runSmartEdit(
   );
   let d = plan.data;
   const counts: SmartEditResult['counts'] = { ...plan.counts, flowers: 0, sfx: 0, music: null, filter: null, captionStyled: 0 };
-  const captionOpen = !isLocked(d, 'caption');
+  // 字幕依重疊分成好幾列時，只要有任何一列被鎖定就整個不動，避免套用模板蓋過使用者鎖定某一列的用意
+  const captionOpen = !captionTrackKeys(d.captions).some((t) => isLocked(d, t));
   // 配樂、音效分成獨立軌道；任一軌鎖定就先不動音訊，避免只套用一半
   const audioOpen = !isLocked(d, 'audio-music') && !isLocked(d, 'audio-sfx');
   onProgress?.('套用模板');

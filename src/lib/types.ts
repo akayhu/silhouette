@@ -237,7 +237,9 @@ export interface StickerItem {
 }
 
 /** 時間軸的軌道：音訊依類型（背景音樂／人聲／音效）分成各自獨立的軌道，可各自鎖定、靜音 */
-export type TrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio-music' | 'audio-voice' | 'audio-sfx';
+export type BaseTrackKey = 'caption' | 'sticker' | 'overlay' | 'main' | 'audio-music' | 'audio-voice' | 'audio-sfx';
+/** 字幕依重疊自動分列（見 captionLanes），第 0 列沿用 'caption'，之後每列各自可以單獨鎖定 */
+export type TrackKey = BaseTrackKey | `caption-${number}`;
 
 /** 時間軸標記：不屬於任何軌道，單純標出某個時間點（節拍、轉場點…），方便之後點擊跳轉 */
 export interface Marker {

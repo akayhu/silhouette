@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { defaultCaptionStyle, newCaption } from '../../lib/timeline';
+import { captionTrackKeys, defaultCaptionStyle, isLocked, newCaption } from '../../lib/timeline';
 import type { CaptionStyle, ProjectData } from '../../lib/types';
 import { applyCaptionRules, formatCaptionTime, importCaptionCues, matchesCaption, mergeCaptions, orderedCaptions, parseCaptionRules, parseSubtitles, replaceCaptionText, serializeSubtitles, shiftCaptions, splitCaptionText } from '../../lib/captions';
 import { Button, Modal } from '../../components/ui';
@@ -30,7 +30,9 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
   const dictionary = useEditor((s) => s.data.captionDictionary);
   const selected = useEditor((s) => s.selected);
   const selection = useEditor((s) => s.selection);
-  const locked = useEditor((s) => !!s.data.locks?.caption);
+  // 字幕可能因為重疊分成好幾列，各自能鎖定；這個面板是整批操作（取代全部、批次平移、套用樣式…），
+  // 只要有任何一列被鎖定就先整個停用，避免批次操作蓋過使用者鎖定某一列的用意
+  const locked = useEditor((s) => captionTrackKeys(s.data.captions).some((t) => isLocked(s.data, t)));
   const [find, setFind] = useState('');
   const [replacement, setReplacement] = useState('');
   const [matchCase, setMatchCase] = useState(false);
@@ -150,7 +152,7 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
 
   return <div className="p-4">
     <div className="flex items-center justify-between"><h2 className="text-sm font-extrabold">字幕校對</h2><button className="text-xs font-bold text-brand disabled:opacity-40" disabled={locked} onClick={() => add()}><Plus className="mr-1 inline size-3" />新增一句</button></div>
-    <LockedBanner track="caption" />
+    <LockedBanner track={captionTrackKeys(captions)} />
     <CaptionCheck seek={seek} />
     <div className="mt-3 space-y-2">
       <input aria-label="搜尋字幕" placeholder="搜尋文字（純文字搜尋）" className={field} value={find} onChange={(e) => { setFind(e.target.value); setPage(0); }} />

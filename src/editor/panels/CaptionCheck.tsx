@@ -2,13 +2,16 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown } from 'lucide-react';
 import { checkCaptions, fixCaptions, ISSUE_LABELS, MAX_CPS, MAX_LINE, MIN_DURATION, summarizeIssues, type CaptionIssue } from '../../lib/captionCheck';
 import { formatCaptionTime } from '../../lib/captions';
+import { captionLocked, captionTrackKeys, isLocked, trackOf } from '../../lib/timeline';
 import { Button, useToast } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 
-/** 一鍵修正：回傳修了幾處、還剩幾個要自己處理 */
+/** 一鍵修正：回傳修了幾處、還剩幾個要自己處理；只修正指定的幾句時，只檢查那幾句所在列有沒有鎖定 */
 export function fixCaptionIssues(ids?: Set<string>) {
-  if (!ensureUnlocked('caption')) return null;
+  const data = useEditor.getState().data;
+  const tracks = ids ? [...ids].map((id) => trackOf({ type: 'caption', id }, data)) : captionTrackKeys(data.captions);
+  if (!ensureUnlocked(...tracks)) return null;
   let fixed = 0;
   useEditor.getState().commit((d) => {
     const result = fixCaptions(d.captions, ids);
@@ -22,7 +25,9 @@ export function fixCaptionIssues(ids?: Set<string>) {
 export function CaptionCheck({ seek }: { seek: (t: number) => void }) {
   const toast = useToast();
   const captions = useEditor((s) => s.data.captions);
-  const locked = useEditor((s) => !!s.data.locks?.caption);
+  const locks = useEditor((s) => s.data.locks);
+  // 「全部修正」是整批操作，只要有任何一列鎖定就先停用；逐句修正則各自檢查那一句所在的列
+  const locked = captionTrackKeys(captions).some((t) => isLocked({ locks }, t));
   const issues = useMemo(() => checkCaptions(captions), [captions]);
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => {
@@ -87,7 +92,7 @@ export function CaptionCheck({ seek }: { seek: (t: number) => void }) {
                 </button>
                 <button
                   className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-brand hover:bg-brand-soft disabled:opacity-40"
-                  disabled={locked}
+                  disabled={captionLocked({ locks, captions }, caption.id)}
                   onClick={() => fix(new Set([caption.id]))}
                 >
                   修正

@@ -1,5 +1,5 @@
 import { Modal } from '../components/ui';
-import { isLocked } from '../lib/timeline';
+import { trackOf } from '../lib/timeline';
 import { notify } from '../components/ui';
 import { ensureUnlocked } from './locks';
 import { useEditor } from './store';
@@ -70,9 +70,9 @@ function currentCaption(edge: 'start' | 'end') {
 /** [ 與 ]：把目前字幕的開始或結束時間設成播放頭位置 */
 export function setCaptionEdge(edge: 'start' | 'end') {
   const { data, time, commit, select } = useEditor.getState();
-  if (isLocked(data, 'caption')) return void ensureUnlocked('caption');
   const c = currentCaption(edge);
   if (!c) return notify('播放頭附近沒有字幕', 'info');
+  if (!ensureUnlocked(trackOf({ type: 'caption', id: c.id }, data))) return;
   const t = Math.round(time * 1000) / 1000;
   if (edge === 'start' && t > c.end - 0.1) return notify('開始時間要比結束早至少 0.1 秒', 'error');
   if (edge === 'end' && t < c.start + 0.1) return notify('結束時間要比開始晚至少 0.1 秒', 'error');

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ProjectData, TrackKey } from '../lib/types';
-import { totalDuration } from '../lib/timeline';
+import { totalDuration, trackOf } from '../lib/timeline';
 
 export type SelItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string };
 export type Selection = SelItem | null;
@@ -106,7 +106,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   toggleLock: (track) => {
     const { data, selected } = get();
     const locked = !data.locks?.[track];
-    const keep = locked ? selected.filter((s) => (s.type === 'clip' ? 'main' : s.type) !== track) : selected;
+    // 字幕依重疊分到的列各自獨立，要用 trackOf 才知道這句字幕實際落在哪一列
+    const keep = locked ? selected.filter((s) => (s.type === 'clip' ? 'main' : s.type === 'caption' ? trackOf(s, data) : s.type) !== track) : selected;
     set({
       data: { ...data, locks: { ...data.locks, [track]: locked } },
       selected: keep,

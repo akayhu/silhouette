@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { AudioLines, Film, Flag, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, Volume2, VolumeX, X, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
 import type { TrimSide } from '../lib/timeline';
-import { audioCategoryOf, clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, TRACK_LABELS, trackOf } from '../lib/timeline';
+import { audioCategoryOf, captionLanes, captionTrackKey, clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, trackLabel, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { AudioClip, Caption, Marker, TrackKey } from '../lib/types';
 import { stickerDef, stickerUrl } from '../lib/stickers';
@@ -546,7 +546,16 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
         <div className="flex w-[112px] shrink-0 flex-col border-r border-line bg-canvas text-[11px] font-bold text-ink-soft" style={{ width: GUTTER }}>
           <div className="h-7 shrink-0 border-b border-line bg-surface" />
           <div ref={labelsRef} className="min-h-0 flex-1 overflow-hidden">
-          <TrackLabel track="caption" locked={locked('caption')} icon={<Type className="size-3.5" />} label="字幕" h="" style={{ height: capLaneCount * CAP_ROW }} />
+          {Array.from({ length: capLaneCount }, (_, i) => i).map((lane) => (
+            <TrackLabel
+              key={lane}
+              track={captionTrackKey(lane)}
+              locked={locked(captionTrackKey(lane))}
+              icon={<Type className="size-3.5" />}
+              label={`字幕${capLaneCount > 1 ? lane + 1 : ''}`}
+              h="h-10"
+            />
+          ))}
           <TrackLabel track="sticker" locked={locked('sticker')} icon={<Smile className="size-3.5" />} label="貼紙" h="h-10" />
           {Array.from({ length: ovLanes }, (_, i) => ovLanes - i).map((n) => (
             <TrackLabel
@@ -630,23 +639,24 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
               }}
             />
             <div ref={tracksRef} className="relative" onPointerDown={onBackground}>
-              {/* 字幕軌：重疊的字幕（含花字）會自動分到不同列，不會互相蓋住 */}
-              <div className={`relative border-b border-line/60 ${lockedRow('caption')}`} style={{ height: capLaneCount * CAP_ROW }}>
-                {Array.from({ length: capLaneCount - 1 }, (_, i) => (
-                  <div key={i} className="pointer-events-none absolute inset-x-0 border-b border-dashed border-line/60" style={{ top: (i + 1) * CAP_ROW }} />
-                ))}
-                {capRows.map(({ c, lane }) => (
-                  <CaptionBlock
-                    key={c.id}
-                    c={c}
-                    left={x(c.start)}
-                    width={(c.end - c.start) * zoom}
-                    top={5 + lane * CAP_ROW}
-                    selected={selIds.has(c.id)}
-                    onDown={(e, mode) => startSpan(e, 'caption', c.id, mode)}
-                  />
-                ))}
-              </div>
+              {/* 字幕軌：重疊的字幕（含花字）會自動分到不同列，每一列可以各自鎖定 */}
+              {Array.from({ length: capLaneCount }, (_, lane) => (
+                <div key={lane} className={`relative h-10 border-b border-line/60 ${lockedRow(captionTrackKey(lane))}`}>
+                  {capRows
+                    .filter((r) => r.lane === lane)
+                    .map(({ c }) => (
+                      <CaptionBlock
+                        key={c.id}
+                        c={c}
+                        left={x(c.start)}
+                        width={(c.end - c.start) * zoom}
+                        top={5}
+                        selected={selIds.has(c.id)}
+                        onDown={(e, mode) => startSpan(e, 'caption', c.id, mode)}
+                      />
+                    ))}
+                </div>
+              ))}
               {/* 貼紙軌 */}
               <div className={`relative h-10 border-b border-line/60 ${lockedRow('sticker')}`}>
                 {data.stickers.map((st) => {
@@ -822,19 +832,6 @@ function CaptionBlock({
   );
 }
 
-/** 重疊的字幕（含花字）分到不同列，不會互相蓋住 */
-function captionLanes(captions: Caption[]) {
-  const ends: number[] = [];
-  return [...captions]
-    .sort((a, b) => a.start - b.start)
-    .map((c) => {
-      let lane = ends.findIndex((e) => e <= c.start + 0.001);
-      if (lane < 0) lane = ends.length;
-      ends[lane] = c.end;
-      return { c, lane };
-    });
-}
-
 function TrackLabel({
   track,
   locked,
@@ -854,7 +851,7 @@ function TrackLabel({
   muted?: boolean;
   onToggleMute?: () => void;
 }) {
-  const name = TRACK_LABELS[track];
+  const name = trackLabel(track);
   return (
     <div className={`group/track flex items-center gap-1 border-b border-line/60 pr-1 pl-3 ${h} ${locked ? 'text-ink-mute' : ''}`} style={style}>
       {icon}

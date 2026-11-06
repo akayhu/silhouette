@@ -6,7 +6,7 @@ import { formatTime, uid } from '../lib/format';
 import type { MediaItem } from '../lib/types';
 import { Button, Modal, useToast } from '../components/ui';
 import { useEditor } from './store';
-import { isLocked } from '../lib/timeline';
+import { captionTrackKeys, isLocked } from '../lib/timeline';
 
 // ---------- 工作佇列：一次上傳多支影片時依序處理 ----------
 
@@ -101,7 +101,7 @@ export function AutoEditDialog() {
       toast('主軌已鎖定，請先解鎖再加入影片', 'error');
       return;
     }
-    const captionsOk = withCaptions && result.segments.length > 0 && !isLocked(data, 'caption');
+    const captionsOk = withCaptions && result.segments.length > 0 && !captionTrackKeys(data.captions).some((t) => isLocked(data, t));
     if (withCaptions && result.segments.length && !captionsOk) toast('字幕軌已鎖定，這次不加字幕', 'info');
     commit((d) => applyAutoEdit(d, media, result, pick, { captions: captionsOk, style: d.captions[0]?.style }));
     toast(

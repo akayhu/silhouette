@@ -1,4 +1,4 @@
-import type { Aspect, AudioClip, Caption, CaptionStyle, CaptionWord, ClipTransform, MediaItem, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
+import type { Aspect, AudioClip, BaseTrackKey, Caption, CaptionStyle, CaptionWord, ClipTransform, MediaItem, OverlayClip, ProjectData, TrackKey, VideoClip } from './types';
 import { uid } from './format';
 import { captionWords, splitCaptionByTime } from './captions';
 
@@ -6,7 +6,7 @@ export { captionWords };
 
 export const MIN_CLIP = 0.1;
 
-export const TRACK_LABELS: Record<TrackKey, string> = {
+export const TRACK_LABELS: Record<BaseTrackKey, string> = {
   caption: '字幕軌',
   sticker: '貼紙軌',
   overlay: '疊加軌',
@@ -16,6 +16,33 @@ export const TRACK_LABELS: Record<TrackKey, string> = {
   'audio-sfx': '音效軌',
 };
 
+/** 軌道的完整名稱（鎖定提示用）：字幕依重疊分出來的列沒有固定名字，補上第幾列 */
+export function trackLabel(track: TrackKey): string {
+  if (track in TRACK_LABELS) return TRACK_LABELS[track as BaseTrackKey];
+  return `字幕${Number(track.slice('caption-'.length)) + 1}軌`;
+}
+
+/** 重疊的字幕（含花字）依開始時間分到不同列，不會互相蓋住；沒有重疊時永遠是第 0 列 */
+export function captionLanes(captions: Caption[]): { c: Caption; lane: number }[] {
+  const ends: number[] = [];
+  return [...captions]
+    .sort((a, b) => a.start - b.start)
+    .map((c) => {
+      let lane = ends.findIndex((e) => e <= c.start + 0.001);
+      if (lane < 0) lane = ends.length;
+      ends[lane] = c.end;
+      return { c, lane };
+    });
+}
+/** 第 0 列沿用原本的 'caption'，不改變既有專案的鎖定設定；之後每列是獨立的 track key */
+export const captionTrackKey = (lane: number): TrackKey => (lane === 0 ? 'caption' : (`caption-${lane}` as TrackKey));
+/** 目前字幕用到的所有列（永遠含第 0 列），用在「只要有一列鎖定就不要整批動字幕」的批次操作 */
+export function captionTrackKeys(captions: Caption[]): TrackKey[] {
+  const lanes = new Set(captionLanes(captions).map((r) => r.lane));
+  lanes.add(0);
+  return [...lanes].map(captionTrackKey);
+}
+
 /** 音訊依素材判斷屬於哪一類：朗讀配音、音效庫的音效，其餘都算背景音樂 */
 export const audioCategoryOf = (m: MediaItem | undefined): 'music' | 'voice' | 'sfx' => {
   if (m?.origin === 'tts' || m?.origin === 'record') return 'voice';
@@ -24,14 +51,18 @@ export const audioCategoryOf = (m: MediaItem | undefined): 'music' | 'voice' | '
 };
 export const audioTrackOf = (a: AudioClip, media: MediaItem[]): TrackKey => `audio-${audioCategoryOf(media.find((m) => m.id === a.mediaId))}`;
 
-/** 選取項目對應到哪一條軌道；音訊依素材類型分成三條獨立軌道。標記不屬於任何軌道，不會真的鎖定 */
-export const trackOf = (item: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string }, d: Pick<ProjectData, 'audio' | 'media'>): TrackKey => {
+/** 選取項目對應到哪一條軌道；音訊依素材類型分成三條獨立軌道，字幕依重疊分到的列各自獨立。標記不屬於任何軌道，不會真的鎖定 */
+export const trackOf = (item: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string }, d: Pick<ProjectData, 'audio' | 'media' | 'captions'>): TrackKey => {
   if (item.type === 'clip' || item.type === 'marker') return 'main';
+  if (item.type === 'caption') return captionTrackKey(captionLanes(d.captions).find((r) => r.c.id === item.id)?.lane ?? 0);
   if (item.type !== 'audio') return item.type;
   const clip = d.audio.find((a) => a.id === item.id);
   return clip ? audioTrackOf(clip, d.media) : 'audio-music';
 };
 export const isLocked = (d: Pick<ProjectData, 'locks'>, track: TrackKey) => !!d.locks?.[track];
+/** 某一句字幕目前所在的列有沒有被鎖定 */
+export const captionLocked = (d: Pick<ProjectData, 'locks' | 'captions'>, id: string) =>
+  isLocked(d, captionTrackKey(captionLanes(d.captions).find((r) => r.c.id === id)?.lane ?? 0));
 
 export const DEFAULT_TRANSFORM: ClipTransform = { x: 0, y: 0, scale: 1, rotation: 0, fit: 'contain' };
 export const transformOf = (c: VideoClip): ClipTransform => ({ ...DEFAULT_TRANSFORM, ...c.transform });
@@ -245,21 +276,20 @@ export function rippleRemove(d: ProjectData, input: Range[]): ProjectData {
       });
   }
 
-  // 鎖定的軌道不跟著移動
-  const captions = isLocked(d, 'caption')
-    ? d.captions
-    : d.captions
-        .map((c) => {
-          const moved = { ...c, start: remap(c.start, ranges), end: remap(c.end, ranges) };
-          const words = captionWords(c);
-          if (!words) return c.words ? { ...moved, words: undefined } : moved;
-          // 逐字時間跟著移動；整個字落在剪掉的範圍裡就拿掉，字幕文字只留剩下的字
-          const kept = words.map((w) => ({ ...w, start: remap(w.start, ranges), end: remap(w.end, ranges) })).filter((w) => w.end - w.start >= 0.01);
-          if (kept.length === words.length) return { ...moved, words: kept };
-          if (!kept.length) return { ...moved, end: moved.start };
-          return { ...moved, words: kept, text: kept.map((w) => w.text).join('') };
-        })
-        .filter((c) => c.end - c.start >= 0.05);
+  // 鎖定的軌道不跟著移動；字幕依重疊分到的列各自獨立鎖定
+  const captions = d.captions
+    .map((c) => {
+      if (captionLocked(d, c.id)) return c;
+      const moved = { ...c, start: remap(c.start, ranges), end: remap(c.end, ranges) };
+      const words = captionWords(c);
+      if (!words) return c.words ? { ...moved, words: undefined } : moved;
+      // 逐字時間跟著移動；整個字落在剪掉的範圍裡就拿掉，字幕文字只留剩下的字
+      const kept = words.map((w) => ({ ...w, start: remap(w.start, ranges), end: remap(w.end, ranges) })).filter((w) => w.end - w.start >= 0.01);
+      if (kept.length === words.length) return { ...moved, words: kept };
+      if (!kept.length) return { ...moved, end: moved.start };
+      return { ...moved, words: kept, text: kept.map((w) => w.text).join('') };
+    })
+    .filter((c) => captionLocked(d, c.id) || c.end - c.start >= 0.05);
   const audio = d.audio.map((a) => (isLocked(d, audioTrackOf(a, d.media)) ? a : { ...a, start: remap(a.start, ranges) }));
   const stickers = isLocked(d, 'sticker')
     ? (d.stickers ?? [])
@@ -326,7 +356,7 @@ export function trimAt(d: ProjectData, items: TrimItem[], t: number, side: TrimS
     return side === 'left' ? { ...a, start: t, in: a.in + (t - a.start), fadeIn: 0 } : { ...a, out: a.in + (t - a.start), fadeOut: 0 };
   });
   const captions = out.captions.map((c) => {
-    if (!targets.some((x) => x.type === 'caption' && x.id === c.id) || isLocked(d, 'caption')) return c;
+    if (!targets.some((x) => x.type === 'caption' && x.id === c.id) || captionLocked(d, c.id)) return c;
     if (!ok(c.start, c.end)) return c;
     trimmed++;
     return side === 'left' ? { ...c, start: t } : { ...c, end: t };

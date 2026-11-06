@@ -51,6 +51,47 @@ export const audioCategoryOf = (m: MediaItem | undefined): 'music' | 'voice' | '
 };
 export const audioTrackOf = (a: AudioClip, media: MediaItem[]): TrackKey => `audio-${audioCategoryOf(media.find((m) => m.id === a.mediaId))}`;
 
+/**
+ * 配樂自動閃避（ducking）：有人聲的時間範圍（非花字字幕、朗讀／錄音的音訊片段）配樂音量自動降低，
+ * 沒人聲時回升，不用使用者自己調；純資料運算，不用任何 AI 模型。
+ */
+export interface DuckRange {
+  start: number;
+  end: number;
+}
+const DUCK_GAP = 0.4; // 間隔在這麼短的人聲片段合併成一段，避免配樂音量一直跳動
+const DUCK_RAMP = 0.25; // 淡入淡出到閃避音量的秒數，避免音量瞬間跳一下很突兀
+export const DUCK_AMOUNT = 0.35; // 閃避時配樂降到原音量的比例
+
+/** 專案裡有人聲的時間範圍（合併相鄰很近的幾段） */
+export function voiceActivityRanges(d: Pick<ProjectData, 'captions' | 'audio' | 'media'>): DuckRange[] {
+  const fromCaptions = d.captions.filter((c) => c.role !== 'flower').map((c) => ({ start: c.start, end: c.end }));
+  const fromVoiceAudio = d.audio
+    .filter((a) => audioCategoryOf(d.media.find((m) => m.id === a.mediaId)) === 'voice')
+    .map((a) => ({ start: a.start, end: a.start + clipLength(a) }));
+  const sorted = [...fromCaptions, ...fromVoiceAudio].sort((a, b) => a.start - b.start);
+  const merged: DuckRange[] = [];
+  for (const r of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end + DUCK_GAP) last.end = Math.max(last.end, r.end);
+    else merged.push({ ...r });
+  }
+  return merged;
+}
+
+/** 某個時間點的配樂閃避增益（1 = 原音量，DUCK_AMOUNT = 完全閃避），邊界有淡入淡出不會跳音量 */
+export function duckGainAt(ranges: DuckRange[], t: number): number {
+  let gain = 1;
+  for (const r of ranges) {
+    let g = 1;
+    if (t >= r.start && t <= r.end) g = DUCK_AMOUNT;
+    else if (t < r.start && t >= r.start - DUCK_RAMP) g = DUCK_AMOUNT + (1 - DUCK_AMOUNT) * ((r.start - t) / DUCK_RAMP);
+    else if (t > r.end && t <= r.end + DUCK_RAMP) g = DUCK_AMOUNT + (1 - DUCK_AMOUNT) * ((t - r.end) / DUCK_RAMP);
+    gain = Math.min(gain, g);
+  }
+  return gain;
+}
+
 /** 選取項目對應到哪一條軌道；音訊依素材類型分成三條獨立軌道，字幕依重疊分到的列各自獨立。標記不屬於任何軌道，不會真的鎖定 */
 export const trackOf = (item: { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string }, d: Pick<ProjectData, 'audio' | 'media' | 'captions'>): TrackKey => {
   if (item.type === 'clip' || item.type === 'marker') return 'main';

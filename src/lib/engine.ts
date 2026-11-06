@@ -7,7 +7,7 @@ import { applyErase } from './erase';
 import { applyBeauty, isBeautyOn } from './beauty';
 import { createDenoiseChain, type DenoiseChain } from './denoise';
 import { captionWords } from './captions';
-import { activeClips, clipLength, layoutMain, overlayEnd, overlayTransform, totalDuration, transformOf, type PlacedClip } from './timeline';
+import { activeClips, audioCategoryOf, clipLength, duckGainAt, layoutMain, overlayEnd, overlayTransform, totalDuration, transformOf, voiceActivityRanges, type PlacedClip } from './timeline';
 
 interface MediaNode {
   el: HTMLMediaElement;
@@ -34,6 +34,8 @@ export class Engine {
   readonly recordDest: MediaStreamAudioDestinationNode;
   private data!: ProjectData;
   private placed: PlacedClip[] = [];
+  /** 配樂自動閃避用：有人聲的時間範圍，資料變動時才重算，不用每一格都算 */
+  private voiceRanges: ReturnType<typeof voiceActivityRanges> = [];
   /** 每個影片素材最多兩個播放器（key：素材 id#0／#1），相鄰片段輪流使用，轉場時才能同時播放 */
   private videos = new Map<string, MediaNode>();
   private layers: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
@@ -113,6 +115,7 @@ export class Engine {
     }
     this.data = data;
     this.placed = layoutMain(data.clips);
+    this.voiceRanges = voiceActivityRanges(data);
     this.duration = totalDuration(data);
     const byId = new Map(data.media.map((m) => [m.id, m]));
     this.mediaById = byId;
@@ -330,6 +333,7 @@ export class Engine {
         if (o.start > t && o.start - t < 1.2 && !node.el.seeking && Math.abs(node.el.currentTime - o.in) > 0.05) node.el.currentTime = o.in;
       }
     }
+    // 配樂自動閃避：有人聲的時間範圍配樂音量自動降低，沒人聲時回升，不用使用者自己調
     for (const a of this.data.audio) {
       const node = this.audios.get(a.id);
       if (!node) continue;
@@ -338,7 +342,9 @@ export class Engine {
       const local = t - a.start;
       if (local >= 0 && local < len) {
         const fade = Math.min(1, a.fadeIn ? local / a.fadeIn : 1, a.fadeOut ? (len - local) / a.fadeOut : 1);
-        this.syncNode(node, a.in + local * speed, speed, a.volume * Math.max(0, fade));
+        const isMusic = audioCategoryOf(this.mediaById.get(a.mediaId)) === 'music';
+        const duck = isMusic ? duckGainAt(this.voiceRanges, t) : 1;
+        this.syncNode(node, a.in + local * speed, speed, a.volume * Math.max(0, fade) * duck);
       } else if (!node.el.paused) node.el.pause();
     }
   }

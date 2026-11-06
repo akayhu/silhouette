@@ -3,7 +3,7 @@ import { COVER_IN_VIDEO_SECONDS } from './cover';
 import { createDenoiseChain } from './denoise';
 import type { Engine } from './engine';
 import { decodeAudio } from './media';
-import { clipLength, layoutMain } from './timeline';
+import { audioCategoryOf, clipLength, duckGainAt, layoutMain, voiceActivityRanges } from './timeline';
 import type { ProjectData } from './types';
 
 /**
@@ -200,6 +200,8 @@ export async function mixAudio(data: ProjectData, duration: number, signal: Abor
     const buffer = await audioOf(m.url, false, m.name);
     if (buffer) await play(buffer, o.start, o.in, o.out - o.in, o.speed, (g) => g.setValueAtTime(o.volume, o.start));
   }
+  // 配樂自動閃避：匯出跟預覽要用同一套規則，所以用同一個 duckGainAt 取樣出音量曲線
+  const voiceRanges = voiceActivityRanges(data);
   for (const a of data.audio) {
     signal.throwIfAborted();
     const m = media.get(a.mediaId);
@@ -207,12 +209,27 @@ export async function mixAudio(data: ProjectData, duration: number, signal: Abor
     const buffer = await audioOf(m.url, true, m.name);
     if (!buffer) continue;
     const len = clipLength(a);
+    const isMusic = audioCategoryOf(m) === 'music';
     await play(buffer, a.start, a.in, a.out - a.in, a.speed ?? 1, (g) => {
-      g.setValueAtTime(a.fadeIn ? 0 : a.volume, a.start);
-      if (a.fadeIn) g.linearRampToValueAtTime(a.volume, a.start + Math.min(a.fadeIn, len));
-      if (a.fadeOut) {
-        g.setValueAtTime(a.volume, a.start + Math.max(0, len - a.fadeOut));
-        g.linearRampToValueAtTime(0, a.start + len);
+      if (isMusic) {
+        // 密集取樣淡入淡出＋閃避合在一起的音量曲線，跟預覽（engine.ts 的 sync）算法一致
+        const fadeAt = (local: number) => Math.min(1, a.fadeIn ? local / Math.min(a.fadeIn, len) : 1, a.fadeOut ? (len - local) / a.fadeOut : 1);
+        const STEP = 0.15;
+        for (let local = 0; local <= len; local += STEP) {
+          const tAbs = a.start + local;
+          const v = a.volume * Math.max(0, fadeAt(local)) * duckGainAt(voiceRanges, tAbs);
+          if (local === 0) g.setValueAtTime(v, tAbs);
+          else g.linearRampToValueAtTime(v, tAbs);
+        }
+        const v = a.volume * Math.max(0, fadeAt(len)) * duckGainAt(voiceRanges, a.start + len);
+        g.linearRampToValueAtTime(v, a.start + len);
+      } else {
+        g.setValueAtTime(a.fadeIn ? 0 : a.volume, a.start);
+        if (a.fadeIn) g.linearRampToValueAtTime(a.volume, a.start + Math.min(a.fadeIn, len));
+        if (a.fadeOut) {
+          g.setValueAtTime(a.volume, a.start + Math.max(0, len - a.fadeOut));
+          g.linearRampToValueAtTime(0, a.start + len);
+        }
       }
     });
   }

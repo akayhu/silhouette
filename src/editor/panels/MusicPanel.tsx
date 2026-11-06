@@ -365,7 +365,7 @@ export function MusicPanel() {
             })}
           </div>
           <p className="mt-4 text-[11px] leading-relaxed text-ink-mute">
-            {license} 配樂加入時會從播放頭開始，自動配合影片長度並淡出。
+            {license} 配樂加入時會從播放頭開始，自動配合影片長度並淡出；播放到有字幕或朗讀配音的時間，配樂也會自動降低音量，講完再回升。
           </p>
         </>
       )}

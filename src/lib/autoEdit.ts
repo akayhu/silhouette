@@ -1,5 +1,6 @@
 import { ASR_MODELS, isFiller, transcribe, type Segment } from './asr';
 import { decodeAudio, detectSilence, sliceMono } from './media';
+import { findRetakes } from './retakeDetect';
 import { captionFromWords, mainDuration } from './timeline';
 import { uid } from './format';
 import type { Caption, CaptionStyle, MediaItem, ProjectData, VideoClip } from './types';
@@ -16,13 +17,15 @@ export interface AutoEditResult {
   duration: number;
   /** 剪輯後要保留的原片段落（素材時間） */
   keeps: Range[];
-  /** 辨識到的字幕（素材時間，不含口誤） */
+  /** 辨識到的字幕（素材時間，不含口誤與重複口白） */
   segments: Segment[];
   /** 剪掉幾段、共幾秒 */
   cuts: number;
   removed: number;
   /** 沒辨識到人聲時不剪，只能用原片 */
   hasSpeech: boolean;
+  /** 偵測到幾處重複口白（講錯重講），已自動保留後面那次 */
+  retakes: number;
 }
 
 const MIN_KEEP = 0.15;
@@ -55,7 +58,7 @@ export async function analyzeRange(
   to: number,
   onStage: (stage: AutoEditStage, progress?: number) => void,
   model?: string,
-): Promise<{ keeps: Range[]; segments: Segment[]; hasSpeech: boolean }> {
+): Promise<{ keeps: Range[]; segments: Segment[]; hasSpeech: boolean; retakes: number }> {
   onStage('audio');
   const buffer = await decodeAudio(media.url);
   const end = Math.min(to, buffer.duration);
@@ -81,23 +84,29 @@ export async function analyzeRange(
   // 只剩標點的片段（去掉句尾標點後是空字串）不當成字幕
   const segments = all.filter((s) => s.text.trim() && !isFiller(s.text));
   const fillers: Range[] = all.filter((s) => isFiller(s.text)).map((s) => [s.start, s.end]);
-  if (!segments.length) return { keeps: [[from, end]], segments: [], hasSpeech: false };
+  if (!segments.length) return { keeps: [[from, end]], segments: [], hasSpeech: false, retakes: 0 };
 
-  // 有聲音、而且附近有人說話的段落才保留，再扣掉只有語助詞的部分
-  const speech: Range[] = segments.map((s) => [s.start - SPEECH_PAD, s.end + SPEECH_PAD]);
+  // 重複口白（講錯重講）：比對字幕文字編輯距離，抓到時只留後面那次，前一次當成要剪掉的段落
+  const retakePairs = findRetakes(segments);
+  const retakeCutIdx = new Set(retakePairs.map((p) => p.earlierIndex));
+  const retakeCuts: Range[] = retakePairs.map((p) => [segments[p.earlierIndex].start, segments[p.earlierIndex].end]);
+  const finalSegments = segments.filter((_, i) => !retakeCutIdx.has(i));
+
+  // 有聲音、而且附近有人說話的段落才保留，再扣掉只有語助詞和重複口白前一次的部分
+  const speech: Range[] = finalSegments.map((s) => [s.start - SPEECH_PAD, s.end + SPEECH_PAD]);
   const keeps = subtract(
     sound.filter((r) => speech.some((sp) => overlaps(sp, r))),
-    fillers,
+    [...fillers, ...retakeCuts],
   ).filter(([x, y]) => y - x >= MIN_KEEP);
-  return { keeps, segments, hasSpeech: true };
+  return { keeps, segments: finalSegments, hasSpeech: true, retakes: retakePairs.length };
 }
 
 export async function analyzeVideo(media: MediaItem, onStage: (stage: AutoEditStage, progress?: number) => void, model?: string): Promise<AutoEditResult> {
   const duration = media.duration;
-  const { keeps, segments, hasSpeech } = await analyzeRange(media, 0, duration, onStage, model);
-  if (!hasSpeech) return { duration, keeps, segments: [], cuts: 0, removed: 0, hasSpeech: false };
+  const { keeps, segments, hasSpeech, retakes } = await analyzeRange(media, 0, duration, onStage, model);
+  if (!hasSpeech) return { duration, keeps, segments: [], cuts: 0, removed: 0, hasSpeech: false, retakes: 0 };
   const kept = keeps.reduce((n, [x, y]) => n + y - x, 0);
-  return { duration, keeps, segments, cuts: complement(keeps, 0, duration).filter(([x, y]) => y - x > 0.05).length, removed: duration - kept, hasSpeech: true };
+  return { duration, keeps, segments, cuts: complement(keeps, 0, duration).filter(([x, y]) => y - x > 0.05).length, removed: duration - kept, hasSpeech: true, retakes };
 }
 
 /** 素材時間 → 剪輯後的時間；落在被剪掉的空檔就對齊到下一段的開頭 */

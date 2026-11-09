@@ -151,7 +151,11 @@ export function AutoEditDialog() {
                 icon={Scissors}
                 title="剪輯後"
                 badge="推薦"
-                detail={canEdit ? `${formatTime(result.duration - result.removed)}・剪掉 ${result.cuts} 段空拍共 ${result.removed.toFixed(1)} 秒` : '沒有可剪的段落'}
+                detail={
+                  canEdit
+                    ? `${formatTime(result.duration - result.removed)}・剪掉 ${result.cuts} 段空拍共 ${result.removed.toFixed(1)} 秒${result.retakes ? `・${result.retakes} 處重複口白只留後面那次` : ''}`
+                    : '沒有可剪的段落'
+                }
               />
               <ChoiceCard
                 active={pick === 'original'}

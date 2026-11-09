@@ -2,11 +2,25 @@
 // 用畫面的亮度變異數（對比度高的畫面通常比較清楚、有細節；轉場、淡入淡出、單色畫面則偏平坦）評分，
 // 挑出分數最高、彼此時間點也有拉開的幾個候選給使用者選
 import { Engine } from './engine';
-import type { ProjectData } from './types';
+import type { Caption, ProjectData } from './types';
 
 export interface CoverCandidate {
   time: number;
   score: number;
+}
+
+/** 封面標題字數上限：封面是大字標題，不是字幕，太長的句子只取開頭當起點 */
+const MAX_COVER_TITLE = 20;
+
+/** 用封面時間點所在（或最接近）的那句字幕當標題建議；沒有字幕就不建議 */
+export function suggestCoverTitle(captions: Caption[], atTime: number): string | null {
+  const plain = captions.filter((c) => c.role !== 'flower' && c.text.trim());
+  if (!plain.length) return null;
+  const hit = plain.find((c) => atTime >= c.start && atTime < c.end);
+  const nearest = hit ?? plain.reduce((best, c) => (Math.abs(c.start - atTime) < Math.abs(best.start - atTime) ? c : best));
+  const text = nearest.text.trim().replace(/[，,。.！!？?、；;：:\s]+$/, '');
+  if (!text) return null;
+  return text.length > MAX_COVER_TITLE ? text.slice(0, MAX_COVER_TITLE) : text;
 }
 
 const SCORE_SIZE = 96; // 只是拿來評分，不是要顯示，越小讀像素越快

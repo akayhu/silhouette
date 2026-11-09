@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Film, ImageIcon, Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { Download, Film, ImageIcon, Loader2, Quote, Sparkles, Trash2 } from 'lucide-react';
 import { COVER_PRESETS, coverSize, coverThumb, defaultCover, renderCover } from '../lib/cover';
-import { suggestCoverTimes } from '../lib/coverSuggest';
+import { suggestCoverTimes, suggestCoverTitle } from '../lib/coverSuggest';
 import { captionBox, drawCaption } from '../lib/engine';
 import { formatTime } from '../lib/format';
 import type { Caption, VideoCover } from '../lib/types';
@@ -83,6 +83,8 @@ export function CoverDialog({ onClose }: { onClose: () => void }) {
     setCover((c) => ({ ...c, style: { ...c.style, x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 } }));
   };
   const box = cover.title.trim() ? captionBox(title, pw, ph) : null;
+  // 標題建議：用封面時間點所在的那句字幕當起點，標題已經有字就不打擾
+  const titleSuggestion = cover.title.trim() ? null : suggestCoverTitle(data.captions, cover.time);
 
   const set = (patch: Partial<VideoCover>) => setCover((c) => ({ ...c, ...patch }));
   const setStyle = (patch: Partial<VideoCover['style']>) => setCover((c) => ({ ...c, style: { ...c.style, ...patch } }));
@@ -296,7 +298,15 @@ export function CoverDialog({ onClose }: { onClose: () => void }) {
           )}
 
           <div>
-            <div className="mb-1.5 text-xs font-semibold text-ink-soft">封面標題</div>
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-semibold text-ink-soft">
+              <span>封面標題</span>
+              {titleSuggestion && (
+                <button type="button" className="flex min-w-0 items-center gap-1 font-bold text-brand hover:underline" onClick={() => set({ title: titleSuggestion })}>
+                  <Quote className="size-3 shrink-0" />
+                  <span className="truncate">用「{titleSuggestion}」</span>
+                </button>
+              )}
+            </div>
             <textarea
               value={cover.title}
               onChange={(e) => set({ title: e.target.value })}

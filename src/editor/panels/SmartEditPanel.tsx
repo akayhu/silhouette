@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Activity, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
+import { Activity, Film, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { formatTime } from '../../lib/format';
 import { checkOpeningHook, swapToOpening } from '../../lib/hookCheck';
+import { findHighlights, type HighlightCandidate } from '../../lib/highlightDetect';
 import { findSimilarAdjacentShots, type SimilarShotPair } from '../../lib/shotSimilarity';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
@@ -47,6 +49,8 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const [candidates, setCandidates] = useState<{ tpl: SmartTemplate; result: SmartEditResult }[] | null>(null);
   const [weakOpening, setWeakOpening] = useState<string | null>(null);
   const [similarPairs, setSimilarPairs] = useState<SimilarShotPair[]>([]);
+  const [findingHighlights, setFindingHighlights] = useState(false);
+  const [highlights, setHighlights] = useState<HighlightCandidate[] | null>(null);
 
   useEffect(() => {
     api.music().then((r) => setLibrary(r.items)).catch(() => setLibrary([]));
@@ -56,6 +60,7 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   useEffect(() => {
     setWeakOpening(null);
     setSimilarPairs([]);
+    setHighlights(null);
     if (!clipsKey) return;
     let cancelled = false;
     const base = useEditor.getState().data;
@@ -77,6 +82,20 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
     useEditor.getState().commit((d) => swapToOpening(d, weakOpening));
     setWeakOpening(null);
     toast('已把動態較大的片段換到開場', 'success');
+  };
+
+  // 精彩片段抓取：逐格讀整支影片的畫面動態，比較花時間，不自動跑，按了才分析
+  const findHighlightClips = async () => {
+    setFindingHighlights(true);
+    try {
+      const base = useEditor.getState().data;
+      const result = await findHighlights(base);
+      if (useEditor.getState().data !== base) return toast('分析期間專案有變動，請再試一次', 'info');
+      if (!result.length) return toast('沒有找到明顯突出的片段，可能影片本身節奏就很平均', 'info');
+      setHighlights(result);
+    } finally {
+      setFindingHighlights(false);
+    }
   };
 
   const toggle = (t: SmartTemplate) => {
@@ -179,6 +198,36 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {hasClips && (
+        <div className="mt-3 rounded-xl border border-line p-3">
+          <div className="flex items-start gap-2.5">
+            <Film className="mt-0.5 size-4 shrink-0 text-brand" />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold">精彩片段</div>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-ink-soft">依字幕密度、強調詞和畫面動態，抓出影片裡幾段比較突出的時間窗，適合剪成獨立短片。</p>
+              <Button variant="secondary" size="sm" className="mt-2" disabled={findingHighlights} onClick={findHighlightClips}>
+                {findingHighlights ? <Loader2 className="size-3.5 animate-spin" /> : <Film className="size-3.5" />}
+                {findingHighlights ? '分析畫面中…' : '找精彩片段'}
+              </Button>
+              {highlights && (
+                <ul className="mt-2.5 space-y-1.5">
+                  {highlights.map((h, i) => (
+                    <li key={h.start} className="flex items-center justify-between gap-2 rounded-lg bg-sunken px-2.5 py-1.5 text-[11px]">
+                      <span className="font-semibold text-ink-soft">
+                        第 {i + 1} 段・{formatTime(h.start)} - {formatTime(h.end)}
+                      </span>
+                      <button className="shrink-0 font-bold text-brand hover:underline" onClick={() => seek(h.start)}>
+                        跳到這段
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

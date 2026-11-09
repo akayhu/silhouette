@@ -1,5 +1,7 @@
 import { orderedCaptions, splitCaptionText } from './captions';
-import type { Caption } from './types';
+import { captionBox } from './engine';
+import { aspectSize } from './timeline';
+import type { Aspect, Caption } from './types';
 
 /**
  * 字幕品質檢查：找出觀眾讀不完、看不清楚或排版有問題的字幕，並提供一鍵修正。
@@ -13,7 +15,7 @@ export const MIN_DURATION = 0.8;
 /** 兩句之間留一點空隙，換句時看得出是新的一句 */
 const GAP = 0.04;
 
-export type IssueKind = 'empty' | 'overlap' | 'short' | 'fast' | 'long';
+export type IssueKind = 'empty' | 'overlap' | 'short' | 'fast' | 'long' | 'overflow';
 
 export interface CaptionIssue {
   id: string;
@@ -30,6 +32,7 @@ export const ISSUE_LABELS: Record<IssueKind, string> = {
   short: '顯示時間太短',
   fast: '字太多讀不完',
   long: '一行太長',
+  overflow: '畫面放不下',
 };
 
 /** 計算閱讀速度用的字數：不算空白和標點 */
@@ -40,7 +43,8 @@ function plainCaptions(captions: Caption[]) {
   return orderedCaptions(captions.filter((c) => c.role !== 'flower'));
 }
 
-export function checkCaptions(captions: Caption[]): CaptionIssue[] {
+export function checkCaptions(captions: Caption[], aspect: Aspect = '9:16'): CaptionIssue[] {
+  const { width: W, height: H } = aspectSize(aspect, 1080);
   const list = plainCaptions(captions);
   const issues: CaptionIssue[] = [];
   list.forEach((c, i) => {
@@ -75,6 +79,12 @@ export function checkCaptions(captions: Caption[]): CaptionIssue[] {
     }
     if (lineLength(c.text) > MAX_LINE) {
       issues.push({ id: c.id, kind: 'long', message: `一行 ${lineLength(c.text)} 字，超過 ${MAX_LINE} 字會換成很多行或太小` });
+    }
+    // 真的用這個字幕的字型、字級、畫布寬度排版量出來的高度，比只看字數準：
+    // 字級開很大、手動換行很多行、或雙語字幕原文加翻譯疊起來，都可能實際排不進畫面
+    const box = captionBox(c, W, H);
+    if (box.h > H) {
+      issues.push({ id: c.id, kind: 'overflow', message: '字級和內容排起來比畫面還高，上下會被裁掉', manual: '建議縮小字級或縮短文字' });
     }
   });
   return issues;

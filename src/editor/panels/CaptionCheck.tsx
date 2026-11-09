@@ -18,7 +18,7 @@ export function fixCaptionIssues(ids?: Set<string>) {
     fixed = result.fixed;
     return result.fixed ? { ...d, captions: result.captions } : d;
   });
-  return { fixed, left: checkCaptions(useEditor.getState().data.captions).length };
+  return { fixed, left: checkCaptions(useEditor.getState().data.captions, useEditor.getState().data.aspect).length };
 }
 
 /** 字幕面板上方的品質檢查：列出讀不完、重疊、太短、太長、空白的字幕，可以逐句或全部修正 */
@@ -26,9 +26,10 @@ export function CaptionCheck({ seek }: { seek: (t: number) => void }) {
   const toast = useToast();
   const captions = useEditor((s) => s.data.captions);
   const locks = useEditor((s) => s.data.locks);
+  const aspect = useEditor((s) => s.data.aspect);
   // 「全部修正」是整批操作，只要有任何一列鎖定就先停用；逐句修正則各自檢查那一句所在的列
   const locked = captionTrackKeys(captions).some((t) => isLocked({ locks }, t));
-  const issues = useMemo(() => checkCaptions(captions), [captions]);
+  const issues = useMemo(() => checkCaptions(captions, aspect), [captions, aspect]);
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => {
     const byId = new Map<string, CaptionIssue[]>();

@@ -6,7 +6,18 @@ const compile = async (file) => stripTypeScriptTypes(await readFile(new URL('../
 const url = (code) => 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
 const format = url(await compile('format.ts'));
 const captionsUrl = url((await compile('captions.ts')).replace("from './format'", `from '${format}'`));
-const check = await import(url((await compile('captionCheck.ts')).replace("from './captions'", `from '${captionsUrl}'`)));
+const timelineUrl = url((await compile('timeline.ts')).replace("from './format'", `from '${format}'`).replace("from './captions'", `from '${captionsUrl}'`));
+// engine.ts 的 captionBox 需要真的 canvas 量字寬字高（瀏覽器才有），這裡只測邏輯分支：
+// 用 caption 上一個測試用的欄位直接指定「量出來的高度」，不依賴真的渲染；真正的像素量測在瀏覽器驗證
+const engineStub = url(`export function captionBox(c) { return { h: c.__testOverflowHeight ?? 0 }; }`);
+const check = await import(
+  url(
+    (await compile('captionCheck.ts'))
+      .replace("from './captions'", `from '${captionsUrl}'`)
+      .replace("from './engine'", `from '${engineStub}'`)
+      .replace("from './timeline'", `from '${timelineUrl}'`),
+  )
+);
 
 const style = { font: 'Arial', size: 80, color: '#fff', stroke: '#000', background: null, bold: true, y: .8, animation: 'none' };
 const cap = (id, start, end, text, extra = {}) => ({ id, start, end, text, style, ...extra });
@@ -48,6 +59,14 @@ test('long lines split at the punctuation nearest the middle, keeping word timin
   assert.deepEqual(captions.map((c) => c.text), ['如果我給你一個不用離職，', '就能開始的副業機會']);
   assert.ok(captions.every((c) => c.words?.length));
   assert.deepEqual(kinds(captions), []);
+});
+
+test('detects overflow when the rendered caption geometry is taller than the frame (captionBox stubbed)', () => {
+  const tall = cap('tall', 0, 2, '字級開很大的字幕', { __testOverflowHeight: 5000 });
+  const normal = cap('normal', 3, 5, '正常大小的字幕');
+  const issues = check.checkCaptions([tall, normal]);
+  assert.deepEqual(issues.map((i) => `${i.id}:${i.kind}`), ['tall:overflow']);
+  assert.ok(issues[0].manual);
 });
 
 test('fixing selected ids leaves other captions untouched', () => {

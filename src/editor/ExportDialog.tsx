@@ -224,7 +224,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const mimes = supportedExportMimes();
   const data = useEditor((s) => s.data);
   // 匯出前的字幕檢查：匯出後才發現字幕讀不完或疊在一起就要重來
-  const captionIssues = useMemo(() => checkCaptions(data.captions), [data.captions]);
+  const captionIssues = useMemo(() => checkCaptions(data.captions, data.aspect), [data.captions, data.aspect]);
   // undefined＝還在檢查；null＝這個瀏覽器兩種方式都不支援
   const [mode, setMode] = useState<ExportMode | null | undefined>(undefined);
   const previewRef = useRef<HTMLDivElement>(null);

@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import { Ear, Loader2 } from 'lucide-react';
 import { DEFAULT_CLIP_DENOISE } from '../../lib/denoise';
+import { suggestDenoiseStrength } from '../../lib/denoiseRecommend';
 import { clipAt, layoutMain } from '../../lib/timeline';
 import type { ClipDenoise, ProjectData } from '../../lib/types';
 import { Button, useToast } from '../../components/ui';
@@ -18,6 +21,7 @@ export function DenoisePanel() {
   const time = useEditor((s) => s.time);
   const selection = useEditor((s) => s.selection);
   const { commit, live, checkpoint } = useEditor.getState();
+  const [analyzing, setAnalyzing] = useState(false);
 
   // 只處理主軌片段：選取中的，否則是播放頭所在的
   const placed = layoutMain(data.clips);
@@ -51,6 +55,20 @@ export function DenoisePanel() {
   const label = `片段 ${placed.findIndex((c) => c.id === clip.id) + 1}`;
   const activePreset = PRESETS.find((p) => p.strength === strength)?.id ?? (strength === 0 ? 'none' : 'custom');
 
+  const suggest = async () => {
+    setAnalyzing(true);
+    try {
+      const base = useEditor.getState().data;
+      const result = await suggestDenoiseStrength(media, clip);
+      if (useEditor.getState().data !== base) return toast('分析期間專案有變動，請再試一次', 'info');
+      if (result === 0) return toast('這段素材聽起來很乾淨，不需要降噪', 'info');
+      set({ strength: result }, true);
+      toast(`已依背景雜訊建議，套用強度 ${result}`, 'success');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   return (
     <div className="p-4">
       <h2 className="text-sm font-extrabold">降噪</h2>
@@ -68,6 +86,11 @@ export function DenoisePanel() {
             <div className="text-ink-mute">目前：{strength === 0 ? '未開啟' : `強度 ${strength}`}</div>
           </div>
         </div>
+
+        <Button variant="secondary" size="sm" className="mt-3 w-full" disabled={analyzing} onClick={suggest}>
+          {analyzing ? <Loader2 className="size-3.5 animate-spin" /> : <Ear className="size-3.5" />}
+          {analyzing ? '分析背景雜訊中…' : '依背景雜訊為你推薦'}
+        </Button>
 
         <div className="mt-4 grid grid-cols-4 gap-1.5">
           <button

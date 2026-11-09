@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, ArrowRight, Check, FolderOpen, HardDrive, Laptop, Mic, Music2, Pause, Play, Plus, RotateCcw, Scissors, WandSparkles } from 'lucide-react';
+import { Activity, ArrowRight, Check, Crop, FolderOpen, HardDrive, Images, Laptop, Mic, Music2, Pause, Play, Plus, RotateCcw, Scale, Scissors, WandSparkles } from 'lucide-react';
 import { MarketingLayout } from '../components/Layout';
 import { PlanCards } from '../components/Plans';
 import { mkButton, SectionTitle } from '../components/marketing';
@@ -149,6 +149,13 @@ const AI_TABS = [
     body: '把字幕翻成英文，顯示在原文下方、字小一點。翻譯在瀏覽器裡執行，每一句都能再修改，匯出 SRT／VTT 也一併帶上。',
     points: ['中文＋英文', '逐句修改', '匯出字幕檔'],
   },
+  {
+    id: 'suggest',
+    label: '智慧建議',
+    title: '剪完之後，AI 再幫你挑出能更好的地方',
+    body: '開場畫面太靜、鏡頭銜接太像、配音大小不一、直式裁切切到重點以外的地方——這些容易漏掉的細節，AI 會主動抓出來提醒你，一鍵套用或自己調整都可以，免費版就能用。',
+    points: ['開場強度、鏡頭相似度檢查', '智能取景自動抓重點', '朗讀音量自動拉齊'],
+  },
 ] as const;
 
 export function AiTabs() {
@@ -156,7 +163,7 @@ export function AiTabs() {
   const t = AI_TABS.find((x) => x.id === tab)!;
   return (
     <section id="ai" className="scroll-mt-16 bg-site-band px-4 py-24 sm:px-8">
-      <SectionTitle title={<>交給 AI，<span className="marker">剪片快很多</span></>} sub="最花時間的剪空拍、上字幕、對時間，片刻剪趣都能先幫你做好。以下功能標示專業版，新會員試用期間都能用。" />
+      <SectionTitle title={<>交給 AI，<span className="marker">剪片快很多</span></>} sub="最花時間的剪空拍、上字幕、對時間，片刻剪趣都能先幫你做好。標示「專業版」的功能，新會員試用期間都能用；沒標示的免費就能用。" />
       <div className="mx-auto max-w-[1180px]">
         <div className="mx-auto flex w-fit max-w-full gap-1 overflow-x-auto rounded-full border border-site-line bg-white p-1.5" role="tablist" aria-label="AI 功能">
           {AI_TABS.map((x) => (
@@ -175,7 +182,7 @@ export function AiTabs() {
           <div>
             <h3 className="text-[clamp(26px,2.6vw,36px)] leading-[1.25] font-black">
               {t.title}
-              <ProBadge />
+              {t.id !== 'suggest' && <ProBadge />}
             </h3>
             <p className="mt-4 text-[16px] leading-[1.85] text-site-soft">{t.body}</p>
             <ul className="mt-6 space-y-2.5">
@@ -199,6 +206,7 @@ export function AiTabs() {
             {tab === 'text' && <TranscriptMock />}
             {tab === 'tpl' && <TemplatesMock />}
             {tab === 'dual' && <DualMock />}
+            {tab === 'suggest' && <SuggestMock />}
           </div>
         </div>
       </div>
@@ -309,7 +317,7 @@ function Phone({ effect, clip, run }: { effect: Effect; clip: number; run: numbe
 }
 
 function Timeline({ effect, run }: { effect: Effect; run: number }) {
-  const cutting = effect === 'cut' || effect === 'filler';
+  const cutting = effect === 'cut' || effect === 'filler' || effect === 'retake';
   const [collapsed, setCollapsed] = useState(true);
   useEffect(() => {
     if (!cutting) return setCollapsed(true);
@@ -428,6 +436,34 @@ function DualMock() {
         <div className="mt-1 text-[clamp(13px,1.4vw,17px)] leading-snug">What do you want to know most?</div>
       </div>
       <span className="absolute top-4 left-4 rounded-full bg-site-ink/70 px-2 py-0.5 text-[11px] text-white">示範</span>
+    </div>
+  );
+}
+
+/** 智慧建議示範：剪完之後 AI 主動抓出來的幾個優化提醒，對應編輯器裡真實的提示卡片 */
+const SUGGESTIONS: { icon: typeof Activity; title: string; note: string; action: string }[] = [
+  { icon: Activity, title: '開場有點靜', note: '前幾秒畫面變化不大，後面有一段動態明顯更強。', action: '換成開場' },
+  { icon: Images, title: '有 2 處銜接畫面很像', note: '兩段接起來色調、畫面都很接近，可能看不出有剪接。', action: '跳到接點' },
+  { icon: Crop, title: '智能取景', note: '裁成「填滿畫面」時自動抓住畫面重點，不再永遠置中。', action: '套用' },
+  { icon: Scale, title: '朗讀音量自動拉齊', note: '多段配音大小不一時，一鍵拉到同一個音量。', action: '套用' },
+];
+
+function SuggestMock() {
+  return (
+    <div className="mx-auto max-w-[520px] divide-y divide-site-line overflow-hidden rounded-[22px] border border-site-line bg-white" role="img" aria-label="示範：AI 剪完後主動抓出來的優化建議">
+      {SUGGESTIONS.map((s) => (
+        <div key={s.title} className="flex items-start gap-3 p-4">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-site-red-soft text-site-red">
+            <s.icon className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-bold">{s.title}</div>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-site-mute">{s.note}</p>
+          </div>
+          <span className="shrink-0 rounded-full border border-site-line px-2.5 py-1 text-[12px] font-bold text-site-soft">{s.action}</span>
+        </div>
+      ))}
+      <p className="px-4 py-2.5 text-[12px] text-site-mute">示範</p>
     </div>
   );
 }
@@ -726,10 +762,11 @@ const CLIPS = [
   { src: photo('1593960548354-62d1b5c9d542'), alt: '攤販在烤架上翻烤香腸', caption: '香腸烤到滋滋作響！' },
 ];
 
-type Effect = 'cut' | 'filler' | 'subs' | 'punch' | 'zoom' | 'trans' | 'anim' | 'sticker';
+type Effect = 'cut' | 'filler' | 'retake' | 'subs' | 'punch' | 'zoom' | 'trans' | 'anim' | 'sticker';
 const LINES: { id: Effect; label: string; qty: string; amount?: string; clip: number }[] = [
   { id: 'cut', label: '剪掉空拍', qty: '4 段', amount: '−11.6 秒', clip: 0 },
   { id: 'filler', label: '剪掉「嗯、啊」', qty: '2 處', amount: '−1.4 秒', clip: 1 },
+  { id: 'retake', label: '剪掉重複口白', qty: '1 處', amount: '只留後面那次', clip: 0 },
   { id: 'subs', label: '自動字幕', qty: '6 句', clip: 1 },
   { id: 'zoom', label: '慢慢放大運鏡', qty: '2 段', clip: 0 },
   { id: 'trans', label: '轉場', qty: '2 個', clip: 1 },
@@ -804,6 +841,8 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { name: '文字剪輯', note: '在逐字稿上刪掉字或句子，影片就同步剪掉那一段。' },
       { name: '雙語字幕', pro: true, note: '一鍵把字幕翻成英文，顯示在原文下方，匯出 SRT／VTT 也一併帶上。' },
       { name: '字幕對時快捷鍵', note: '按 [ ] 把字幕開始、結束設在播放頭；J／K／L 控制播放，按 ? 看全部快捷鍵。' },
+      { name: '字幕品質檢查', note: '抓出讀不完、重疊、太短、太長、字級太大畫面放不下的字幕，一鍵修正。' },
+      { name: '字幕關鍵字自動變色', note: '數字、「最」「超」「限時」等重點字詞自動上色，不用自己挑字。' },
     ],
   },
   {
@@ -813,6 +852,8 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { name: '原創音效', qty: '50 個' },
       { name: '上傳自己的音樂，自動配合影片長度' },
       { name: '音量、淡入淡出；轉場時聲音交叉淡化' },
+      { name: '配樂自動閃避人聲', note: '有人說話時配樂自動變小聲，講完再回到原本音量。' },
+      { name: '朗讀音量自動拉齊', note: '多段配音或錄音大小不一致時，一鍵拉到同一個音量。' },
       { name: '文字朗讀：台灣腔 AI 人聲與系統語音', pro: true, note: '配音會依句子自動加上對齊的字幕。' },
       { name: '錄一段約 10 秒，建立自己的 AI 聲音', pro: true },
       { name: '錄音上字幕', pro: true, note: '用麥克風直接錄一段口白，加到音訊軌；可選自動降噪，還能用瀏覽器內建語音辨識產生對齊時間的字幕。' },
@@ -829,6 +870,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { name: '片段動態：慢慢放大、縮小、特寫推近、震動', qty: '4 種' },
       { name: '美肌：磨皮、美白、紅潤', note: '4 種預設，可個別微調；主軌和疊加片段都能用。' },
       { name: '降噪：人聲更接近錄音室效果', note: '濾低頻悶響、講話停頓時壓低背景雜訊、人聲增豔，強度可調。' },
+      { name: '智能取景', note: '裁成「填滿畫面」時自動抓住畫面重點，不再永遠置中。' },
     ],
   },
   {
@@ -836,10 +878,12 @@ const GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { name: '智能混剪', pro: true, note: '一次選多支素材，AI 自動幫每支挑一段接起來：有講話的留講話段，沒講話的留畫面動態最多的一段。' },
       { name: '智能剪輯', qty: '20 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
-      { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、自動上字幕，讓你選剪輯前或剪輯後的版本。' },
+      { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、講錯重來的重複口白，自動上字幕，讓你選剪輯前或剪輯後的版本。' },
       { name: 'AI 自動剪輯', pro: true, note: '依聲音起伏和字幕內容，加上特寫、運鏡、轉場、字幕動畫和貼紙。' },
       { name: '智能口播：剪掉停頓與「嗯、啊」', pro: true },
       { name: '智能全消：去水印、去字幕', pro: true, note: '分別偵測 Logo／浮水印與燒錄字幕，模糊、馬賽克兩種方式，只處理你有權使用的影片。' },
+      { name: '開場強度檢查', note: '開場畫面太靜時提醒換成動態較強的片段。' },
+      { name: '鏡頭相似度檢查', note: '相鄰片段畫面太像時提醒，可能看不出有剪接。' },
     ],
   },
   {

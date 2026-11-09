@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Sparkles } from 'lucide-react';
 import { DEFAULT_CLIP_FILTER, FILTER_PRESETS, filterThumbnail, type ClipFilter, type FilterId } from '../../lib/filters';
 import { recommendFilters, type FilterRecommendation } from '../../lib/filterRecommend';
 import { clipAt, layoutMain } from '../../lib/timeline';
@@ -104,11 +103,9 @@ export function FilterPanel() {
       </div>
 
       {recommended.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
-          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
-            <Sparkles className="size-3.5" /> 為你推薦
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-extrabold text-ink-soft">為你推薦</div>
+          <div className="grid grid-cols-3 gap-2">
             {recommended.map((r) => {
               const active = filter.preset === r.id;
               return (

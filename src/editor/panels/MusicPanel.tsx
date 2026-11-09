@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveLocalFile } from '../../lib/localMedia';
-import { Check, Loader2, Music2, Pause, Play, Plus, Search, Sparkles, Trash2, UploadCloud } from 'lucide-react';
+import { Check, Loader2, Music2, Pause, Play, Plus, Search, Trash2, UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatTime, uid } from '../../lib/format';
 import { audioPeaks, probe } from '../../lib/media';
@@ -261,11 +261,9 @@ export function MusicPanel() {
       ) : (
         <>
           {recommended.length > 0 && (
-            <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
-              <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
-                <Sparkles className="size-3.5" /> 為你推薦
-              </div>
-              <ul className="mt-2 space-y-1.5">
+            <div className="mt-3">
+              <div className="mb-2 text-xs font-extrabold text-ink-soft">為你推薦</div>
+              <ul className="space-y-1.5">
                 {recommended.map(({ track: t, reason }) => {
                   const active = playing === t.id;
                   return (

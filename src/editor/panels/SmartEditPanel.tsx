@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Images, Loader2, Music2, RotateCcw, Sparkles, WandSparkles } from 'lucide-react';
+import { Activity, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { checkOpeningHook, swapToOpening } from '../../lib/hookCheck';
@@ -149,31 +149,36 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
         選 1 個模板直接套用，或選 2-3 個先比較結果再決定。一鍵剪掉空拍、配上字幕、花字、音樂和音效，完成後每一項都能再調整，也能一鍵復原。
       </p>
 
-      {weakOpening && (
-        <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
-          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
-            <Sparkles className="size-3.5" /> 開場有點靜
-          </div>
-          <p className="mt-1 text-[11px] leading-relaxed text-ink-soft">開場前幾秒畫面變化不大，容易被滑掉；後面有一段動態明顯更強，建議換成開場。</p>
-          <Button size="sm" className="mt-2 w-full" onClick={applyBetterOpening}>
-            換成開場
-          </Button>
-        </div>
-      )}
-
-      {similarPairs.length > 0 && (
-        <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
-          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
-            <Images className="size-3.5" /> 有 {similarPairs.length} 處銜接畫面很像
-          </div>
-          <p className="mt-1 text-[11px] leading-relaxed text-ink-soft">兩段接起來色調、畫面都很接近，可能看不太出來有剪接；可以跳過去看看要不要加轉場或換個鏡位。</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {similarPairs.map((p, i) => (
-              <button key={p.nextId} className="rounded-lg border border-brand/30 px-2 py-1 text-[11px] font-bold text-brand hover:bg-brand-soft" onClick={() => seek(p.at)}>
-                接點 {i + 1}
-              </button>
-            ))}
-          </div>
+      {(weakOpening || similarPairs.length > 0) && (
+        <div className="mt-3 divide-y divide-line rounded-xl border border-line">
+          {weakOpening && (
+            <div className="flex items-start gap-2.5 p-3">
+              <Activity className="mt-0.5 size-4 shrink-0 text-brand" />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold">開場有點靜</div>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-ink-soft">前幾秒畫面變化不大，容易被滑掉；後面有一段動態明顯更強。</p>
+                <Button size="sm" className="mt-2" onClick={applyBetterOpening}>
+                  換成開場
+                </Button>
+              </div>
+            </div>
+          )}
+          {similarPairs.length > 0 && (
+            <div className="flex items-start gap-2.5 p-3">
+              <Images className="mt-0.5 size-4 shrink-0 text-brand" />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold">有 {similarPairs.length} 處銜接畫面很像</div>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-ink-soft">兩段接起來色調、畫面都很接近，可能看不太出來有剪接。</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {similarPairs.map((p, i) => (
+                    <button key={p.nextId} className="rounded-lg border border-line px-2 py-1 text-[11px] font-bold text-ink-soft hover:border-brand/40 hover:text-brand" onClick={() => seek(p.at)}>
+                      接點 {i + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

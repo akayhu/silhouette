@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, Loader2, Volume2, VolumeX, Wand2 } from 'lucide-react';
+import { ChevronDown, Loader2, Scale, Volume2, VolumeX } from 'lucide-react';
 import type { AudioClip, MediaItem, ProjectData, TrackKey } from '../../lib/types';
 import { audioCategoryOf } from '../../lib/timeline';
 import { applyLevelMatch, matchVoiceLevels } from '../../lib/levelMatch';
@@ -175,7 +175,7 @@ export function SoundMixer() {
       </div>
       {voiceCount > 1 && (
         <Button variant="secondary" size="sm" className="mt-3 w-full" disabled={leveling} onClick={levelMatchVoices}>
-          {leveling ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
+          {leveling ? <Loader2 className="size-3.5 animate-spin" /> : <Scale className="size-3.5" />}
           {leveling ? '分析音量中…' : `朗讀音量自動拉齊（${voiceCount} 段）`}
         </Button>
       )}

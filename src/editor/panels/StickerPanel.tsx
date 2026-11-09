@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Sparkles } from 'lucide-react';
 import { uid } from '../../lib/format';
 import { STICKER_CATEGORIES, STICKERS, stickerUrl, type StickerCategory, type StickerDef } from '../../lib/stickers';
 import { recommendStickers } from '../../lib/stickerRecommend';
@@ -51,11 +50,9 @@ export function StickerPanel() {
       <p className="mt-1 text-xs text-ink-mute">原創設計，無版權問題，可用於個人與商業影片。點一下加入，會從播放頭開始顯示 3 秒。</p>
 
       {recommended.length > 0 && (
-        <div className="mt-3 rounded-2xl border border-brand/20 bg-brand-soft/20 p-3">
-          <div className="flex items-center gap-1.5 text-xs font-extrabold text-brand">
-            <Sparkles className="size-3.5" /> 為你推薦
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
+        <div className="mt-3">
+          <div className="mb-2 text-xs font-extrabold text-ink-soft">為你推薦</div>
+          <div className="grid grid-cols-3 gap-2">
             {recommended.map(({ sticker, reason }) => (
               <button
                 key={sticker.id}

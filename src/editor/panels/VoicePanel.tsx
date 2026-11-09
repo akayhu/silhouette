@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveLocalFile } from '../../lib/localMedia';
-import { AudioLines, Lightbulb, Loader2, Mic, Play, Sparkles, Square, Trash2 } from 'lucide-react';
+import { AudioLines, Info, Lightbulb, Loader2, Mic, Play, Square, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { ASR_MODELS, transcribe } from '../../lib/asr';
@@ -235,7 +235,7 @@ export function VoicePanel() {
         </label>
         {isAI ? (
           <p className="flex gap-2 rounded-xl bg-brand-soft/60 px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
-            <Sparkles className="mt-0.5 size-3.5 shrink-0 text-brand" />
+            <Info className="mt-0.5 size-3.5 shrink-0 text-brand" />
             <span>台灣腔 AI 人聲由 BreezyVoice 在這台電腦上產生，聲音最自然，但每句約需 30–60 秒，第一次使用要先載入模型。</span>
           </p>
         ) : (

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { DEFAULT_HIGHLIGHT } from '../lib/engine';
 import { captionWords } from '../lib/captions';
-import { ArrowDown, ArrowUp, AudioLines, Copy, Film, Layers, Loader2, MousePointerClick, RotateCcw, Smile, Trash2, Type, Wand2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, AudioLines, Copy, Crop, Film, Layers, Loader2, MousePointerClick, RotateCcw, Smile, Trash2, Type } from 'lucide-react';
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
 import { suggestReframeX } from '../lib/reframe';
@@ -441,7 +441,7 @@ function FrameSection({ clipId, kind = 'clip' }: { clipId: string; kind?: 'clip'
       </div>
       {canReframe && (
         <Button variant="secondary" size="sm" className="mt-3 w-full" disabled={reframing} onClick={reframe}>
-          {reframing ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
+          {reframing ? <Loader2 className="size-3.5 animate-spin" /> : <Crop className="size-3.5" />}
           {reframing ? '分析畫面中…' : '智能取景'}
         </Button>
       )}

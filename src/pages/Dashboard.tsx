@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { deleteLocalFiles } from '../lib/localMedia';
 import { Link, useNavigate } from 'react-router-dom';
-import { Clapperboard, Copy, Crown, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDownAZ, Clapperboard, Clock, Copy, Crown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatTime, relativeTime } from '../lib/format';
@@ -28,6 +28,8 @@ export default function Dashboard() {
   const [renaming, setRenaming] = useState<ProjectSummary | null>(null);
   const [deleting, setDeleting] = useState<ProjectSummary | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'updated' | 'name'>('updated');
 
   const load = () => api.projects().then((r) => setProjects(r.projects));
   useEffect(() => {
@@ -38,6 +40,13 @@ export default function Dashboard() {
       navigate('/dashboard', { replace: true });
     }
   }, []);
+
+  const visible = useMemo(() => {
+    if (!projects) return null;
+    const q = query.trim().toLowerCase();
+    const filtered = q ? projects.filter((p) => p.name.toLowerCase().includes(q)) : projects;
+    return sort === 'name' ? [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'zh-TW')) : filtered;
+  }, [projects, query, sort]);
 
   if (!user) return null;
   const { projectsThisMonth, projectLimit } = user.usage;
@@ -132,14 +141,59 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <h2 className="mt-10 text-lg font-extrabold">我的專案</h2>
-      {projects === null ? (
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-extrabold">我的專案</h2>
+        {projects !== null && projects.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-mute" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜尋專案名稱"
+                aria-label="搜尋專案名稱"
+                className="h-9 w-44 rounded-xl border border-line bg-surface pl-9 pr-8 text-sm outline-none focus:border-brand sm:w-56"
+              />
+              {query && (
+                <button onClick={() => setQuery('')} aria-label="清除搜尋" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-ink-mute hover:bg-sunken hover:text-ink">
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex rounded-xl border border-line p-0.5">
+              <button
+                onClick={() => setSort('updated')}
+                aria-pressed={sort === 'updated'}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${sort === 'updated' ? 'bg-brand-soft text-brand' : 'text-ink-mute hover:text-ink'}`}
+              >
+                <Clock className="size-3.5" /> 最近更新
+              </button>
+              <button
+                onClick={() => setSort('name')}
+                aria-pressed={sort === 'name'}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${sort === 'name' ? 'bg-brand-soft text-brand' : 'text-ink-mute hover:text-ink'}`}
+              >
+                <ArrowDownAZ className="size-3.5" /> 名稱
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      {visible === null ? (
         <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="aspect-[4/5] animate-pulse rounded-3xl bg-sunken" />
           ))}
         </div>
-      ) : projects.length === 0 ? (
+      ) : visible.length === 0 && query ? (
+        <div className="mt-4 flex flex-col items-center rounded-3xl border-2 border-dashed border-line bg-surface/60 px-6 py-16 text-center">
+          <span className="grid size-14 place-items-center rounded-2xl bg-sunken text-ink-mute">
+            <Search className="size-7" />
+          </span>
+          <span className="mt-4 text-lg font-extrabold">找不到「{query}」</span>
+          <span className="mt-1 text-sm text-ink-soft">換個關鍵字，或清除搜尋看全部專案</span>
+        </div>
+      ) : visible.length === 0 ? (
         <button onClick={openCreate} className="mt-4 flex w-full flex-col items-center rounded-3xl border-2 border-dashed border-line bg-surface/60 px-6 py-16 text-center transition hover:border-brand/50 hover:bg-brand-soft/30">
           <span className="grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand">
             <Clapperboard className="size-7" />
@@ -149,7 +203,7 @@ export default function Dashboard() {
         </button>
       ) : (
         <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {projects.map((p) => (
+          {visible.map((p) => (
             <div key={p.id} className="group relative rounded-3xl border border-line bg-surface p-2 shadow-card transition hover:-translate-y-0.5 hover:shadow-pop">
               <Link to={`/editor/${p.id}`} className="block">
                 <div className="grid aspect-[4/3] place-items-center overflow-hidden rounded-2xl bg-sunken">

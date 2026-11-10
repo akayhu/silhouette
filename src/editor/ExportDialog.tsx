@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Check, CheckCircle2, CloudUpload, Download, Film, HardDrive, Loader2, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, CloudUpload, Download, Film, HardDrive, Loader2, Trash2, Volume2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { localExports, type ExportInfo, type LocalExport, type SavedExport } from '../lib/exportStore';
 import { useAuth } from '../lib/auth';
 import { exportModeFor, exportVideo, type ExportMode, type ExportStep } from '../lib/exportVideo';
 import { supportedExportMimes } from '../lib/exportSupport';
 import { formatTime } from '../lib/format';
+import { analyzeMixLoudness, applyMixGain, type MixLoudnessResult } from '../lib/mixLoudness';
 import { DEFAULT_SETTINGS, estimateSize, needsRealtime, type ExportBitrate, type ExportFps } from '../lib/offlineExport';
 import { aspectSize } from '../lib/timeline';
 import type { ProjectData } from '../lib/types';
@@ -13,6 +14,7 @@ import { Button, Modal, ProBadge, useToast, useUpgrade } from '../components/ui'
 import { useEditor } from './store';
 import { checkCaptions, summarizeIssues } from '../lib/captionCheck';
 import { fixCaptionIssues } from './panels/CaptionCheck';
+import { ensureUnlocked } from './locks';
 
 type Quality = 720 | 1080;
 
@@ -225,6 +227,21 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const data = useEditor((s) => s.data);
   // 匯出前的字幕檢查：匯出後才發現字幕讀不完或疊在一起就要重來
   const captionIssues = useMemo(() => checkCaptions(data.captions, data.aspect), [data.captions, data.aspect]);
+  // 匯出前的整體混音音量檢查：口白、配樂、音效個別調好音量，疊在一起之後可能還是太小聲或太吵
+  const [mixLoudness, setMixLoudness] = useState<MixLoudnessResult | null>(null);
+  useEffect(() => {
+    if (duration < 0.5) return setMixLoudness(null);
+    const controller = new AbortController();
+    analyzeMixLoudness(data, duration, controller.signal).then((r) => setMixLoudness(r), () => {});
+    return () => controller.abort();
+  }, [data, duration]);
+  const applyMixGainFix = () => {
+    if (!mixLoudness || mixLoudness.suggestedGain === 1) return;
+    if (!ensureUnlocked('main', 'overlay', 'audio-music', 'audio-voice', 'audio-sfx')) return;
+    const gain = mixLoudness.suggestedGain;
+    useEditor.getState().commit((d) => applyMixGain(d, gain));
+    toast(gain > 1 ? '已調大整體音量' : '已調小整體音量', 'success');
+  };
   // undefined＝還在檢查；null＝這個瀏覽器兩種方式都不支援
   const [mode, setMode] = useState<ExportMode | null | undefined>(undefined);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -438,6 +455,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 }}
               >
                 一鍵修正
+              </button>
+            </div>
+          )}
+          {mixLoudness && mixLoudness.suggestedGain !== 1 && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-line px-3 py-2">
+              <Volume2 className="mt-0.5 size-4 shrink-0 text-brand" />
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="font-bold">整體音量偏{mixLoudness.suggestedGain > 1 ? '小' : '大'}</div>
+                <div className="mt-0.5 text-ink-mute">口白、配樂、音效混在一起後的整體音量跟建議範圍差比較多，可以一鍵調整。</div>
+              </div>
+              <button className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-brand hover:bg-brand-soft" onClick={applyMixGainFix}>
+                一鍵調整
               </button>
             </div>
           )}

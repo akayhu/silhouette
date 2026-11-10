@@ -64,6 +64,35 @@ export function Slider({ label, value, min, max, step = 1, format, onChange, onS
   );
 }
 
+/** 字幕進場動畫選項：卡片有實際播放的小動畫預覽（滑過或選中才播放），選的時候看得出效果長怎樣 */
+const ANIM_PREVIEW: Partial<Record<CaptionAnimation, string>> = { fade: 'cap-fade', pop: 'cap-pop', slide: 'cap-slide', typewriter: 'cap-sweep' };
+
+export function AnimationPicker({ value, onChange }: { value: CaptionAnimation; onChange: (v: CaptionAnimation) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      {ANIMS.map((o) => (
+        <button key={o.id} onClick={() => onChange(o.id)} data-active={value === o.id} className="cap-tile group text-center">
+          <div className={`relative flex h-11 items-center justify-center overflow-hidden rounded-lg border-2 bg-sunken transition ${value === o.id ? 'border-brand' : 'border-transparent group-hover:border-brand/40'}`}>
+            {o.id === 'karaoke' ? (
+              <span className="relative text-[13px] font-black">
+                <span className="text-ink">字幕</span>
+                <span className="cap-sweep absolute inset-0 text-brand" style={{ animationName: 'cap-sweep' }}>
+                  字幕
+                </span>
+              </span>
+            ) : (
+              <span className="cap-b text-[13px] font-black text-ink" style={ANIM_PREVIEW[o.id] ? { animationName: ANIM_PREVIEW[o.id] } : undefined}>
+                字幕
+              </span>
+            )}
+          </div>
+          <div className={`mt-1 text-[11px] font-bold ${value === o.id ? 'text-brand' : 'text-ink-soft'}`}>{o.label}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Chips<T extends string | number>({ options, value, onChange }: { options: { id: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -287,7 +316,7 @@ export function Inspector() {
         </div>
       </Section>
       <Section title="進場動畫">
-        <Chips options={ANIMS} value={s.animation} onChange={(animation) => setStyle({ animation })} />
+        <AnimationPicker value={s.animation} onChange={(animation) => setStyle({ animation })} />
         {s.animation === 'karaoke' && (
           <div className="mt-3 space-y-2">
             <ColorRow label="唸到的字" value={s.highlight ?? DEFAULT_HIGHLIGHT} onStart={checkpoint} onChange={(highlight, rec) => setStyle({ highlight }, rec)} />
@@ -573,7 +602,7 @@ function MultiInspector() {
               <Slider label="垂直位置" value={Math.round(s0.y * 100)} min={5} max={95} format={(v) => (v < 35 ? '上方' : v > 65 ? '下方' : '中間')} onStart={checkpoint} onChange={(v) => setCaps({ y: v / 100 }, false)} />
               <div>
                 <div className="mb-1.5 text-xs font-semibold text-ink-soft">進場動畫</div>
-                <Chips options={ANIMS} value={s0.animation} onChange={(animation) => setCaps({ animation })} />
+                <AnimationPicker value={s0.animation} onChange={(animation) => setCaps({ animation })} />
               </div>
               {s0.animation === 'karaoke' && (
                 <ColorRow label="唸到的字" value={s0.highlight ?? DEFAULT_HIGHLIGHT} onStart={checkpoint} onChange={(highlight, rec) => setCaps({ highlight }, rec)} />

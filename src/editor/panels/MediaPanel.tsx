@@ -78,6 +78,7 @@ export async function importMediaFile(file: File): Promise<MediaItem> {
 export function MediaPanel() {
   const projectId = useEditor((s) => s.projectId)!;
   const media = useEditor((s) => s.data.media);
+  const images = useMemo(() => media.filter((m) => m.kind === 'image'), [media]);
   const clips = useEditor((s) => s.data.clips);
   const audio = useEditor((s) => s.data.audio);
   const used = useMemo(() => new Set([...clips.map((c) => c.mediaId), ...audio.map((a) => a.mediaId)]), [clips, audio]);
@@ -249,6 +250,29 @@ export function MediaPanel() {
           <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-mute">剪掉沒有人聲的空拍、自動上字幕，完成後讓你選剪輯前或剪輯後的版本。</span>
         </span>
       </label>
+
+      {images.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-1.5 text-xs font-extrabold text-ink-soft">常用疊加圖片</div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {images.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => addToOverlay(m)}
+                className="group relative aspect-square overflow-hidden rounded-lg border border-line bg-sunken hover:border-brand/50"
+                aria-label={`疊加「${m.name}」到播放頭位置`}
+                title={`疊加「${m.name}」`}
+              >
+                {m.thumb ? <img src={m.thumb} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="m-auto size-5 text-ink-mute" />}
+                <span className="absolute inset-0 hidden items-center justify-center bg-ink/55 group-hover:flex">
+                  <Layers className="size-4 text-white" />
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-mute">點一下直接疊加到播放頭位置，適合品牌圖卡、Logo 這類常重複用的圖片。</p>
+        </div>
+      )}
 
       <div className="mt-4 space-y-2">
         {uploading.map((u) => (

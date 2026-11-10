@@ -187,6 +187,25 @@ input[type='range'] {
 @keyframes tr-double-wipe { 0%, 15% { clip-path: inset(50% 0 50% 0) } 70%, 100% { clip-path: inset(0 0 0 0) } }
 @keyframes tr-rotate3d { 0%, 15% { transform: perspective(600px) rotateY(70deg) scale(0.85); opacity: 0 } 70%, 100% { transform: none; opacity: 1 } }
 
+/* 字幕進場動畫預覽小動畫：滑過或選中時播放，跟轉場預覽同一套模式 */
+.cap-tile .cap-b,
+.cap-tile .cap-sweep {
+  animation-duration: 1.8s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-play-state: paused;
+}
+.cap-tile:hover .cap-b,
+.cap-tile:hover .cap-sweep,
+.cap-tile[data-active='true'] .cap-b,
+.cap-tile[data-active='true'] .cap-sweep {
+  animation-play-state: running;
+}
+@keyframes cap-fade { 0%, 15% { opacity: 0 } 50%, 85% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes cap-pop { 0%, 15% { transform: scale(0.5); opacity: 0 } 55% { transform: scale(1.12); opacity: 1 } 70%, 100% { transform: scale(1); opacity: 1 } }
+@keyframes cap-slide { 0%, 15% { transform: translateY(70%); opacity: 0 } 70%, 100% { transform: none; opacity: 1 } }
+@keyframes cap-sweep { 0%, 10% { clip-path: inset(0 100% 0 0) } 85%, 100% { clip-path: inset(0 0% 0 0) } }
+
 /* ---------- 行銷頁：明亮的創作者軟體官網 ---------- */
 .mk {
   font-family: var(--font-hei);

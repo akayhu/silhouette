@@ -1,4 +1,5 @@
 import { isEmphasis } from './autoEffects';
+import { suggestCoverTitle } from './coverSuggest';
 import { motionScoreAt } from './mixEdit';
 import { clipAt, layoutMain, mainDuration } from './timeline';
 import type { ProjectData } from './types';
@@ -13,6 +14,8 @@ export interface HighlightCandidate {
   start: number;
   end: number;
   score: number;
+  /** 用這段時間附近的字幕當標題建議，沒有字幕就是 null */
+  title: string | null;
 }
 
 const WINDOW_SEC = 20;
@@ -63,11 +66,11 @@ export async function findHighlights(d: Pick<ProjectData, 'clips' | 'captions' |
   scored.sort((a, b) => b.score - a.score);
 
   const minGap = WINDOW_SEC * MIN_GAP_RATIO;
-  const picked: HighlightCandidate[] = [];
+  const picked: { start: number; end: number; score: number }[] = [];
   for (const c of scored) {
     if (c.score <= 0) break;
     if (picked.every((p) => Math.abs(p.start - c.start) >= minGap)) picked.push(c);
     if (picked.length >= count) break;
   }
-  return picked.sort((a, b) => a.start - b.start);
+  return picked.sort((a, b) => a.start - b.start).map((c) => ({ ...c, title: suggestCoverTitle(d.captions, c.start) }));
 }

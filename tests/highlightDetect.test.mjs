@@ -6,17 +6,21 @@ const compile = async (file) => stripTypeScriptTypes(await readFile(new URL('../
 const url = (code) => 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
 
 // findHighlights 依賴 autoEffects.ts（isEmphasis）跟 mixEdit.ts（motionScoreAt，需要真的影片解碼），
-// 這裡只測文字／時間的評分邏輯，用空殼頂替掉兩個需要瀏覽器的模組：motionScoreAt 固定回傳 0（分數全靠字幕）
+// 這裡只測文字／時間的評分邏輯，用空殼頂替掉兩個需要瀏覽器的模組：motionScoreAt 固定回傳 0（分數全靠字幕）；
+// coverSuggest.ts 的 suggestCoverTitle 是純文字函式，編譯真的檔案（只把它依賴的 engine.ts 換成空殼）
 const format = url(await compile('format.ts'));
 const captionsUrl = url((await compile('captions.ts')).replace("from './format'", `from '${format}'`));
 const timelineUrl = url((await compile('timeline.ts')).replace("from './format'", `from '${format}'`).replace("from './captions'", `from '${captionsUrl}'`));
 const autoEffectsStub = url(`export const isEmphasis = (text) => /[!！]|哇|超|太|真的|竟然|居然|絕對|一定|必|重點|最/.test(text);`);
 const mixEditStub = url(`export async function motionScoreAt() { return 0; }`);
+const engineStub = url(`export class Engine {}`);
+const coverSuggestUrl = url((await compile('coverSuggest.ts')).replace("from './engine'", `from '${engineStub}'`));
 const mod = await import(
   url(
     (await compile('highlightDetect.ts'))
       .replace("from './autoEffects'", `from '${autoEffectsStub}'`)
       .replace("from './mixEdit'", `from '${mixEditStub}'`)
+      .replace("from './coverSuggest'", `from '${coverSuggestUrl}'`)
       .replace("from './timeline'", `from '${timelineUrl}'`),
   )
 );
@@ -46,6 +50,8 @@ test('findHighlights：字幕密度與強調詞集中的時間窗分數較高，
   assert.ok(result.length > 0, '應該找到至少一段');
   // 選中的時間窗應該落在有強調詞字幕密集的區域附近
   assert.ok(result.some((r) => r.start < 20), '前段密集強調詞的窗口應該入選');
+  // 每個候選都該有字幕當標題建議（這段範例每個窗口附近都有字幕）
+  assert.ok(result.every((r) => typeof r.title === 'string' && r.title.length > 0), '候選應該附帶標題建議');
 });
 
 test('findHighlights：入選的候選彼此時間有間隔，不會擠在一起', async () => {

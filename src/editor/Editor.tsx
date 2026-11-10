@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Clapperboard, Download, Eraser, Compass, Film, Keyboard, ListCollapse, Loader2, Mic, Moon, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, Sun, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Clapperboard, Download, Eraser, Compass, Film, Keyboard, ListCollapse, Loader2, Mic, Moon, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, Sun, Table, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
@@ -32,6 +32,7 @@ import { setCaptionEdge, ShortcutsDialog } from './Shortcuts';
 import { LAYOUT_DEFAULT, Splitter, useEditorLayout } from './Splitter';
 import { Guide, guideEnabled } from './Guide';
 import { CoverDialog } from './CoverDialog';
+import { ShotTable } from './ShotTable';
 import { AutoEditDialog } from './AutoEditDialog';
 import { useProjectPersistence } from './useProjectPersistence';
 import { NavigationWarning, PersistenceLoading, PersistenceNotice, SaveBadge } from './PersistenceUI';
@@ -65,6 +66,7 @@ export default function Editor() {
   // 首次使用引導：新專案（主軌還沒有影片）預設打開，其他工具收起來
   const [guide, setGuide] = useState(false);
   const [coverOpen, setCoverOpen] = useState(false);
+  const [shotTableOpen, setShotTableOpen] = useState(false);
   // 工具區寬度、預覽寬度、時間軸高度：拖曳分隔線調整，記在這台瀏覽器
   const [layout, setLayout] = useEditorLayout();
   const dragFrom = useRef(layout);
@@ -411,6 +413,9 @@ export default function Editor() {
           >
             {layout.theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </IconBtn>
+          <IconBtn label="鏡頭總覽表" onClick={() => setShotTableOpen(true)} disabled={!data.clips.length}>
+            <Table className="size-4" />
+          </IconBtn>
           <IconBtn label="快捷鍵 (?)" onClick={() => setShortcuts(true)}>
             <Keyboard className="size-4" />
           </IconBtn>
@@ -463,6 +468,7 @@ export default function Editor() {
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       <ShortcutsDialog open={shortcuts} onClose={() => setShortcuts(false)} />
       {coverOpen && <CoverDialog onClose={() => setCoverOpen(false)} />}
+      {shotTableOpen && <ShotTable onClose={() => setShotTableOpen(false)} seek={seek} />}
       <AutoEditDialog />
     </div>
   );

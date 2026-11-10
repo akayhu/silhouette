@@ -53,7 +53,9 @@ export function startOfMonth() {
 // 到期未續訂的專業版自動降回免費版
 // 到期就降回免費版：真正的續訂由綠界定期定額的 PeriodReturnURL 通知觸發，
 // 會在到期前延長 plan_renews_at；這裡只負責「沒有收到續訂通知」時的降級。
+// 管理者帳號永遠是專業版、不限期，不受到期日影響（也不會被降級邏輯動到）
 export function refreshPlan(user) {
+  if (user.role === 'admin') return user.plan === 'pro' ? user : { ...user, plan: 'pro' };
   if (user.plan === 'pro' && user.plan_renews_at && new Date(user.plan_renews_at) < new Date()) {
     db.prepare(`UPDATE users SET plan='free', plan_renews_at=NULL, plan_cancel_at_period_end=0 WHERE id=?`).run(user.id);
     return { ...user, plan: 'free', plan_renews_at: null, plan_cancel_at_period_end: 0 };

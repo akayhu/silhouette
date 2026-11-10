@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { db, now } from '../db.mjs';
-import { requireAuth, publicUser, grantProMonths } from '../helpers.mjs';
+import { requireAuth, publicUser, grantProMonths, refreshPlan } from '../helpers.mjs';
 import { ecpayCheckMacValue, ecpayVerifyMac, ecpayDate, ecpayPeriodAction } from '../ecpay.mjs';
 import { PRO_PRICE_TWD, APP_URL, ECPAY_MERCHANT_ID, ECPAY_HOST, ECPAY_PERIOD_MONTHS } from '../env.mjs';
 
@@ -141,7 +141,7 @@ router.post('/api/billing/cancel', requireAuth, async (req, res) => {
     }
   }
   db.prepare(`UPDATE users SET plan_cancel_at_period_end=1 WHERE id=?`).run(req.user.id);
-  res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)) });
+  res.json({ user: publicUser(refreshPlan(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id))) });
 });
 
 router.get('/api/billing/payments', requireAuth, (req, res) => {
@@ -176,7 +176,7 @@ router.post('/api/billing/promo/redeem', requireAuth, (req, res) => {
   }
   grantProMonths(req.user, promo.months, 'promo');
   db.prepare(`INSERT INTO promo_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)`).run(code, req.user.id, now());
-  res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)), months: promo.months });
+  res.json({ user: publicUser(refreshPlan(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id))), months: promo.months });
 });
 
 export default router;

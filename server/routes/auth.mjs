@@ -211,7 +211,7 @@ router.patch('/api/auth/me', requireAuth, updateMeLimiter, (req, res) => {
     if (String(req.body.newPassword).length < 8) return res.status(400).json({ error: '新密碼至少需要 8 個字元' });
     db.prepare(`UPDATE users SET password_hash=? WHERE id=?`).run(hashPassword(String(req.body.newPassword)), req.user.id);
   }
-  res.json({ user: publicUser(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id)) });
+  res.json({ user: publicUser(refreshPlan(db.prepare(`SELECT * FROM users WHERE id=?`).get(req.user.id))) });
 });
 
 // ---------- 登入裝置：使用者自己能看到有效的登入紀錄，並登出其他裝置 ----------

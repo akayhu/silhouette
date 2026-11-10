@@ -166,13 +166,17 @@ export default function Account() {
                 <div className="mt-4 flex items-center gap-3 rounded-2xl bg-coral-soft p-4">
                   <Crown className="size-6 text-coral" />
                   <div>
-                    <div className="font-bold">專業版．NT$399／月</div>
+                    <div className="font-bold">{user.role === 'admin' ? '專業版（管理者帳號）' : '專業版．NT$399／月'}</div>
                     <div className="text-sm text-ink-soft">
-                      {user.cancelAtPeriodEnd ? `已取消，將於 ${formatDate(user.planRenewsAt!)} 回到免費版` : `下次續訂：${formatDate(user.planRenewsAt!)}`}
+                      {!user.planRenewsAt
+                        ? '不限期'
+                        : user.cancelAtPeriodEnd
+                          ? `已取消，將於 ${formatDate(user.planRenewsAt)} 回到免費版`
+                          : `下次續訂：${formatDate(user.planRenewsAt)}`}
                     </div>
                   </div>
                 </div>
-                {user.cancelAtPeriodEnd ? (
+                {user.role === 'admin' ? null : user.cancelAtPeriodEnd ? (
                   <p className="mt-4 text-sm text-ink-soft">已停止續扣款，到期後可以再重新訂閱一次。</p>
                 ) : (
                   <Button variant="danger" className="mt-4" onClick={() => setConfirmCancel(true)}>

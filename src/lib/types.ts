@@ -90,6 +90,8 @@ export interface ClipTransform {
   scale: number;
   rotation: number;
   fit: 'contain' | 'cover';
+  /** 分割畫面版型用：把這個片段的畫面限制在畫布的這個矩形內（0–1 比例），避免「填滿畫面」時蓋到別的區域 */
+  clipRegion?: { x: number; y: number; w: number; h: number };
 }
 
 /** 轉場種類清單（唯一來源）：型別和首頁數字帶都從這裡算數量，不用手動對帳 */

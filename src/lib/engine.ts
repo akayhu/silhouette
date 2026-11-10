@@ -466,6 +466,7 @@ export class Engine {
     // 背景：同一畫面放大模糊，避免黑邊
     const cover = Math.max(W / sw, H / sh);
     ctx.save();
+    applyClipRegion(ctx, tf.clipRegion, W, H);
     ctx.filter = `blur(${Math.round(W / 24)}px) brightness(0.9) ${css}`;
     ctx.drawImage(el, (W - sw * cover) / 2 - 20, (H - sh * cover) / 2 - 20, sw * cover + 40, sh * cover + 40);
     ctx.filter = css || 'none';
@@ -502,6 +503,7 @@ export class Engine {
     if (isBeautyOn(o.beauty)) el = applyBeauty(el, Math.max(2, Math.round(Math.min(sw, dw))), Math.max(2, Math.round(Math.min(sh, dh))), o.beauty!);
     const fp = resolveFilter(o.filter);
     ctx.save();
+    applyClipRegion(ctx, tf.clipRegion, W, H);
     ctx.globalAlpha = o.opacity;
     ctx.translate(cx, cy);
     ctx.rotate((tf.rotation * Math.PI) / 180);
@@ -851,6 +853,14 @@ export function motionAt(motion: ClipMotion | undefined, local: number, length: 
 export function drawnRect(tf: ClipTransform, sw: number, sh: number, W: number, H: number) {
   const base = tf.fit === 'cover' ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh);
   return { cx: W / 2 + tf.x * W, cy: H / 2 + tf.y * H, dw: sw * base * tf.scale, dh: sh * base * tf.scale };
+}
+
+/** 分割畫面版型：把畫面裁剪在指定矩形內，避免「填滿畫面」時蓋到隔壁區域（來源長寬比跟區域差很多時尤其需要） */
+function applyClipRegion(ctx: CanvasRenderingContext2D, region: ClipTransform['clipRegion'], W: number, H: number) {
+  if (!region) return;
+  ctx.beginPath();
+  ctx.rect(region.x * W, region.y * H, region.w * W, region.h * H);
+  ctx.clip();
 }
 
 // ---------- 字幕與浮水印繪製 ----------

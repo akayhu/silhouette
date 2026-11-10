@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, AudioLines, Copy, Crop, Film, Layers, Loader2, Mous
 import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
 import { suggestReframeX } from '../lib/reframe';
+import { SPLIT_PRESETS, splitTransforms } from '../lib/splitLayout';
 import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, layoutMain, overlayEnd, overlayLaneCount, placeOverlayLane, removeItems, removeMainClip, transformOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipMotion, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
@@ -83,6 +84,8 @@ export function Inspector() {
   const selection = useEditor((s) => s.selection);
   const selected = useEditor((s) => s.selected);
   const data = useEditor((s) => s.data);
+  const time = useEditor((s) => s.time);
+  const toast = useToast();
   const { commit, live, checkpoint, select } = useEditor.getState();
 
   if (selected.length > 1) return <MultiInspector />;
@@ -103,6 +106,19 @@ export function Inspector() {
     if (!clip) return null;
     const m = data.media.find((x) => x.id === clip.mediaId);
     const update = (patch: Partial<typeof clip>) => live((d) => ({ ...d, clips: d.clips.map((c) => (c.id === clip.id ? { ...c, ...patch } : c)) }));
+    const overlayNow = data.overlays.find((o) => time >= o.start && time < overlayEnd(o));
+    const applySplit = (preset: (typeof SPLIT_PRESETS)[number]) => {
+      if (!overlayNow) return toast('請先把另一個素材疊加到畫面上，才能套用分割畫面版型', 'info');
+      const overlayMedia = data.media.find((x) => x.id === overlayNow.mediaId);
+      const { width: W, height: H } = aspectSize(data.aspect, 1080);
+      const { main, overlay } = splitTransforms(preset, data.aspect, { w: m?.width ?? W, h: m?.height ?? H }, { w: overlayMedia?.width ?? W, h: overlayMedia?.height ?? H });
+      commit((d) => ({
+        ...d,
+        clips: d.clips.map((c) => (c.id === clip.id ? { ...c, transform: main } : c)),
+        overlays: d.overlays.map((o) => (o.id === overlayNow.id ? { ...o, transform: overlay } : o)),
+      }));
+      toast(`已套用「${preset.name}」`, 'success');
+    };
     return (
       <div>
         <Section title="影片片段">
@@ -113,6 +129,22 @@ export function Inspector() {
           </div>
         </Section>
         <FrameSection clipId={clip.id} />
+        <Section title="分割畫面版型">
+          <div className="grid grid-cols-2 gap-1.5">
+            {SPLIT_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => applySplit(p)}
+                className="rounded-xl border-2 border-line py-2 text-xs font-bold text-ink-soft transition hover:border-brand/40 hover:text-brand"
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-mute">
+            {overlayNow ? '會同時調整這個主軌片段和目前播放頭位置的疊加片段。' : '目前播放頭沒有疊加片段，請先疊加一個素材再套用。'}
+          </p>
+        </Section>
         <Section title="動態效果">
           <Chips
             options={MOTIONS}

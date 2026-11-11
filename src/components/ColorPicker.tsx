@@ -62,6 +62,18 @@ function toHex(c: HSVA, withAlpha = true) {
   return withAlpha && c.a < 0.999 ? base + hex2(Math.round(c.a * 255)) : base;
 }
 
+/** 從 hex／rgb(a) 色碼讀出目前的不透明度（0～1）；讀不出來就當完全不透明 */
+export function colorAlpha(color: string): number {
+  return parse(color)?.a ?? 1;
+}
+
+/** 保留色相不變，只換成指定的不透明度（0～1）；用在「底色」旁的透明度滑桿，不用整個打開選色器 */
+export function withAlpha(color: string, alpha: number): string {
+  const p = parse(color);
+  if (!p) return color;
+  return toHex({ ...p, a: clamp(alpha) });
+}
+
 function useMine() {
   const [mine, setMine] = useState<string[]>(() => {
     try {

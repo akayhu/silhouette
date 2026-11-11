@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { DEFAULT_HIGHLIGHT } from '../lib/engine';
+import { captionLineCount, DEFAULT_HIGHLIGHT } from '../lib/engine';
 import { captionWords } from '../lib/captions';
 import { ArrowDown, ArrowUp, AudioLines, Copy, Crop, Film, Layers, Loader2, MousePointerClick, RotateCcw, Smile, Trash2, Type } from 'lucide-react';
 import { stickerDef, stickerUrl } from '../lib/stickers';
@@ -10,7 +10,7 @@ import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, l
 import { formatTime } from '../lib/format';
 import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipMotion, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
 import { Button, useToast } from '../components/ui';
-import { ColorPicker } from '../components/ColorPicker';
+import { colorAlpha, ColorPicker, withAlpha } from '../components/ColorPicker';
 import { useEditor } from './store';
 import { TranslationField } from './TranslationField';
 
@@ -254,6 +254,9 @@ export function Inspector() {
     record ? commit(fn) : live(fn);
   };
   const s = c.style;
+  // 行距設定只有這句實際會顯示兩行以上時才有意義：手動換行或單純文字太長自動換行都算
+  const { width: capW, height: capH } = aspectSize(data.aspect, 1080);
+  const wrapsToTwoLines = captionLineCount(c, capW, capH) >= 2;
   return (
     <div>
       <Section title="字幕內容" aside={<span className="text-[11px] text-ink-mute">{formatTime(c.start, true)} – {formatTime(c.end, true)}</span>}>
@@ -275,6 +278,17 @@ export function Inspector() {
         </select>
         <div className="mt-3 space-y-3">
           <Slider label="大小" value={s.size} min={28} max={140} onStart={checkpoint} onChange={(v) => setStyle({ size: v }, false)} />
+          {wrapsToTwoLines && (
+            <Slider
+              label="行間距"
+              value={Math.round((s.lineHeight ?? 1.28) * 100)}
+              min={80}
+              max={200}
+              format={(v) => `${v}%`}
+              onStart={checkpoint}
+              onChange={(v) => setStyle({ lineHeight: v / 100 }, false)}
+            />
+          )}
           <label className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
             <input type="checkbox" checked={s.bold} onChange={(e) => setStyle({ bold: e.target.checked })} className="accent-brand" /> 粗體
           </label>
@@ -295,6 +309,17 @@ export function Inspector() {
               ))}
               <ColorPicker value={s.background ?? '#ffffff'} onStart={checkpoint} onChange={(background, rec) => setStyle({ background }, rec)} label="底色" />
             </div>
+            {s.background && (
+              <Slider
+                label="透明度"
+                value={Math.round(colorAlpha(s.background) * 100)}
+                min={0}
+                max={100}
+                format={(v) => `${v}%`}
+                onStart={checkpoint}
+                onChange={(v) => setStyle({ background: withAlpha(s.background!, v / 100) }, false)}
+              />
+            )}
           </div>
         </div>
       </Section>
@@ -519,6 +544,9 @@ function MultiInspector() {
   const { commit, live, checkpoint, select } = useEditor.getState();
   const ids = new Set(selected.map((i) => i.id));
   const caps = data.captions.filter((c) => ids.has(c.id));
+  // 行距設定只有選到的字幕裡至少一句會顯示兩行以上時才有意義：手動換行或文字太長自動換行都算
+  const { width: capW, height: capH } = aspectSize(data.aspect, 1080);
+  const anyTwoLines = caps.some((c) => captionLineCount(c, capW, capH) >= 2);
   const auds = data.audio.filter((a) => ids.has(a.id));
   const clips = data.clips.filter((c) => ids.has(c.id));
   const stks = data.stickers.filter((st) => ids.has(st.id));
@@ -589,6 +617,17 @@ function MultiInspector() {
                 ))}
               </select>
               <Slider label="大小" value={s0.size} min={28} max={140} onStart={checkpoint} onChange={(v) => setCaps({ size: v }, false)} />
+              {anyTwoLines && (
+                <Slider
+                  label="行間距"
+                  value={Math.round((s0.lineHeight ?? 1.28) * 100)}
+                  min={80}
+                  max={200}
+                  format={(v) => `${v}%`}
+                  onStart={checkpoint}
+                  onChange={(v) => setCaps({ lineHeight: v / 100 }, false)}
+                />
+              )}
               <label className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
                 <input type="checkbox" checked={s0.bold} onChange={(e) => setCaps({ bold: e.target.checked })} className="accent-brand" /> 粗體
               </label>

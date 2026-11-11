@@ -902,7 +902,7 @@ function layoutCaption(ctx: CanvasRenderingContext2D, c: Caption, W: number, H: 
   // 最後設回原文字型，呼叫端接著畫原文
   ctx.font = captionFont(s, size);
   const lines = wrap(ctx, c.text, W * 0.86);
-  const lh = size * 1.28;
+  const lh = size * (s.lineHeight ?? 1.28);
   const mainH = lines.length * lh;
   const blockH = mainH + gap + tLines.length * tLh;
   const widest = Math.max(tWidest, ...lines.map((l) => ctx.measureText(l).width));
@@ -913,6 +913,14 @@ function layoutCaption(ctx: CanvasRenderingContext2D, c: Caption, W: number, H: 
 }
 
 let measureCtx: CanvasRenderingContext2D | null = null;
+/** 這句字幕目前會換成幾行（含文字太長自動換行，不只是手動按 Enter 的換行）；行距設定只有兩行以上才有意義 */
+export function captionLineCount(c: Caption, W: number, H: number): number {
+  measureCtx ??= document.createElement('canvas').getContext('2d')!;
+  const size = c.style.size * (Math.min(W, H) / 1080);
+  measureCtx.font = captionFont(c.style, size);
+  return wrap(measureCtx, c.text, W * 0.86).length;
+}
+
 /** 字幕在畫布上的範圍（像素）與中心點可移動的範圍（0–1），預覽拖曳用 */
 export function captionBox(c: Caption, W: number, H: number) {
   measureCtx ??= document.createElement('canvas').getContext('2d')!;

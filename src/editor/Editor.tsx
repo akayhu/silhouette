@@ -277,7 +277,7 @@ export default function Editor() {
       {tab === 'smart' && <SmartEditPanel seek={seek} />}
       {tab === 'mix' && <MixPanel />}
       {tab === 'music' && <MusicPanel />}
-      {tab === 'text' && <TextPanel seek={seek} />}
+      {tab === 'text' && <TextPanel seek={seek} onOpenVoice={() => changeTab('voice')} />}
       {tab === 'transcript' && <TranscriptPanel seek={seek} />}
       {tab === 'voice' && <VoicePanel />}
       {tab === 'sticker' && <StickerPanel />}

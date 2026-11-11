@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { AudioLines, Plus } from 'lucide-react';
 import { captionTrackKeys, defaultCaptionStyle, isLocked, newCaption } from '../../lib/timeline';
 import type { CaptionStyle, ProjectData } from '../../lib/types';
 import { applyCaptionRules, formatCaptionTime, importCaptionCues, matchesCaption, mergeCaptions, orderedCaptions, parseCaptionRules, parseSubtitles, replaceCaptionText, serializeSubtitles, shiftCaptions, splitCaptionText } from '../../lib/captions';
@@ -25,7 +25,7 @@ type Scope = 'visible' | 'selected' | 'all';
 const PAGE = 25;
 const field = 'min-w-0 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand disabled:opacity-50';
 
-export function TextPanel({ seek }: { seek: (t: number) => void }) {
+export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; onOpenVoice: () => void }) {
   const captions = useEditor((s) => s.data.captions);
   const dictionary = useEditor((s) => s.data.captionDictionary);
   const selected = useEditor((s) => s.selected);
@@ -154,6 +154,10 @@ export function TextPanel({ seek }: { seek: (t: number) => void }) {
 
   return <div className="p-4">
     <div className="flex items-center justify-between"><h2 className="text-sm font-extrabold">字幕校對</h2><button className="text-xs font-bold text-brand disabled:opacity-40" disabled={locked} onClick={() => add()}><Plus className="mr-1 inline size-3" />新增一句</button></div>
+    <button onClick={onOpenVoice} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-brand-soft/60 px-3 py-2 text-left text-xs font-bold text-ink hover:bg-brand-soft">
+      <AudioLines className="size-3.5 shrink-0 text-brand" />
+      <span className="flex-1">沒有素材也能上字幕：貼上口播稿，自動產生配音和字幕</span>
+    </button>
     <LockedBanner track={captionTrackKeys(captions)} />
     <CaptionCheck seek={seek} />
     <div className="mt-3 space-y-2">

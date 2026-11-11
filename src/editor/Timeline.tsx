@@ -260,7 +260,9 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
       setMarquee(box);
       const hits = boxes
         .filter((b) => !locked(trackOf(b.item, data)))
-        .filter((b) => b.x1 > box.left && b.x0 < box.left + box.width && b.y1 > box.top && b.y0 < box.top + box.height)
+        // 時間軸方向要整段都框到才算選到，框到一半刪除時才不會把沒框到的部分也一起刪掉；
+        // 垂直方向（跨軌道）維持碰到就算，方便一次框選好幾軌
+        .filter((b) => b.x0 >= box.left && b.x1 <= box.left + box.width && b.y1 > box.top && b.y0 < box.top + box.height)
         .map((b) => b.item);
       setSelected([...base, ...hits.filter((h) => !base.some((s) => s.id === h.id))]);
     };

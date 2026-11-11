@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '../components/Layout';
 import { ProBadge } from '../components/ui';
+import { SMART_TEMPLATES } from '../lib/templates';
 
 type Group = {
   id: string;
@@ -156,7 +157,7 @@ const GROUPS: Group[] = [
     tool: '智能剪輯',
     toolIcon: Sparkles,
     rows: [
-      { label: '智能剪輯模板', tag: '20 個', pro: true },
+      { label: '智能剪輯模板', tag: `${SMART_TEMPLATES.length} 個`, pro: true },
       { label: '智能混剪', pro: true },
       { label: '智能口播：剪掉停頓', pro: true },
       { label: '智能全消：去水印、去字幕', pro: true },
@@ -171,6 +172,7 @@ const GROUPS: Group[] = [
     steps: [
       '點右上角「匯出」，確認畫質：免費版 720p（含浮水印）、專業版 1080p（無浮水印）',
       '設定影片封面：從時間軸挑一格畫面，或上傳一張圖片，再加上封面標題',
+      '口白、配樂、音效疊在一起後整體音量太小聲或太吵時，會跳出提示，可以一鍵調整整體音量',
       '匯出完成會存進帳戶的「匯出紀錄」，之後可以隨時回來下載',
       '剪輯內容、字幕和設定會自動同步到帳戶；換裝置時重新選回原本的素材檔，就能接著剪（影片本身不會上傳到伺服器）',
     ],
@@ -180,6 +182,7 @@ const GROUPS: Group[] = [
       { label: '720p，含浮水印' },
       { label: '1080p，無浮水印', pro: true },
       { label: '封面：挑一格畫面或上傳圖片' },
+      { label: '整體混音量檢查，一鍵調整' },
       { label: '專案自動存檔同步帳戶' },
     ],
   },

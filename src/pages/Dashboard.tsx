@@ -1,14 +1,59 @@
 import { useEffect, useMemo, useState } from 'react';
 import { deleteLocalFiles } from '../lib/localMedia';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowDownAZ, Clapperboard, Clock, Copy, Crown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowDownAZ, Clapperboard, Clock, Copy, Crown, MoreHorizontal, Pencil, Plus, Search, ShoppingBag, Trash2, X } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatTime, relativeTime } from '../lib/format';
 import { isPaidPro, isTrial, trialDaysLeft, trialEnded } from '../lib/plan';
+import { upcomingShoppingMoments } from '../lib/shoppingCalendar';
 import type { Aspect, ProjectSummary } from '../lib/types';
 import { AppLayout } from '../components/Layout';
 import { Button, Field, Modal, inputClass, useToast, useUpgrade } from '../components/ui';
+
+/** 存在 localStorage 的 key 帶日期，換一個檔期（例如明年的雙11）會是新 key，不會被去年關掉的紀錄誤蓋住 */
+const dismissKey = (id: string, date: Date) => `shopping-moment-dismissed:${id}:${date.toISOString().slice(0, 10)}`;
+
+/** 蝦皮分潤這類開箱／推薦影片的檔期提示：只顯示最近的一個，關掉後這個檔期就不會再跳出來 */
+function ShoppingMomentCard() {
+  const next = useMemo(() => upcomingShoppingMoments()[0] ?? null, []);
+  const [dismissed, setDismissed] = useState(() => {
+    if (!next) return false;
+    try {
+      return localStorage.getItem(dismissKey(next.moment.id, next.date)) === '1';
+    } catch {
+      return false;
+    }
+  });
+  if (!next || dismissed) return null;
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(dismissKey(next.moment.id, next.date), '1');
+    } catch {
+      /* 無痕模式等存不了就算了，這次工作階段還是會關掉 */
+    }
+  };
+  return (
+    <div className="mt-6 flex items-start gap-3 rounded-3xl border border-line bg-surface p-5 shadow-card">
+      <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand">
+        <ShoppingBag className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-bold">
+          {next.daysUntil === 0 ? '今天就是' : `還有 ${next.daysUntil} 天`} {next.moment.name}
+          {next.approx && <span className="ml-1 text-xs font-normal text-ink-mute">（約，農曆節慶每年日期會變動）</span>}
+          ，適合拍分潤影片
+        </div>
+        <div className="mt-1.5 text-sm text-ink-soft">建議關鍵字：{next.moment.keywords.join('、')}</div>
+        <div className="mt-0.5 text-sm text-ink-soft">拍片角度：{next.moment.angle}</div>
+      </div>
+      <button onClick={dismiss} aria-label="關閉提示" className="shrink-0 rounded-lg p-1.5 text-ink-mute hover:bg-sunken hover:text-ink">
+        <X className="size-4" />
+      </button>
+    </div>
+  );
+}
 
 const aspects: { id: Aspect; label: string; sub: string; box: string }[] = [
   { id: '9:16', label: '9:16 直式', sub: 'Reels、TikTok、Shorts', box: 'h-12 w-7' },
@@ -140,6 +185,8 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      <ShoppingMomentCard />
 
       <div className="mt-10 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-extrabold">我的專案</h2>

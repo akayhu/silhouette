@@ -2,6 +2,7 @@ import { useState, type ComponentType } from 'react';
 import { AudioLines, LayoutTemplate, Palette, Scissors, Sparkles, Type, Upload } from 'lucide-react';
 import { AppLayout } from '../components/Layout';
 import { ProBadge } from '../components/ui';
+import { SMART_TEMPLATES } from '../lib/templates';
 
 type Feature = { name: string; desc: string; pro?: boolean };
 type Group = { id: string; title: string; icon: ComponentType<{ className?: string }>; intro: string; items: Feature[] };
@@ -100,7 +101,7 @@ const GROUPS: Group[] = [
     intro: '最花時間的挑片段、剪空拍、上字幕，交給 AI 先幫你做好，你再微調就好。',
     items: [
       { name: '智能混剪', desc: '一次選多支素材，AI 自動幫每支挑一段接起來：有講話的留講話段，沒講話的留畫面動態最多的一段，省去自己一支支挑的時間。', pro: true },
-      { name: '智能剪輯模板', desc: '20 個模板，一鍵套用剪空拍、上字幕、加花字、配樂和音效的完整剪輯公式。', pro: true },
+      { name: '智能剪輯模板', desc: `${SMART_TEMPLATES.length} 個模板，一鍵套用剪空拍、上字幕、加花字、配樂和音效的完整剪輯公式。`, pro: true },
       { name: '上傳後自動剪輯', desc: '影片上傳完自動幫你剪掉沒人說話的空拍、講錯重來的重複口白，上好字幕，讓你選剪輯前或剪輯後的版本。', pro: true },
       { name: 'AI 自動剪輯', desc: '依聲音起伏和字幕內容，自動加上特寫、運鏡、轉場、字幕動畫和貼紙，讓剪輯更有層次。', pro: true },
       { name: '智能口播', desc: '自動剪掉說話的停頓和「嗯、啊」之類的口誤，口播類影片最省時間的功能。', pro: true },
@@ -120,7 +121,9 @@ const GROUPS: Group[] = [
       { name: '匯出跟預覽一致', desc: '所見即所得，不會匯出結果跟編輯時看到的不一樣。' },
       { name: '影片封面', desc: '從時間軸挑一格畫面，或上傳一張圖片，加上封面標題，讓平台抓到吸睛的封面。' },
       { name: '本機剪輯', desc: '原始影片留在你的電腦，不必上傳；剪輯、算圖、匯出都在你的瀏覽器裡完成。' },
+      { name: '匯出前整體混音量檢查', desc: '口白、配樂、音效個別調好音量後，疊在一起可能還是太小聲或太吵，匯出前會提醒並可一鍵調整整體音量。' },
       { name: '專案存在帳戶裡', desc: '剪輯內容、字幕和設定會自動同步；換裝置時重新選回原本的素材檔即可接著剪。' },
+      { name: '專案搜尋與排序', desc: '專案變多了可以在「我的專案」用名稱搜尋，也能切換依最近更新或名稱排序，快速找到要剪的專案。' },
     ],
   },
 ];

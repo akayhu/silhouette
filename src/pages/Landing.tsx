@@ -15,13 +15,14 @@ import musicLibrary from '../../server/music/library.json';
 
 /**
  * 首頁：明亮、以產品為主角的軟體官網。
- * 首屏（編輯器視窗）→ AI 功能分頁 → 數字帶 → 本機剪輯 → 三步驟 → 全部功能 → 適合誰 → 方案 → 常見問題 → 紅色收尾帶。
+ * 首屏（編輯器視窗）→ 風格速覽 → AI 功能分頁 → 數字帶 → 本機剪輯 → 三步驟 → 全部功能 → 適合誰 → 方案 → 常見問題 → 紅色收尾帶。
  */
 export default function Landing() {
   return (
     <MarketingLayout>
       <StructuredData />
       <Hero />
+      <StyleShowcase />
       <AiTabs />
       <Numbers />
       <LocalFirst />
@@ -101,6 +102,75 @@ function Chip({ className, icon, text, num }: { className: string; icon: React.R
       {text}
       {num && <span className="num text-site-red">{num}</span>}
     </div>
+  );
+}
+
+// ---------- 風格速覽 ----------
+
+/** 這裡獨立宣告，避免依賴檔案後段才初始化的 photo()（module 頂層常數照執行順序初始化，提早用會是 undefined） */
+const showcasePhoto = (id: string) => `https://images.unsplash.com/photo-${id}?w=540&h=960&fit=crop&q=70&auto=format`;
+
+const SHOWCASE_STYLES: { id: string; photo: string; alt: string; text: string }[] = [
+  { id: 'food', photo: showcasePhoto('1593960548354-62d1b5c9d542'), alt: '攤販在烤架上翻烤香腸', text: '必吃美食！' },
+  { id: 'talk', photo: showcasePhoto('1478737270239-2f02b77fc618'), alt: '錄音室麥克風特寫', text: '重點來了' },
+  { id: 'hype', photo: showcasePhoto('1759674861540-afed9f86f94a'), alt: '跑者衝刺的動態殘影', text: '全力衝刺！' },
+  { id: 'cute', photo: showcasePhoto('1598875706250-21faaf804361'), alt: '吐舌微笑的黃金獵犬', text: '太可愛了吧' },
+  { id: 'travel', photo: showcasePhoto('1622932720890-15cdc9364a55'), alt: '夕陽下的海浪與沙灘', text: '美到不想走' },
+  { id: 'minimal', photo: showcasePhoto('1605187151664-9d89904d62d0'), alt: '床上的拿鐵咖啡與書', text: '慢下來' },
+  { id: 'motivate', photo: showcasePhoto('1779922811108-245a9403ef44'), alt: '登山者站在日出山頂剪影', text: '你做到了！' },
+  { id: 'story', photo: showcasePhoto('1453828423292-392a660a502f'), alt: '木箱裡的黑白老照片', text: '好久不見' },
+  { id: 'citypop', photo: showcasePhoto('1608690158878-1a96b29b455b'), alt: '夜晚霓虹燈反射在溼漉漉的街道', text: '城市不打烊' },
+  { id: 'tech', photo: showcasePhoto('1496181133206-80ce9b88a853'), alt: '桌上闔著的筆電特寫', text: '開箱啦' },
+  { id: 'kids', photo: showcasePhoto('1614655652730-7ad98f6d8d0c'), alt: '小孩躺在草地上大笑', text: '好好玩喔' },
+  { id: 'camp', photo: showcasePhoto('1470246973918-29a93221c455'), alt: '星空下森林裡發光的帳篷', text: '今晚紮營' },
+  { id: 'zenstyle', photo: showcasePhoto('1764590385590-b07c0b0d9f66'), alt: '湖邊沙灘上疊起的石頭', text: '放輕鬆' },
+  { id: 'wedding', photo: showcasePhoto('1683039676974-420cfd6625ca'), alt: '新人在綠色藤蔓前依偎對望', text: '我願意' },
+  { id: 'neonparty', photo: showcasePhoto('1630833767746-303744f1afc0'), alt: '夜店裡模糊的彩色霓虹燈光軌跡', text: '嗨起來！' },
+  { id: 'festival', photo: showcasePhoto('1603910234616-3b5f4a6be2b4'), alt: '演唱會上飄落的紫色彩帶與歡呼人群', text: '一起歡呼' },
+  { id: 'pool', photo: showcasePhoto('1591285713698-598d587de63e'), alt: '泳池邊漂浮的黃色游泳圈', text: '消暑一夏' },
+  { id: 'springbloom', photo: showcasePhoto('1538943186303-104afadcbb16'), alt: '盛開的粉色櫻花特寫', text: '花開了！' },
+  { id: 'puppyplay', photo: showcasePhoto('1761583780303-f4e89f7b2bd4'), alt: '小狗在草地上奔跑跳躍', text: '放電時間' },
+  { id: 'beachsunset', photo: showcasePhoto('1608294639728-1bdf05258600'), alt: '夕陽下沙灘上的人影剪影', text: '日落時分' },
+  { id: 'graduation', photo: showcasePhoto('1496317899792-9d7dbcd928a1'), alt: '畢業生開心拋起學士帽', text: '畢業快樂' },
+  { id: 'midnightcity', photo: showcasePhoto('1774979300738-5c8c05e1db6b'), alt: '高樓俯瞰的午夜城市燈火', text: '夜未眠' },
+];
+
+function ShowcaseCard({ s }: { s: (typeof SHOWCASE_STYLES)[number] }) {
+  const t = SMART_TEMPLATES.find((x) => x.id === s.id)!;
+  return (
+    <div className="relative aspect-[9/16] w-[150px] shrink-0 overflow-hidden rounded-2xl bg-site-ink sm:w-[172px]">
+      <img src={s.photo} alt={s.alt} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-t from-site-ink/70 via-transparent to-site-ink/35" />
+      <span className="absolute top-2.5 left-2.5 rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] font-bold text-site-ink">{t.name}</span>
+      <span className="absolute top-2.5 right-2.5 rounded-full bg-site-ink/55 px-2 py-0.5 text-[10px] font-bold text-white">示範</span>
+      <div className="absolute inset-x-0 top-[18%] flex justify-center px-2 text-center">
+        <StylePreview style={t.flower} text={s.text} size={17} />
+      </div>
+    </div>
+  );
+}
+
+function StyleShowcase() {
+  const reduced = usePrefersReducedMotion();
+  return (
+    <section className="px-4 pb-24 sm:px-8">
+      <SectionTitle title="套一款模板，風格立刻到位" sub={`${SMART_TEMPLATES.length} 款智能剪輯模板，字幕、花字、濾鏡、配樂都配好了，以下用素材庫的示範照片看看效果（非真實使用者影片）。`} />
+      {reduced ? (
+        <div className="mx-auto flex max-w-[1180px] gap-4 overflow-x-auto pb-2">
+          {SHOWCASE_STYLES.map((s) => (
+            <ShowcaseCard key={s.id} s={s} />
+          ))}
+        </div>
+      ) : (
+        <div className="mx-auto max-w-[1180px] overflow-hidden">
+          <div className="marquee-track flex w-max gap-4">
+            {[...SHOWCASE_STYLES, ...SHOWCASE_STYLES].map((s, i) => (
+              <ShowcaseCard key={`${s.id}-${i}`} s={s} />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -877,7 +947,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: 'AI 自動處理',
     items: [
       { name: '智能混剪', pro: true, note: '一次選多支素材，AI 自動幫每支挑一段接起來：有講話的留講話段，沒講話的留畫面動態最多的一段。' },
-      { name: '智能剪輯', qty: '20 個模板', pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
+      { name: '智能剪輯', qty: `${SMART_TEMPLATES.length} 個模板`, pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
       { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、講錯重來的重複口白，自動上字幕，讓你選剪輯前或剪輯後的版本。' },
       { name: 'AI 自動剪輯', pro: true, note: '依聲音起伏和字幕內容，加上特寫、運鏡、轉場、字幕動畫和貼紙。' },
       { name: '智能口播：剪掉停頓與「嗯、啊」', pro: true },
@@ -893,7 +963,9 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { name: '免費版畫質（含浮水印）', qty: '720p' },
       { name: '高畫質、無浮水印', qty: '1080p', pro: true },
       { name: '本機剪輯：原始影片留在你的電腦，不必上傳', note: '剪輯、算圖、匯出都在你的瀏覽器裡完成，影片不會傳到伺服器。' },
+      { name: '匯出前整體混音量檢查', note: '口白、配樂、音效混在一起後的整體音量跟建議範圍差比較多時會提醒，可以一鍵調整。' },
       { name: '專案存在帳戶裡', note: '剪輯內容、字幕和設定會同步到帳戶；換裝置時需重新提供素材（選回原本的影片檔即可）。' },
+      { name: '專案搜尋與排序', note: '「我的專案」可以依名稱搜尋，也能切換依最近更新或名稱排序。' },
     ],
   },
 ];

@@ -147,6 +147,24 @@ input[type='range'] {
   }
 }
 
+/* 風格速覽輪播：卡片陣列重複兩份首尾相接，往左無縫捲動，滑鼠移上去暫停方便細看 */
+@keyframes marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  animation: marquee-x 40s linear infinite;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
 /* 轉場預覽小動畫：滑過或選中時播放 */
 .tr-tile .tr-b,
 .tr-tile .tr-flash {

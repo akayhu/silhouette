@@ -14,8 +14,15 @@ import { StylePreview } from '../../components/StylePreview';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
 
 const MAX_COMPARE = 3;
+
+type Section = 'apply' | 'suggest';
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'apply', label: '套用模板' },
+  { id: 'suggest', label: '智慧建議' },
+];
 
 function summaryLines(c: SmartEditResult['counts']) {
   return [
@@ -33,6 +40,7 @@ function summaryLines(c: SmartEditResult['counts']) {
 }
 
 export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
+  const [section, setSection] = useState<Section>('apply');
   const { user } = useAuth();
   const isPro = user?.plan === 'pro';
   const upgrade = useUpgrade();
@@ -171,15 +179,13 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const lines = done ? summaryLines(done.counts) : [];
 
   return (
-    <div className="p-4">
-      <div className="flex items-center gap-2">
-        <h2 className="text-sm font-extrabold">智能剪輯</h2>
-        {!isPro && <ProBadge />}
-      </div>
-      <p className="mt-1 text-xs leading-relaxed text-ink-mute">
-        選 1 個模板直接套用，或選 2-3 個先比較結果再決定。一鍵剪掉空拍、配上字幕、花字、音樂和音效，完成後每一項都能再調整，也能一鍵復原。
-      </p>
-
+    <PanelShell>
+      <PanelNav sections={SECTIONS} value={section} onChange={setSection} />
+      <div className={panelContentClass}>
+      {section === 'suggest' && <>
+      <h2 className="text-sm font-extrabold">智慧建議</h2>
+      <p className="mt-1 text-xs leading-relaxed text-ink-mute">依畫面動態、字幕密度抓出開場強度、鏡頭相似度跟精彩片段，純訊號分析，不是真的能聽懂內容的 AI。</p>
+      {!weakOpening && !similarPairs.length && !hasClips && <p className="mt-3 rounded-xl bg-sunken p-3 text-xs text-ink-soft">主軌上還沒有影片，先加入影片再回來看建議。</p>}
       {(weakOpening || similarPairs.length > 0) && (
         <div className="mt-3 divide-y divide-line rounded-xl border border-line">
           {weakOpening && (
@@ -246,7 +252,16 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
           </div>
         </div>
       )}
+      </>}
 
+      {section === 'apply' && <>
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-extrabold">智能剪輯</h2>
+        {!isPro && <ProBadge />}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+        選 1 個模板直接套用，或選 2-3 個先比較結果再決定。一鍵剪掉空拍、配上字幕、花字、音樂和音效，完成後每一項都能再調整，也能一鍵復原。
+      </p>
       <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="模板（可多選比較）">
         {SMART_TEMPLATES.map((t) => {
           const on = selected.some((x) => x.id === t.id);
@@ -334,6 +349,8 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
         </Button>
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-ink-mute">再套用一次會換掉上一次的花字、模板配樂和音效；你自己上傳的音樂不會被動到。之後會陸續新增模板。</p>
-    </div>
+      </>}
+      </div>
+    </PanelShell>
   );
 }

@@ -12,6 +12,7 @@ import { useToast } from '../../components/ui';
 import { Chips } from '../Inspector';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
 import { SoundMixer } from './SoundMixer';
 
 // 卡片封面：沒有真實封面圖，用調色盤裡的既有顏色依 id 雜湊出固定的漸層，同一首歌永遠同一張「封面」
@@ -29,11 +30,12 @@ function coverFor(id: string) {
   return COVERS[h % COVERS.length];
 }
 
-type Tab = 'music' | 'sfx' | 'mine';
+type Tab = 'music' | 'sfx' | 'mine' | 'mixer';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'music', label: '配樂' },
   { id: 'sfx', label: '音效' },
   { id: 'mine', label: '我的音樂' },
+  { id: 'mixer', label: '聲音大小' },
 ];
 
 /** 把音樂庫的曲目加到音訊軌：同一首只建立一次素材 */
@@ -166,25 +168,16 @@ export function MusicPanel() {
   };
 
   return (
-    <div className="p-4">
-      <h2 className="text-sm font-extrabold">音樂庫</h2>
-      <p className="mt-1 text-xs text-ink-mute">無版權音樂，可免費用於個人與商業影片；也可以加入自己的音樂。</p>
-      <SoundMixer />
-
-      <div className="mt-3 grid grid-cols-3 rounded-xl bg-sunken p-0.5">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => (setTab(t.id), setMood('全部'))}
-            className={`rounded-[10px] py-1.5 text-xs font-bold transition ${tab === t.id ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'mine' ? (
-        <div className="mt-3">
+    <PanelShell>
+      <PanelNav sections={TABS} value={tab} onChange={(t) => (setTab(t), setMood('全部'))} />
+      <div className={panelContentClass}>
+      {tab === 'mixer' && <>
+        <h2 className="text-sm font-extrabold">聲音大小</h2>
+        <SoundMixer />
+      </>}
+      {tab === 'mine' && (
+        <div>
+          <h2 className="text-sm font-extrabold">我的音樂</h2>
           <button
             onClick={() => fileInput.current?.click()}
             onDragOver={(e) => (e.preventDefault(), setOver(true))}
@@ -258,8 +251,11 @@ export function MusicPanel() {
             請上傳你擁有版權或已取得授權的音樂。加入時會從播放頭開始，自動配合影片長度並淡出，之後可以在音訊軌調整。
           </p>
         </div>
-      ) : (
+      )}
+      {(tab === 'music' || tab === 'sfx') && (
         <>
+          <h2 className="text-sm font-extrabold">{tab === 'music' ? '配樂' : '音效'}</h2>
+          <p className="mt-1 text-xs text-ink-mute">無版權音樂，可免費用於個人與商業影片。</p>
           {recommended.length > 0 && (
             <div className="mt-3">
               <div className="mb-2 text-xs font-extrabold text-ink-soft">為你推薦</div>
@@ -367,7 +363,8 @@ export function MusicPanel() {
           </p>
         </>
       )}
-    </div>
+      </div>
+    </PanelShell>
   );
 }
 

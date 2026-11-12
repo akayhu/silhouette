@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, AudioLines, Clapperboard, Download, Eraser, Compass, Film, Keyboard, ListCollapse, Loader2, Mic, Moon, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, Sun, Table, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, AudioLines, Clapperboard, Download, Eraser, Compass, Film, Keyboard, Loader2, Mic, Moon, PanelRight, PanelTop, Music, Palette, Redo2, ScanFace, Smile, Sparkles, Sun, Table, TextCursorInput, Type, Undo2, WandSparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
@@ -10,7 +10,7 @@ import type { Aspect } from '../lib/types';
 import { Button, Logo, notify } from '../components/ui';
 import { useEditor } from './store';
 import { Preview } from './Preview';
-import { ToolRail, ToolTabs } from './ToolTabs';
+import { ToolTabs } from './ToolTabs';
 import { Timeline } from './Timeline';
 import { Inspector } from './Inspector';
 import { MediaPanel } from './panels/MediaPanel';
@@ -265,8 +265,6 @@ export default function Editor() {
   if (!loaded) return <PersistenceLoading persistence={persistence} />;
 
   // 編輯器各區塊；依版面模式（預覽在右側／上方）排列
-  // 工具列改成固定在左邊的直式圖示欄（rail）模式時，收合只收工具內容，圖示欄本身一直都在
-  const toolsCollapsed = layout.compactTools && !layout.toolsExpanded;
   const changeTab = (id: Tab) => {
     setTab(id);
     if (id !== 'erase') useEditor.getState().setEraseEdit(null);
@@ -289,17 +287,7 @@ export default function Editor() {
       {tab === 'erase' && <ErasePanel onCompare={(on) => engineRef.current?.setBypassErase(on)} />}
     </div>
   );
-  const toolsPanel = layout.compactTools ? (
-    <section className="flex shrink-0">
-      {/* 直式圖示欄：固定在最左邊，旁邊是目前工具的內容，可以整個收合 */}
-      <ToolRail tabs={tabs} value={tab} onChange={changeTab} expanded={layout.toolsExpanded} onToggleExpanded={() => setLayout({ toolsExpanded: !layout.toolsExpanded })} />
-      {!toolsCollapsed && (
-        <div className="flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: layout.tools }}>
-          {toolsContent}
-        </div>
-      )}
-    </section>
-  ) : (
+  const toolsPanel = (
     <section className="flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: layout.tools }}>
       {/* 工具列：放在素材區上方，橫向排列 */}
       <ToolTabs tabs={tabs} value={tab} onChange={changeTab} />
@@ -400,13 +388,6 @@ export default function Editor() {
             {layout.mode === 'top' ? <PanelRight className="size-4" /> : <PanelTop className="size-4" />}
           </IconBtn>
           <IconBtn
-            label={layout.compactTools ? '改回一排工具圖示' : '工具列改成直式圖示欄（可收合）'}
-            onClick={() => setLayout({ compactTools: !layout.compactTools })}
-            aria-pressed={layout.compactTools}
-          >
-            <ListCollapse className="size-4" />
-          </IconBtn>
-          <IconBtn
             label={layout.theme === 'dark' ? '改回淺色介面' : '改成深色介面'}
             onClick={() => setLayout({ theme: layout.theme === 'dark' ? 'light' : 'dark' })}
             aria-pressed={layout.theme === 'dark'}
@@ -434,7 +415,7 @@ export default function Editor() {
             {guide ? guidePanel : (
               <>
                 {toolsPanel}
-                {!toolsCollapsed && toolsSplit}
+                {toolsSplit}
                 {inspectorPanel}
               </>
             )}
@@ -452,7 +433,7 @@ export default function Editor() {
               {guide ? guidePanel : (
                 <>
                   {toolsPanel}
-                  {!toolsCollapsed && toolsSplit}
+                  {toolsSplit}
                   {inspectorPanel}
                 </>
               )}

@@ -14,30 +14,42 @@ import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { Chips, Slider } from '../Inspector';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
 
 type Range = [number, number];
 
+type Section = 'effects' | 'captions' | 'script' | 'bilingual' | 'cut';
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'effects', label: '剪輯' },
+  { id: 'captions', label: '字幕' },
+  { id: 'script', label: '講稿' },
+  { id: 'bilingual', label: '雙語' },
+  { id: 'cut', label: '口播' },
+];
+
 export function AIPanel() {
+  const [section, setSection] = useState<Section>('effects');
   const { user } = useAuth();
   const upgrade = useUpgrade();
   const isPro = user?.plan === 'pro';
   return (
-    <div className="divide-y divide-line">
+    <PanelShell>
+      <PanelNav sections={SECTIONS} value={section} onChange={setSection} />
+      <div className={panelContentClass}>
       {!isPro && (
-        <div className="p-4">
-          <button onClick={() => upgrade('AI 工具是專業版功能。')} className="w-full rounded-2xl border border-brand/25 bg-brand-soft/60 p-4 text-left">
-            <ProBadge />
-            <div className="mt-2 text-sm font-extrabold">升級解鎖 AI 工具</div>
-            <div className="mt-0.5 text-xs text-ink-soft">自動字幕、智能口播不限次數</div>
-          </button>
-        </div>
+        <button onClick={() => upgrade('AI 工具是專業版功能。')} className="mb-4 w-full rounded-2xl border border-brand/25 bg-brand-soft/60 p-4 text-left">
+          <ProBadge />
+          <div className="mt-2 text-sm font-extrabold">升級解鎖 AI 工具</div>
+          <div className="mt-0.5 text-xs text-ink-soft">自動字幕、智能口播不限次數</div>
+        </button>
       )}
-      <AutoEffects isPro={isPro} />
-      <AutoCaptions isPro={isPro} />
-      <ScriptSync isPro={isPro} />
-      <Bilingual isPro={isPro} />
-      <SmartCut isPro={isPro} />
-    </div>
+      {section === 'effects' && <AutoEffects isPro={isPro} />}
+      {section === 'captions' && <AutoCaptions isPro={isPro} />}
+      {section === 'script' && <ScriptSync isPro={isPro} />}
+      {section === 'bilingual' && <Bilingual isPro={isPro} />}
+      {section === 'cut' && <SmartCut isPro={isPro} />}
+      </div>
+    </PanelShell>
   );
 }
 
@@ -118,7 +130,7 @@ function AutoEffects({ isPro }: { isPro: boolean }) {
     : [];
 
   return (
-    <section className="p-4">
+    <section>
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-xl bg-brand-soft text-brand">
           <Clapperboard className="size-4" />
@@ -258,7 +270,7 @@ function AutoCaptions({ isPro }: { isPro: boolean }) {
   };
 
   return (
-    <section className="p-4">
+    <section>
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-xl bg-coral-soft text-coral">
           <Captions className="size-4" />
@@ -354,7 +366,7 @@ function Bilingual({ isPro }: { isPro: boolean }) {
   };
 
   return (
-    <section className="p-4">
+    <section>
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-xl bg-coral-soft text-coral">
           <Languages className="size-4" />
@@ -427,7 +439,7 @@ function ScriptSync({ isPro }: { isPro: boolean }) {
   };
 
   return (
-    <section className="p-4">
+    <section>
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-xl bg-coral-soft text-coral">
           <FileText className="size-4" />
@@ -514,7 +526,7 @@ function SmartCut({ isPro }: { isPro: boolean }) {
   };
 
   return (
-    <section className="p-4">
+    <section>
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-xl bg-mint-soft text-mint">
           <Scissors className="size-4" />

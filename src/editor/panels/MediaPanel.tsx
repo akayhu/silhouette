@@ -10,6 +10,14 @@ import { useAutoEdit } from '../AutoEditDialog';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 import { audioCategoryOf, DEFAULT_OVERLAY_TRANSFORM, freeOverlayLane } from '../../lib/timeline';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
+
+type Section = 'upload' | 'images' | 'library';
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'upload', label: '上傳' },
+  { id: 'images', label: '常用圖片' },
+  { id: 'library', label: '素材' },
+];
 
 export function addToTimeline(m: MediaItem) {
   if (!ensureUnlocked(m.kind === 'audio' ? `audio-${audioCategoryOf(m)}` : 'main')) return;
@@ -76,6 +84,7 @@ export async function importMediaFile(file: File): Promise<MediaItem> {
 }
 
 export function MediaPanel() {
+  const [section, setSection] = useState<Section>('upload');
   const projectId = useEditor((s) => s.projectId)!;
   const media = useEditor((s) => s.data.media);
   const images = useMemo(() => media.filter((m) => m.kind === 'image'), [media]);
@@ -176,8 +185,11 @@ export function MediaPanel() {
   };
 
   return (
-    <div className="p-4">
-      <h2 className="text-sm font-extrabold">素材庫</h2>
+    <PanelShell>
+      <PanelNav sections={SECTIONS} value={section} onChange={setSection} />
+      <div className={panelContentClass}>
+      {section === 'upload' && <>
+      <h2 className="text-sm font-extrabold">上傳素材</h2>
       <button
         onClick={() => input.current?.click()}
         onDragOver={(e) => (e.preventDefault(), setOver(true))}
@@ -250,10 +262,14 @@ export function MediaPanel() {
           <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-mute">剪掉沒有人聲的空拍、自動上字幕，完成後讓你選剪輯前或剪輯後的版本。</span>
         </span>
       </label>
+      </>}
 
-      {images.length > 0 && (
-        <div className="mt-4">
-          <div className="mb-1.5 text-xs font-extrabold text-ink-soft">常用疊加圖片</div>
+      {section === 'images' && <>
+      <h2 className="text-sm font-extrabold">常用疊加圖片</h2>
+      {images.length === 0 ? (
+        <p className="mt-3 py-6 text-center text-xs text-ink-mute">素材庫裡還沒有圖片，加進來的圖片會自動列在這裡</p>
+      ) : (
+        <div className="mt-3">
           <div className="grid grid-cols-5 gap-1.5">
             {images.map((m) => (
               <button
@@ -273,8 +289,11 @@ export function MediaPanel() {
           <p className="mt-1.5 text-[11px] leading-relaxed text-ink-mute">點一下直接疊加到播放頭位置，適合品牌圖卡、Logo 這類常重複用的圖片。</p>
         </div>
       )}
+      </>}
 
-      <div className="mt-4 space-y-2">
+      {section === 'library' && <>
+      <h2 className="text-sm font-extrabold">素材庫</h2>
+      <div className="mt-3 space-y-2">
         {uploading.map((u) => (
           <div key={u.name} className="flex items-center gap-3 rounded-xl bg-sunken/70 p-2 text-xs font-semibold text-ink-soft">
             <Loader2 className="size-4 animate-spin" /> 加入中：<span className="truncate">{u.name}</span>
@@ -321,7 +340,9 @@ export function MediaPanel() {
         ))}
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-ink-mute">按「＋」影片和圖片會接在主軌最後面，音樂會從播放頭放進音訊軌；按「疊加」會把影片或圖片疊在主軌上方（畫中畫），可以一層一層往上疊。</p>
-    </div>
+      </>}
+      </div>
+    </PanelShell>
   );
 }
 

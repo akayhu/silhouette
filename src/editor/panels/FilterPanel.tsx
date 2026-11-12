@@ -7,6 +7,13 @@ import { Button, useToast } from '../../components/ui';
 import { Slider } from '../Inspector';
 import { useEditor } from '../store';
 import { LockedBanner } from '../locks';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
+
+type Section = 'preset' | 'adjust';
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'preset', label: '濾鏡' },
+  { id: 'adjust', label: '調整' },
+];
 
 const ADJUSTMENTS: { key: keyof ClipFilter; label: string; min: number; max: number; format?: (v: number) => string }[] = [
   { key: 'brightness', label: '亮度', min: -50, max: 50 },
@@ -18,6 +25,7 @@ const ADJUSTMENTS: { key: keyof ClipFilter; label: string; min: number; max: num
 ];
 
 export function FilterPanel() {
+  const [section, setSection] = useState<Section>('preset');
   const toast = useToast();
   const data = useEditor((s) => s.data);
   const time = useEditor((s) => s.time);
@@ -51,14 +59,17 @@ export function FilterPanel() {
 
   if (!clip || !media || media.kind === 'audio') {
     return (
-      <div className="p-4">
-        <h2 className="text-sm font-extrabold">濾鏡</h2>
-        <div className="mt-4 rounded-2xl border-2 border-dashed border-line p-6 text-center text-xs leading-relaxed text-ink-soft">
-          把播放頭移到要套用的影片上，
-          <br />
-          或在時間軸點選主軌、疊加片段。
+      <PanelShell>
+        <PanelNav sections={SECTIONS} value={section} onChange={setSection} />
+        <div className={panelContentClass}>
+          <h2 className="text-sm font-extrabold">濾鏡</h2>
+          <div className="mt-4 rounded-2xl border-2 border-dashed border-line p-6 text-center text-xs leading-relaxed text-ink-soft">
+            把播放頭移到要套用的影片上，
+            <br />
+            或在時間軸點選主軌、疊加片段。
+          </div>
         </div>
-      </div>
+      </PanelShell>
     );
   }
 
@@ -87,9 +98,11 @@ export function FilterPanel() {
   const label = overlay ? `疊加第 ${overlay.lane + 1} 層` : `片段 ${placed.findIndex((c) => c.id === clip.id) + 1}`;
 
   return (
-    <div className="p-4">
-      <h2 className="text-sm font-extrabold">濾鏡</h2>
-      <p className="mt-1 text-xs text-ink-mute">原創色彩風格，無版權問題。主軌和疊加片段都能套用，也可以一鍵套用到全部。</p>
+    <PanelShell>
+      <PanelNav sections={SECTIONS} value={section} onChange={setSection} />
+      <div className={panelContentClass}>
+      <h2 className="text-sm font-extrabold">{section === 'preset' ? '濾鏡' : '調整'}</h2>
+      <p className="mt-1 text-xs text-ink-mute">{section === 'preset' ? '原創色彩風格，無版權問題。主軌和疊加片段都能套用，也可以一鍵套用到全部。' : '手動微調亮度、對比、飽和度等細節，跟上面的濾鏡疊加使用。'}</p>
 
       <LockedBanner track={track} />
 
@@ -102,6 +115,7 @@ export function FilterPanel() {
         </div>
       </div>
 
+      {section === 'preset' && <>
       {recommended.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 text-xs font-extrabold text-ink-soft">為你推薦</div>
@@ -140,10 +154,10 @@ export function FilterPanel() {
           <Slider label="濾鏡強度" value={Math.round(filter.intensity * 100)} min={0} max={100} format={(v) => `${v}%`} onStart={checkpoint} onChange={(v) => set({ intensity: v / 100 }, false)} />
         </div>
       )}
+      </>}
 
-      <div className="mt-5 border-t border-line pt-4">
-        <div className="mb-3 text-xs font-extrabold text-ink-soft">調整</div>
-        <div className="space-y-3">
+      {section === 'adjust' && (
+        <div className="mt-4 space-y-3">
           {ADJUSTMENTS.map((a) => (
             <Slider
               key={a.key}
@@ -157,7 +171,7 @@ export function FilterPanel() {
             />
           ))}
         </div>
-      </div>
+      )}
 
       <div className="mt-5 grid grid-cols-2 gap-2">
         <Button variant="secondary" size="sm" onClick={() => commit((d) => update(d, () => undefined))}>
@@ -168,6 +182,7 @@ export function FilterPanel() {
         </Button>
       </div>
       </fieldset>
-    </div>
+      </div>
+    </PanelShell>
   );
 }

@@ -6,6 +6,7 @@ import type { StickerItem } from '../../lib/types';
 import { useToast } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
 
 const DEFAULT_SECONDS = 3;
 
@@ -45,7 +46,9 @@ export function StickerPanel() {
   };
 
   return (
-    <div className="p-4">
+    <PanelShell>
+      <PanelNav sections={STICKER_CATEGORIES} value={cat} onChange={setCat} />
+      <div className={panelContentClass}>
       <h2 className="text-sm font-extrabold">貼紙</h2>
       <p className="mt-1 text-xs text-ink-mute">原創設計，無版權問題，可用於個人與商業影片。點一下加入，會從播放頭開始顯示 3 秒。</p>
 
@@ -68,18 +71,6 @@ export function StickerPanel() {
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-4 rounded-xl bg-sunken p-0.5">
-        {STICKER_CATEGORIES.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setCat(c.id)}
-            className={`rounded-[10px] py-1.5 text-xs font-bold transition ${cat === c.id ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'}`}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-
       <div className="mt-4 grid grid-cols-3 gap-2">
         {list.map((s) => (
           <button
@@ -94,6 +85,7 @@ export function StickerPanel() {
         ))}
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-ink-mute">加入後可以在右側預覽畫面直接拖曳位置，或在中間的屬性區調整大小、角度和動畫。</p>
-    </div>
+      </div>
+    </PanelShell>
   );
 }

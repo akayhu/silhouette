@@ -16,7 +16,10 @@ import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { Chips, Slider } from '../Inspector';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
 import { VoiceCloneDialog } from './VoiceCloneDialog';
+
+type Section = 'tts' | 'myvoice' | 'record' | 'captions';
 
 const LOCALE: Record<string, string> = { zh_TW: '系統語音・台灣國語', zh_CN: '系統語音・中國普通話', zh_HK: '系統語音・香港粵語' };
 
@@ -58,6 +61,7 @@ async function toMedia(url: string, name: string): Promise<MediaItem> {
 }
 
 export function VoicePanel() {
+  const [section, setSection] = useState<Section>('tts');
   const { user } = useAuth();
   const upgrade = useUpgrade();
   const toast = useToast();
@@ -199,9 +203,18 @@ export function VoicePanel() {
 
   const customVoices = voices.filter((v) => v.custom);
   const busyLabel = isAI ? progressLabel(progress) : '產生中…';
+  const sections: { id: Section; label: string }[] = [
+    { id: 'tts', label: '文字朗讀' },
+    ...(breezy ? [{ id: 'myvoice' as const, label: '我的聲音' }] : []),
+    { id: 'record', label: '錄音' },
+    { id: 'captions', label: '配音' },
+  ];
 
   return (
-    <div className="p-4">
+    <PanelShell>
+      <PanelNav sections={sections} value={section} onChange={setSection} />
+      <div className={panelContentClass}>
+      {section === 'tts' && <>
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-extrabold">文字朗讀</h2>
         {!isPro && <ProBadge />}
@@ -257,11 +270,12 @@ export function VoicePanel() {
         </Button>
       </div>
       {busy === 'preview' && isAI && <p className="mt-2 text-center text-[11px] text-ink-mute">{busyLabel}（試聽只念第一句）</p>}
+      </>}
 
-      {breezy && (
-        <div className="mt-6 rounded-2xl border border-line p-4">
+      {section === 'myvoice' && breezy && (
+        <div>
           <div className="flex items-center justify-between">
-            <div className="text-sm font-extrabold">我的聲音</div>
+            <h2 className="text-sm font-extrabold">我的聲音</h2>
             <span className="text-[11px] text-ink-mute">{customVoices.length}/10</span>
           </div>
           <p className="mt-1 text-xs text-ink-soft">錄一段 10 秒左右的朗讀，就能做出新的台灣腔 AI 人聲。</p>
@@ -284,21 +298,23 @@ export function VoicePanel() {
         </div>
       )}
 
-      <RecordCaption isPro={isPro} guard={guard} />
+      {section === 'record' && <RecordCaption isPro={isPro} guard={guard} />}
 
-      <div className="mt-4 rounded-2xl bg-sunken/70 p-4">
-        <div className="text-sm font-extrabold">字幕轉語音</div>
-        <p className="mt-1 text-xs text-ink-soft">把每一句字幕各自產生配音，對齊字幕的開始時間。</p>
-        <Button variant="secondary" size="sm" className="mt-3 w-full" onClick={captionsToVoice} disabled={!!busy || captionCount === 0}>
-          {busy === 'captions' ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin" /> {busyLabel}
-            </>
-          ) : (
-            `用目前聲音朗讀 ${captionCount} 句字幕`
-          )}
-        </Button>
-      </div>
+      {section === 'captions' && (
+        <div>
+          <h2 className="text-sm font-extrabold">字幕轉語音</h2>
+          <p className="mt-1 text-xs text-ink-soft">把每一句字幕各自產生配音，對齊字幕的開始時間。</p>
+          <Button variant="secondary" size="sm" className="mt-3 w-full" onClick={captionsToVoice} disabled={!!busy || captionCount === 0}>
+            {busy === 'captions' ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" /> {busyLabel}
+              </>
+            ) : (
+              `用目前聲音朗讀 ${captionCount} 句字幕`
+            )}
+          </Button>
+        </div>
+      )}
 
       {cloning && (
         <VoiceCloneDialog
@@ -310,7 +326,8 @@ export function VoicePanel() {
           }}
         />
       )}
-    </div>
+      </div>
+    </PanelShell>
   );
 }
 

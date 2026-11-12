@@ -7,10 +7,6 @@ export interface EditorLayout {
   timeline: number;
   /** side：預覽在右側從上到下；top：預覽在上方，時間軸橫跨整個寬度 */
   mode: 'side' | 'top';
-  /** 工具列改用下拉選單挑工具（取代一排圖示），可以收合整個工具面板 */
-  compactTools: boolean;
-  /** compactTools 開啟時，工具面板內容是否展開；關閉時只留下拉選單那一條 */
-  toolsExpanded: boolean;
   /** 編輯器介面主題：淺色（原本）或深色 */
   theme: 'light' | 'dark';
 }
@@ -21,8 +17,6 @@ export const LAYOUT_DEFAULT = (): EditorLayout => ({
   preview: Math.round(Math.min(520, Math.max(320, window.innerWidth * 0.32))),
   timeline: 300,
   mode: 'side',
-  compactTools: false,
-  toolsExpanded: true,
   theme: 'dark',
 });
 
@@ -38,8 +32,6 @@ export function clampLayout(l: EditorLayout): EditorLayout {
     preview,
     timeline,
     mode: l.mode === 'top' ? 'top' : 'side',
-    compactTools: !!l.compactTools,
-    toolsExpanded: l.toolsExpanded ?? true,
     theme: l.theme === 'dark' ? 'dark' : 'light',
   };
 }

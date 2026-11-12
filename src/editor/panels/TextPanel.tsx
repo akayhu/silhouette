@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AudioLines, Plus } from 'lucide-react';
+import { AudioLines, Plus, Search } from 'lucide-react';
 import { captionTrackKeys, defaultCaptionStyle, isLocked, newCaption } from '../../lib/timeline';
 import type { CaptionStyle, ProjectData } from '../../lib/types';
 import { applyCaptionRules, formatCaptionTime, importCaptionCues, matchesCaption, mergeCaptions, orderedCaptions, parseCaptionRules, parseSubtitles, replaceCaptionText, serializeSubtitles, shiftCaptions, splitCaptionText } from '../../lib/captions';
+import { FLOWER_STYLES } from '../../lib/flowerStyles';
+import { StylePreview } from '../../components/StylePreview';
 import { Button, Modal } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked, LockedBanner } from '../locks';
+import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
 import { CaptionRow } from './CaptionRow';
 import { CaptionCheck } from './CaptionCheck';
 
@@ -24,6 +27,14 @@ const presets: { name: string; style: Partial<CaptionStyle>; preview: React.CSSP
 type Scope = 'visible' | 'selected' | 'all';
 const PAGE = 25;
 const field = 'min-w-0 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand disabled:opacity-50';
+
+type Section = 'list' | 'dict' | 'style' | 'flower';
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'list', label: '字幕清單' },
+  { id: 'dict', label: '校正字典' },
+  { id: 'style', label: '套用樣式' },
+  { id: 'flower', label: '花字' },
+];
 
 export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; onOpenVoice: () => void }) {
   const captions = useEditor((s) => s.data.captions);
@@ -44,6 +55,8 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
   const [emphasisOn, setEmphasisOn] = useState(false);
   const [emphasisColor, setEmphasisColor] = useState('#ffd43b');
   const [rulesText, setRulesText] = useState('');
+  const [flowerSearch, setFlowerSearch] = useState('');
+  const [section, setSection] = useState<Section>('list');
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [incoming, setIncoming] = useState<ReturnType<typeof parseSubtitles> | null>(null);
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
@@ -55,6 +68,10 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
   useEffect(() => () => { readToken.current++; }, []);
   useEffect(() => setRulesText((dictionary ?? []).map((r) => `${r.from} => ${r.to}`).join('\n')), [dictionary]);
   const eligible = useMemo(() => orderedCaptions(captions.filter((c) => includeFlowers || c.role !== 'flower')), [captions, includeFlowers]);
+  const flowerResults = useMemo(() => {
+    const q = flowerSearch.trim();
+    return q ? FLOWER_STYLES.filter((f) => f.name.includes(q)) : FLOWER_STYLES;
+  }, [flowerSearch]);
   const filtered = useMemo(() => eligible.filter((c) => matchesCaption(c, find, matchCase)), [eligible, find, matchCase]);
   const checked = new Set(selected.filter((s) => s.type === 'caption').map((s) => s.id));
   const targets = scope === 'selected' ? eligible.filter((c) => checked.has(c.id)) : scope === 'all' ? eligible : filtered;
@@ -80,6 +97,13 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
     const caption = newCaption(state.time, state.time + 2, '輸入字幕文字', { ...defaultCaptionStyle(), ...style });
     state.commit((d) => ({ ...d, captions: [...d.captions, caption] })); state.select({ type: 'caption', id: caption.id });
     if (find) setFind('');
+  };
+  // 花字庫點一下：軌道上已經選了一句字幕就直接套用樣式（保留原本文字），沒有選取才新增一句
+  const applyFlower = (style: CaptionStyle) => {
+    if (selection?.type === 'caption' && !!captions.find((x) => x.id === selection.id)) {
+      if (!ensureUnlocked('caption')) return;
+      useEditor.getState().commit((d) => ({ ...d, captions: d.captions.map((x) => (x.id === selection.id ? { ...x, style } : x)) }));
+    } else add(style);
   };
   const focus = (id: string, start: number) => {
     if (!ensureUnlocked('caption')) return;
@@ -152,93 +176,134 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
     <button disabled={currentPage >= maxPage} onClick={() => setPage(currentPage + 1)} className="rounded px-2 py-1 disabled:opacity-35">下一頁</button>
   </div>;
 
-  return <div className="p-4">
-    <div className="flex items-center justify-between"><h2 className="text-sm font-extrabold">字幕校對</h2><button className="text-xs font-bold text-brand disabled:opacity-40" disabled={locked} onClick={() => add()}><Plus className="mr-1 inline size-3" />新增一句</button></div>
-    <button onClick={onOpenVoice} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-brand-soft/60 px-3 py-2 text-left text-xs font-bold text-ink hover:bg-brand-soft">
-      <AudioLines className="size-3.5 shrink-0 text-brand" />
-      <span className="flex-1">沒有素材也能上字幕：貼上口播稿，自動產生配音和字幕</span>
-    </button>
-    <LockedBanner track={captionTrackKeys(captions)} />
-    <CaptionCheck seek={seek} />
-    <div className="mt-3 space-y-2">
-      <input aria-label="搜尋字幕" placeholder="搜尋文字（純文字搜尋）" className={field} value={find} onChange={(e) => { setFind(e.target.value); setPage(0); }} />
-      <div className="flex gap-2"><input aria-label="取代文字" placeholder="取代為…（可留空）" className={field} value={replacement} onChange={(e) => setReplacement(e.target.value)} /><Button size="sm" disabled={locked || !find || !targets.length} onClick={replace}>全部取代</Button></div>
-      <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-ink-soft">
-        <label><input type="checkbox" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} className="mr-1 accent-brand" />區分英文大小寫</label>
-        <label><input type="checkbox" checked={includeFlowers} onChange={(e) => { setIncludeFlowers(e.target.checked); setPage(0); }} className="mr-1 accent-brand" />包含花字</label>
-      </div>
-      <label className="block text-[11px] text-ink-soft">批次與匯出範圍<select aria-label="字幕操作範圍" className={`${field} mt-1`} value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
-        <option value="visible">目前列表（{filtered.length} 句，含其他頁）</option><option value="selected">已勾選（{checkedEligible.size} 句）</option><option value="all">全部{includeFlowers ? '字幕與花字' : '一般字幕'}（{eligible.length} 句）</option>
-      </select></label>
-      <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={locked || reading} onClick={() => input.current?.click()}>{reading ? '讀取中…' : '匯入 SRT／VTT'}</Button><Button variant="secondary" size="sm" disabled={!targets.length} onClick={() => exportFile('srt')}>匯出 SRT</Button><Button variant="secondary" size="sm" disabled={!targets.length} onClick={() => exportFile('vtt')}>匯出 VTT</Button></div>
-      <input ref={input} type="file" accept=".srt,.vtt" className="hidden" aria-label="匯入字幕檔" onChange={(e) => { const file = e.target.files?.[0]; if (file) void readFile(file); e.target.value = ''; }} />
+  return <PanelShell>
+    <PanelNav sections={SECTIONS} value={section} onChange={setSection} />
+    <div className={panelContentClass}>
+      {section === 'list' && <>
+        <div className="flex items-center justify-between"><h2 className="text-sm font-extrabold">字幕校對</h2><button className="text-xs font-bold text-brand disabled:opacity-40" disabled={locked} onClick={() => add()}><Plus className="mr-1 inline size-3" />新增一句</button></div>
+        <button onClick={onOpenVoice} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-brand-soft/60 px-3 py-2 text-left text-xs font-bold text-ink hover:bg-brand-soft">
+          <AudioLines className="size-3.5 shrink-0 text-brand" />
+          <span className="flex-1">沒有素材也能上字幕：貼上口播稿，自動產生配音和字幕</span>
+        </button>
+        <LockedBanner track={captionTrackKeys(captions)} />
+        <CaptionCheck seek={seek} />
+        <div className="mt-3 space-y-2">
+          <input aria-label="搜尋字幕" placeholder="搜尋文字（純文字搜尋）" className={field} value={find} onChange={(e) => { setFind(e.target.value); setPage(0); }} />
+          <div className="flex gap-2"><input aria-label="取代文字" placeholder="取代為…（可留空）" className={field} value={replacement} onChange={(e) => setReplacement(e.target.value)} /><Button size="sm" disabled={locked || !find || !targets.length} onClick={replace}>全部取代</Button></div>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-ink-soft">
+            <label><input type="checkbox" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} className="mr-1 accent-brand" />區分英文大小寫</label>
+            <label><input type="checkbox" checked={includeFlowers} onChange={(e) => { setIncludeFlowers(e.target.checked); setPage(0); }} className="mr-1 accent-brand" />包含花字</label>
+          </div>
+          <label className="block text-[11px] text-ink-soft">批次與匯出範圍<select aria-label="字幕操作範圍" className={`${field} mt-1`} value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
+            <option value="visible">目前列表（{filtered.length} 句，含其他頁）</option><option value="selected">已勾選（{checkedEligible.size} 句）</option><option value="all">全部{includeFlowers ? '字幕與花字' : '一般字幕'}（{eligible.length} 句）</option>
+          </select></label>
+          <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={locked || reading} onClick={() => input.current?.click()}>{reading ? '讀取中…' : '匯入 SRT／VTT'}</Button><Button variant="secondary" size="sm" disabled={!targets.length} onClick={() => exportFile('srt')}>匯出 SRT</Button><Button variant="secondary" size="sm" disabled={!targets.length} onClick={() => exportFile('vtt')}>匯出 VTT</Button></div>
+          <input ref={input} type="file" accept=".srt,.vtt" className="hidden" aria-label="匯入字幕檔" onChange={(e) => { const file = e.target.files?.[0]; if (file) void readFile(file); e.target.value = ''; }} />
+        </div>
+        {message && <p role={message.error ? 'alert' : 'status'} className={`mt-3 rounded-lg px-2 py-2 text-xs ${message.error ? 'bg-red-50 text-red-700' : 'bg-brand-soft text-brand'}`}>{message.text}</p>}
+        <details className="mt-3 rounded-xl border border-line p-2 text-xs">
+          <summary className="cursor-pointer font-bold">批次時間與樣式・目前範圍 {targets.length} 句</summary>
+          <div className="mt-3 flex gap-2"><input type="number" step="0.1" aria-label="批次平移秒數" className={field} value={offset} onChange={(e) => setOffset(e.target.value)} /><Button size="sm" disabled={locked || !targets.length} onClick={() => apply((d) => {
+            if (!offset.trim()) throw new Error('請輸入平移秒數；正數延後，負數提前。');
+            const shifted = shiftCaptions(d.captions, targetIds, Number(offset)); return shifted === d.captions ? d : { ...d, captions: shifted };
+          }, `已平移 ${targets.length} 句；影片與音訊不變。`)}>平移秒數</Button></div>
+          <p className="mt-1 text-[10px] text-ink-mute">正數延後、負數提前；超過影片結尾會延長專案。</p>
+          <div className="mt-3 flex gap-2"><select aria-label="批次字幕樣式" className={field} value={preset} onChange={(e) => setPreset(Number(e.target.value))}>{presets.map((p, i) => <option key={p.name} value={i}>{p.name}</option>)}</select><Button size="sm" disabled={locked || !targets.length} onClick={() => apply((d) => ({ ...d, captions: d.captions.map((c) => targetIds.has(c.id) ? { ...c, style: { ...defaultCaptionStyle(), ...presets[preset].style } } : c) }), `已套用樣式至 ${targets.length} 句。`)}>套用樣式</Button></div>
+          <div className="mt-3 flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-[11px] text-ink-soft">
+              <input type="checkbox" className="accent-brand" checked={emphasisOn} onChange={(e) => setEmphasisOn(e.target.checked)} />
+              關鍵字自動變色
+            </label>
+            <input aria-label="強調色" type="color" className="h-6 w-8 rounded disabled:opacity-40" value={emphasisColor} onChange={(e) => setEmphasisColor(e.target.value)} disabled={!emphasisOn} />
+            <Button
+              size="sm"
+              disabled={locked || !targets.length}
+              onClick={() => apply(
+                (d) => ({ ...d, captions: d.captions.map((c) => (targetIds.has(c.id) ? { ...c, style: { ...c.style, emphasisColor: emphasisOn ? emphasisColor : undefined } } : c)) }),
+                emphasisOn ? `已為 ${targets.length} 句套用關鍵字變色。` : `已移除 ${targets.length} 句的關鍵字變色。`,
+              )}
+            >
+              套用
+            </Button>
+          </div>
+          <p className="mt-1 text-[10px] text-ink-mute">自動偵測數字、百分比、「最」「超」「限時」「免費」等重點字詞變色，不用自己挑字。</p>
+        </details>
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+          <button disabled={locked || !filtered.length} className="font-bold text-brand disabled:opacity-40" onClick={() => useEditor.getState().setSelected(filtered.map((c) => ({ type: 'caption', id: c.id })))}>勾選列表全部</button>
+          <button className="text-ink-soft" onClick={() => useEditor.getState().setSelected(selected.filter((s) => s.type !== 'caption'))}>取消勾選</button>
+          <button disabled={locked || checkedEligible.size < 2} className="ml-auto font-bold text-brand disabled:opacity-40" title="合併相鄰字幕；沿用第一句樣式，跨空白處也會連成同一段" onClick={merge}>合併勾選 {checkedEligible.size} 句</button>
+        </div>
+        <p className="mt-2 text-[10px] text-ink-mute">Enter 下一句・Shift+Enter 換行・⌘／Ctrl+Enter 依文字游標拆句。批次操作可復原。</p>
+        {pagination}
+        {!filtered.length ? <p className="rounded-xl bg-sunken p-3 text-xs text-ink-soft">{eligible.length ? '沒有符合搜尋條件的字幕。' : '還沒有一般字幕，可新增、匯入或使用 AI 自動字幕。'}</p> : <ul className="space-y-2">
+          {visible.map((c, index) => <CaptionRow key={c.id} caption={c} number={currentPage * PAGE + index + 1} checked={checked.has(c.id)} active={selection?.id === c.id} locked={locked}
+            inputRef={(el) => { if (el) inputs.current.set(c.id, el); else inputs.current.delete(c.id); }}
+            toggle={() => { if (ensureUnlocked('caption')) useEditor.getState().toggleSelect({ type: 'caption', id: c.id }); }}
+            focus={() => focus(c.id, c.start)} change={(text) => changeText(c.id, text)} changeTranslation={(text) => changeTranslation(c.id, text)} split={() => { split(c.id); editing.current = null; }} next={() => next(c.id)} blur={() => { editing.current = null; }} error={(text) => inform(text, true)}
+            retime={(start, end) => {
+              if (start < 0 || end <= start) throw new Error('結束時間必須晚於開始時間。');
+              apply((d) => ({ ...d, captions: d.captions.map((x) => x.id === c.id ? { ...x, start, end } : x) }));
+            }} />)}
+        </ul>}
+        {filtered.length > PAGE && pagination}
+      </>}
+      {section === 'dict' && <>
+        <h2 className="text-sm font-extrabold">人名與品牌校正字典（此專案）</h2>
+        <p className="mt-2 text-[11px] text-ink-soft">每行一筆，例如「麥克風牌子 =&gt; 正確品牌」。儲存後可一鍵校正指定範圍，不會自動修改辨識結果。</p>
+        <textarea aria-label="字幕校正字典" className={`${field} mt-2 h-24`} disabled={locked} value={rulesText} onChange={(e) => setRulesText(e.target.value)} placeholder={'錯字 => 正確文字\nMac Book => MacBook'} />
+        <div className="mt-2 flex gap-2"><Button size="sm" disabled={locked} onClick={() => apply((d) => ({ ...d, captionDictionary: parseCaptionRules(rulesText) }), '已儲存專案字典，可隨專案同步及復原。')}>儲存字典</Button>
+        <Button variant="secondary" size="sm" disabled={locked || !dictionary?.length || !targets.length} onClick={() => apply((d) => { const result = applyCaptionRules(d.captions, targetIds, d.captionDictionary ?? []); inform(`已校正 ${result.changed} 句。`); return result.captions === d.captions ? d : { ...d, captions: result.captions }; })}>套用已儲存字典</Button></div>
+      </>}
+      {section === 'style' && <>
+        <h2 className="text-sm font-extrabold">以樣式新增字幕</h2>
+        <p className="mt-2 text-[11px] text-ink-soft">點一款直接新增一句使用該樣式的字幕。</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {presets.map((p) => <button key={p.name} disabled={locked} onClick={() => add(p.style)} className="grid h-16 place-items-center rounded-xl bg-[linear-gradient(140deg,#c9d4ff,#ffd9cb)] disabled:opacity-40"><span className="text-sm font-black" style={p.preview}>{p.name}</span></button>)}
+        </div>
+      </>}
+      {section === 'flower' && <>
+        <h2 className="text-sm font-extrabold">花字庫（{FLOWER_STYLES.length} 款）</h2>
+        <p className="mt-2 text-[11px] text-ink-soft">軌道上有選取字幕時點一款直接套用；沒有選取就新增一句。重用智能剪輯模板裡的花字樣式，不是真的能聽懂內容的 AI。</p>
+        <div className="relative mt-2">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-mute" />
+          <input
+            aria-label="搜尋花字樣式"
+            placeholder="搜尋花字樣式（例如：霓虹、復古、可愛）"
+            className={`${field} pl-8`}
+            value={flowerSearch}
+            onChange={(e) => setFlowerSearch(e.target.value)}
+          />
+        </div>
+        {flowerResults.length === 0 ? (
+          <p className="mt-3 py-4 text-center text-ink-mute">找不到符合的花字樣式</p>
+        ) : (
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {flowerResults.map((f) => (
+              <button
+                key={f.id}
+                disabled={locked}
+                onClick={() => applyFlower(f.style)}
+                className="flex flex-col items-center gap-1.5 rounded-xl bg-[linear-gradient(140deg,#2a2a33,#1a1a20)] px-1 py-3 disabled:opacity-40"
+              >
+                <StylePreview style={f.style} text="花字" size={20} />
+                <span className="truncate px-1 text-[10px] font-semibold text-ink-mute">{f.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </>}
+      <Modal open={!!incoming} onClose={() => setIncoming(null)} width="max-w-lg">
+        <h2 className="text-xl font-extrabold">確認匯入字幕</h2>
+        <p className="mt-3 text-sm">找到 {incoming?.cues.length} 句，將套用預設字幕樣式。匯入後可以復原。</p>
+        {incoming?.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-ink-soft">{warning}</p>)}
+        <ul className="mt-3 space-y-2 rounded-xl bg-sunken p-3 text-xs">{incoming?.cues.slice(0, 3).map((cue, i) => <li key={i} className="whitespace-pre-wrap">{formatCaptionTime(cue.start)} — {cue.text}</li>)}</ul>
+        <div className="mt-4 space-y-2 text-sm"><label className="block"><input type="radio" name="caption-import-mode" checked={importMode === 'append'} onChange={() => setImportMode('append')} /> 追加到現有字幕</label><label className="block"><input type="radio" name="caption-import-mode" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} /> 取代一般字幕，保留花字</label></div>
+        <Button className="mt-5 w-full" disabled={locked || !incoming} onClick={() => {
+          if (!incoming || !ensureUnlocked('caption')) return;
+          apply((d) => importCaptionCues(d, incoming.cues, importMode, defaultCaptionStyle()), `已匯入 ${incoming.cues.length} 句字幕。`);
+          setIncoming(null); setFind(''); setPage(0); useEditor.getState().select(null);
+        }}>確認匯入</Button>
+      </Modal>
     </div>
-    {message && <p role={message.error ? 'alert' : 'status'} className={`mt-3 rounded-lg px-2 py-2 text-xs ${message.error ? 'bg-red-50 text-red-700' : 'bg-brand-soft text-brand'}`}>{message.text}</p>}
-    <details className="mt-3 rounded-xl border border-line p-2 text-xs">
-      <summary className="cursor-pointer font-bold">批次時間與樣式・目前範圍 {targets.length} 句</summary>
-      <div className="mt-3 flex gap-2"><input type="number" step="0.1" aria-label="批次平移秒數" className={field} value={offset} onChange={(e) => setOffset(e.target.value)} /><Button size="sm" disabled={locked || !targets.length} onClick={() => apply((d) => {
-        if (!offset.trim()) throw new Error('請輸入平移秒數；正數延後，負數提前。');
-        const shifted = shiftCaptions(d.captions, targetIds, Number(offset)); return shifted === d.captions ? d : { ...d, captions: shifted };
-      }, `已平移 ${targets.length} 句；影片與音訊不變。`)}>平移秒數</Button></div>
-      <p className="mt-1 text-[10px] text-ink-mute">正數延後、負數提前；超過影片結尾會延長專案。</p>
-      <div className="mt-3 flex gap-2"><select aria-label="批次字幕樣式" className={field} value={preset} onChange={(e) => setPreset(Number(e.target.value))}>{presets.map((p, i) => <option key={p.name} value={i}>{p.name}</option>)}</select><Button size="sm" disabled={locked || !targets.length} onClick={() => apply((d) => ({ ...d, captions: d.captions.map((c) => targetIds.has(c.id) ? { ...c, style: { ...defaultCaptionStyle(), ...presets[preset].style } } : c) }), `已套用樣式至 ${targets.length} 句。`)}>套用樣式</Button></div>
-      <div className="mt-3 flex items-center gap-2">
-        <label className="flex items-center gap-1.5 text-[11px] text-ink-soft">
-          <input type="checkbox" className="accent-brand" checked={emphasisOn} onChange={(e) => setEmphasisOn(e.target.checked)} />
-          關鍵字自動變色
-        </label>
-        <input aria-label="強調色" type="color" className="h-6 w-8 rounded disabled:opacity-40" value={emphasisColor} onChange={(e) => setEmphasisColor(e.target.value)} disabled={!emphasisOn} />
-        <Button
-          size="sm"
-          disabled={locked || !targets.length}
-          onClick={() => apply(
-            (d) => ({ ...d, captions: d.captions.map((c) => (targetIds.has(c.id) ? { ...c, style: { ...c.style, emphasisColor: emphasisOn ? emphasisColor : undefined } } : c)) }),
-            emphasisOn ? `已為 ${targets.length} 句套用關鍵字變色。` : `已移除 ${targets.length} 句的關鍵字變色。`,
-          )}
-        >
-          套用
-        </Button>
-      </div>
-      <p className="mt-1 text-[10px] text-ink-mute">自動偵測數字、百分比、「最」「超」「限時」「免費」等重點字詞變色，不用自己挑字。</p>
-    </details>
-    <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
-      <button disabled={locked || !filtered.length} className="font-bold text-brand disabled:opacity-40" onClick={() => useEditor.getState().setSelected(filtered.map((c) => ({ type: 'caption', id: c.id })))}>勾選列表全部</button>
-      <button className="text-ink-soft" onClick={() => useEditor.getState().setSelected(selected.filter((s) => s.type !== 'caption'))}>取消勾選</button>
-      <button disabled={locked || checkedEligible.size < 2} className="ml-auto font-bold text-brand disabled:opacity-40" title="合併相鄰字幕；沿用第一句樣式，跨空白處也會連成同一段" onClick={merge}>合併勾選 {checkedEligible.size} 句</button>
-    </div>
-    <p className="mt-2 text-[10px] text-ink-mute">Enter 下一句・Shift+Enter 換行・⌘／Ctrl+Enter 依文字游標拆句。批次操作可復原。</p>
-    {pagination}
-    {!filtered.length ? <p className="rounded-xl bg-sunken p-3 text-xs text-ink-soft">{eligible.length ? '沒有符合搜尋條件的字幕。' : '還沒有一般字幕，可新增、匯入或使用 AI 自動字幕。'}</p> : <ul className="space-y-2">
-      {visible.map((c, index) => <CaptionRow key={c.id} caption={c} number={currentPage * PAGE + index + 1} checked={checked.has(c.id)} active={selection?.id === c.id} locked={locked}
-        inputRef={(el) => { if (el) inputs.current.set(c.id, el); else inputs.current.delete(c.id); }}
-        toggle={() => { if (ensureUnlocked('caption')) useEditor.getState().toggleSelect({ type: 'caption', id: c.id }); }}
-        focus={() => focus(c.id, c.start)} change={(text) => changeText(c.id, text)} changeTranslation={(text) => changeTranslation(c.id, text)} split={() => { split(c.id); editing.current = null; }} next={() => next(c.id)} blur={() => { editing.current = null; }} error={(text) => inform(text, true)}
-        retime={(start, end) => {
-          if (start < 0 || end <= start) throw new Error('結束時間必須晚於開始時間。');
-          apply((d) => ({ ...d, captions: d.captions.map((x) => x.id === c.id ? { ...x, start, end } : x) }));
-        }} />)}
-    </ul>}
-    {filtered.length > PAGE && pagination}
-    <details className="mt-4 rounded-xl border border-line p-2 text-xs"><summary className="cursor-pointer font-bold">人名與品牌校正字典（此專案）</summary>
-      <p className="mt-2 text-[11px] text-ink-soft">每行一筆，例如「麥克風牌子 =&gt; 正確品牌」。儲存後可一鍵校正指定範圍，不會自動修改辨識結果。</p>
-      <textarea aria-label="字幕校正字典" className={`${field} mt-2 h-24`} disabled={locked} value={rulesText} onChange={(e) => setRulesText(e.target.value)} placeholder={'錯字 => 正確文字\nMac Book => MacBook'} />
-      <div className="mt-2 flex gap-2"><Button size="sm" disabled={locked} onClick={() => apply((d) => ({ ...d, captionDictionary: parseCaptionRules(rulesText) }), '已儲存專案字典，可隨專案同步及復原。')}>儲存字典</Button>
-      <Button variant="secondary" size="sm" disabled={locked || !dictionary?.length || !targets.length} onClick={() => apply((d) => { const result = applyCaptionRules(d.captions, targetIds, d.captionDictionary ?? []); inform(`已校正 ${result.changed} 句。`); return result.captions === d.captions ? d : { ...d, captions: result.captions }; })}>套用已儲存字典</Button></div>
-    </details>
-    <details className="mt-3 rounded-xl border border-line p-2 text-xs"><summary className="cursor-pointer font-bold">以樣式新增字幕</summary><div className="mt-2 grid grid-cols-2 gap-2">
-      {presets.map((p) => <button key={p.name} disabled={locked} onClick={() => add(p.style)} className="grid h-16 place-items-center rounded-xl bg-[linear-gradient(140deg,#c9d4ff,#ffd9cb)] disabled:opacity-40"><span className="text-sm font-black" style={p.preview}>{p.name}</span></button>)}
-    </div></details>
-    <Modal open={!!incoming} onClose={() => setIncoming(null)} width="max-w-lg">
-      <h2 className="text-xl font-extrabold">確認匯入字幕</h2>
-      <p className="mt-3 text-sm">找到 {incoming?.cues.length} 句，將套用預設字幕樣式。匯入後可以復原。</p>
-      {incoming?.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-ink-soft">{warning}</p>)}
-      <ul className="mt-3 space-y-2 rounded-xl bg-sunken p-3 text-xs">{incoming?.cues.slice(0, 3).map((cue, i) => <li key={i} className="whitespace-pre-wrap">{formatCaptionTime(cue.start)} — {cue.text}</li>)}</ul>
-      <div className="mt-4 space-y-2 text-sm"><label className="block"><input type="radio" name="caption-import-mode" checked={importMode === 'append'} onChange={() => setImportMode('append')} /> 追加到現有字幕</label><label className="block"><input type="radio" name="caption-import-mode" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} /> 取代一般字幕，保留花字</label></div>
-      <Button className="mt-5 w-full" disabled={locked || !incoming} onClick={() => {
-        if (!incoming || !ensureUnlocked('caption')) return;
-        apply((d) => importCaptionCues(d, incoming.cues, importMode, defaultCaptionStyle()), `已匯入 ${incoming.cues.length} 句字幕。`);
-        setIncoming(null); setFind(''); setPage(0); useEditor.getState().select(null);
-      }}>確認匯入</Button>
-    </Modal>
-  </div>;
+  </PanelShell>;
 }

@@ -75,7 +75,7 @@ function Hero() {
               <span className="ml-3 rounded-full bg-white px-3 py-0.5 text-[11px] text-site-mute">片刻剪趣編輯器</span>
             </div>
             <picture>
-              <source media="(max-width: 639px)" srcSet="/editor-demo-mobile.jpg" width={920} height={1690} />
+              <source media="(max-width: 639px)" srcSet="/editor-demo-mobile.jpg" width={920} height={1703} />
               <img
                 src="/editor-demo.jpg"
                 width={1440}

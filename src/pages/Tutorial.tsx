@@ -43,7 +43,7 @@ const GROUPS: Group[] = [
     icon: LayoutTemplate,
     intro: '打開一個專案後，先認識畫面的三大區塊：頂部工具列、預覽畫面、時間軸與軌道，之後學其他功能會更順。',
     steps: [
-      '頂部工具列：左邊是專案名稱（可以直接點了改）和自動儲存狀態；中間是復原／重做；右邊可以切換深色介面、預覽位置（上方或右側）、工具列顯示方式，還有畫面比例和「匯出」按鈕',
+      '頂部工具列：左邊是專案名稱（可以直接點了改）和自動儲存狀態；中間是復原／重做；右邊可以切換深色介面、預覽位置（上方或右側），還有畫面比例和「匯出」按鈕',
       '預覽畫面：下方圓形按鈕播放／暫停，可以開「參考線」顯示短影音安全框，避免重要內容被平台介面（按讚、留言）擋住；按住 ⌘／Ctrl 滾動可以縮放預覽',
       '時間軸分成 5 條軌道：字幕、貼紙、疊加、主軌（影片畫面）、音訊（音樂、人聲、音效各自獨立），每條軌道前面都有鎖定和靜音兩個按鈕',
       '點一下軌道上的片段就能選取、拖曳可以移動位置；右上角的「引導」可以切成四步驟精簡模式，熟悉後再關掉看全部工具',
@@ -83,6 +83,7 @@ const GROUPS: Group[] = [
       '點工具列「字幕」，按「AI 自動字幕」讓 AI 聽寫產生繁體中文字幕（辨識在瀏覽器裡執行，影片不會外傳）',
       '選一款字幕樣式範本，或自己調字型、大小、顏色、描邊、底色、陰影',
       '直接在預覽畫面拖曳字幕位置；選進場動畫，像是卡拉 OK 逐字亮起、打字機效果',
+      '選取一句字幕，切到「花字」分頁挑一款現成花字樣式，直接套用到選取的那句字幕',
       '要精修對時：選取字幕，按 [ 把開始設到播放頭，按 ] 設結束',
       '切到「文字剪輯」分頁，在逐字稿上刪掉字或句子，影片就同步剪掉那一段',
       '上方「品質檢查」會自動抓出讀不完、重疊、太短、太長或字級太大放不下的字幕，可以一鍵修正；數字和「最」「超」「限時」等重點字詞也能一鍵自動變色強調',
@@ -93,6 +94,7 @@ const GROUPS: Group[] = [
       { label: 'AI 自動字幕', pro: true },
       { label: '字幕樣式範本', tag: '9 款' },
       { label: '進場動畫', tag: '5 種' },
+      { label: '花字庫' },
       { label: '雙語字幕', pro: true },
       { label: '字幕品質檢查、關鍵字變色' },
     ],
@@ -308,49 +310,47 @@ function DemoPanel({ group }: { group: Group }) {
         <span className="size-2.5 rounded-full bg-mint/70" />
         <span className="ml-3 text-xs font-semibold text-ink-mute">片刻剪趣｜編輯器</span>
       </div>
-      <div className="flex">
-        <div className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-3">
-          {tools.map((t) => {
-            const isActive = t.label === group.tool;
-            return (
-              <div
-                key={t.label}
-                className={`flex w-full flex-col items-center gap-1 px-1 py-2 text-center text-[10px] font-semibold ${
-                  isActive ? 'bg-brand-soft text-brand' : 'text-ink-mute'
-                }`}
-              >
-                <t.icon className="size-4" />
-                {t.label}
-              </div>
-            );
-          })}
-        </div>
-        <div className="min-w-0 flex-1 p-4">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-ink">
-            <group.toolIcon className="size-3.5 text-brand" /> {group.tool}
-          </div>
-          <ul className="mt-3 space-y-2">
-            {group.rows.map((r) => (
-              <li key={r.label} className="flex items-center justify-between gap-2 rounded-xl bg-surface px-3 py-2.5 text-xs shadow-card">
-                <span className="flex items-center gap-1.5 font-semibold text-ink">
-                  {r.label}
-                  {r.pro && <ProBadge />}
-                </span>
-                {r.tag && <span className="shrink-0 text-ink-mute">{r.tag}</span>}
-              </li>
-            ))}
-          </ul>
-          <div className="mt-4 h-10 rounded-xl bg-surface shadow-card" aria-hidden>
-            <div className="flex h-full items-center gap-1 px-2">
-              {Array.from({ length: 14 }).map((_, i) => (
-                <span key={i} className="h-full w-1.5 shrink-0 rounded-full bg-brand/15" style={{ height: `${30 + ((i * 37) % 60)}%` }} />
-              ))}
+      <div className="flex items-center gap-1 border-b border-line bg-surface px-2 py-1.5">
+        {tools.map((t) => {
+          const isActive = t.label === group.tool;
+          return (
+            <div
+              key={t.label}
+              className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold ${
+                isActive ? 'bg-brand-soft text-brand' : 'text-ink-mute'
+              }`}
+            >
+              <t.icon className="size-3.5" />
+              {t.label}
             </div>
+          );
+        })}
+      </div>
+      <div className="min-w-0 flex-1 p-4">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-ink">
+          <group.toolIcon className="size-3.5 text-brand" /> {group.tool}
+        </div>
+        <ul className="mt-3 space-y-2">
+          {group.rows.map((r) => (
+            <li key={r.label} className="flex items-center justify-between gap-2 rounded-xl bg-surface px-3 py-2.5 text-xs shadow-card">
+              <span className="flex items-center gap-1.5 font-semibold text-ink">
+                {r.label}
+                {r.pro && <ProBadge />}
+              </span>
+              {r.tag && <span className="shrink-0 text-ink-mute">{r.tag}</span>}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 h-10 rounded-xl bg-surface shadow-card" aria-hidden>
+          <div className="flex h-full items-center gap-1 px-2">
+            {Array.from({ length: 14 }).map((_, i) => (
+              <span key={i} className="h-full w-1.5 shrink-0 rounded-full bg-brand/15" style={{ height: `${30 + ((i * 37) % 60)}%` }} />
+            ))}
           </div>
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-ink-mute">
-            <ListChecks className="size-3" /> 時間軸示意
-            <ArrowRightLeft className="ml-auto size-3" />
-          </div>
+        </div>
+        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-ink-mute">
+          <ListChecks className="size-3" /> 時間軸示意
+          <ArrowRightLeft className="ml-auto size-3" />
         </div>
       </div>
     </div>

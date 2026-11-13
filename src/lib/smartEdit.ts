@@ -2,7 +2,9 @@ import { isEmphasis, planAutoEffects, type AutoEffectPlan } from './autoEffects'
 import { DEFAULT_CLIP_FILTER, FILTER_PRESETS } from './filters';
 import { uid } from './format';
 import { captionTrackKeys, isLocked, layoutMain, mainDuration, newCaption } from './timeline';
-import type { SmartTemplate } from './templates';
+import { pickTemplate } from './autoPick';
+import { recommendMusic } from './musicRecommend';
+import { SMART_TEMPLATES, type SmartTemplate } from './templates';
 import type { AudioClip, Caption, LibraryTrack, MediaItem, ProjectData } from './types';
 
 /**
@@ -14,6 +16,10 @@ import type { AudioClip, Caption, LibraryTrack, MediaItem, ProjectData } from '.
 export interface SmartEditResult {
   data: ProjectData;
   counts: AutoEffectPlan['counts'] & { flowers: number; sfx: number; music: string | null; filter: string | null; captionStyled: number };
+  /** 實際套用的模板（一鍵自動剪輯由內容挑的） */
+  template: SmartTemplate;
+  /** 一鍵自動剪輯挑模板時命中的內容關鍵字；沒命中或不是自動挑的就是空陣列 */
+  matched: string[];
 }
 
 const SFX_VOLUME = 0.7;
@@ -27,20 +33,42 @@ function flowerText(text: string) {
   return chars.length > 9 ? chars.slice(0, 9).join('') : t;
 }
 
+/**
+ * tplOrAuto 傳 'auto'：先剪空拍、剪掉講錯重講、辨識字幕，再依字幕內容挑模板，
+ * 配樂也改用內容比對（不是模板固定的那首）。
+ */
 export async function runSmartEdit(
   input: ProjectData,
-  tpl: SmartTemplate,
+  tplOrAuto: SmartTemplate | 'auto',
   library: LibraryTrack[],
   opts: { regenerateCaptions: boolean },
   onProgress?: (text: string) => void,
 ): Promise<SmartEditResult> {
-  // 1. 剪空拍、上字幕、特寫、轉場、字幕動畫、貼紙
+  const auto = tplOrAuto === 'auto';
+  const needSubs = opts.regenerateCaptions || input.captions.filter((c) => c.role !== 'flower').length === 0;
+  let working = input;
+  let tpl: SmartTemplate;
+  let matched: string[] = [];
+  let pre: AutoEffectPlan['counts'] | null = null;
+  if (auto) {
+    // 自動挑模板要先有字幕內容：這一輪只剪空拍、剪口誤與重複口白、辨識字幕（最花時間的語音辨識只跑一次）
+    const first = await planAutoEffects(input, { intensity: 'normal', cut: true, subtitles: needSubs, motion: false, transitions: false, captions: false, stickers: false }, onProgress);
+    working = first.data;
+    pre = first.counts;
+    const picked = pickTemplate(working.captions, SMART_TEMPLATES);
+    tpl = picked.template;
+    matched = picked.matched;
+    onProgress?.(`挑選模板「${tpl.name}」`);
+  } else {
+    tpl = tplOrAuto;
+  }
+  // 1. 剪空拍、上字幕、特寫、轉場、字幕動畫、貼紙（自動模式前面已經剪好、辨識好了）
   const plan = await planAutoEffects(
-    input,
+    working,
     {
       intensity: tpl.intensity,
-      cut: true,
-      subtitles: opts.regenerateCaptions || input.captions.filter((c) => c.role !== 'flower').length === 0,
+      cut: !pre,
+      subtitles: !pre && needSubs,
       motion: true,
       transitions: true,
       captions: true,
@@ -50,6 +78,11 @@ export async function runSmartEdit(
   );
   let d = plan.data;
   const counts: SmartEditResult['counts'] = { ...plan.counts, flowers: 0, sfx: 0, music: null, filter: null, captionStyled: 0 };
+  if (pre) {
+    counts.cuts = pre.cuts;
+    counts.removed = pre.removed;
+    counts.subtitles = pre.subtitles;
+  }
   // 字幕依重疊分成好幾列時，只要有任何一列被鎖定就整個不動，避免套用模板蓋過使用者鎖定某一列的用意
   const captionOpen = !captionTrackKeys(d.captions).some((t) => isLocked(d, t));
   // 配樂、音效分成獨立軌道；任一軌鎖定就先不動音訊，避免只套用一半
@@ -112,7 +145,8 @@ export async function runSmartEdit(
       return m;
     };
     const total = mainDuration(d.clips);
-    const song = library.find((t) => t.id === tpl.music);
+    // 自動模式：配樂依字幕內容與語速比對挑；沒有合適的才用模板預設那首
+    const song = (auto ? recommendMusic(d, library, 1)[0]?.track : undefined) ?? library.find((t) => t.id === tpl.music);
     if (song && total > 0.5) {
       const m = mediaFor(song);
       // 影片比曲子長就接著重播
@@ -144,5 +178,5 @@ export async function runSmartEdit(
     d = { ...d, media, audio };
   }
 
-  return { data: d, counts };
+  return { data: d, counts, template: tpl, matched };
 }

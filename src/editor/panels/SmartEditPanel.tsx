@@ -52,7 +52,7 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const [selected, setSelected] = useState<SmartTemplate[]>([SMART_TEMPLATES[0]]);
   const [regen, setRegen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [done, setDone] = useState<{ tpl: SmartTemplate; counts: SmartEditResult['counts'] } | null>(null);
+  const [done, setDone] = useState<{ tpl: SmartTemplate; counts: SmartEditResult['counts']; auto?: string[] } | null>(null);
   // 選 2-3 個模板時，先把每個模板實際跑過一次（真正的剪輯結果，不是猜的），
   // 列出來比較之後再選一個套用；只選 1 個就跟以前一樣直接套用，不用多一次確認
   const [candidates, setCandidates] = useState<{ tpl: SmartTemplate; result: SmartEditResult }[] | null>(null);
@@ -128,16 +128,34 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
     });
   };
 
-  const applyResult = (tpl: SmartTemplate, result: SmartEditResult, base: ProjectData) => {
+  const applyResult = (tpl: SmartTemplate, result: SmartEditResult, base: ProjectData, auto?: string[]) => {
     // 分析期間又改了專案就不套用，避免蓋掉修改
     if (useEditor.getState().data !== base) {
       toast('剪輯期間專案有變動，請再試一次', 'info');
       return;
     }
     useEditor.getState().commit(() => result.data);
-    setDone({ tpl, counts: result.counts });
+    setDone({ tpl, counts: result.counts, auto });
     setCandidates(null);
-    toast(`已套用「${tpl.name}」模板`, 'success');
+    toast(auto ? `已一鍵自動剪輯，挑了「${tpl.name}」模板` : `已套用「${tpl.name}」模板`, 'success');
+  };
+
+  // 一鍵自動剪輯：不用選模板，剪空拍、剪掉講錯重講、上字幕，依內容挑模板，花字、配樂、音效一次配好
+  const runAuto = async () => {
+    if (!isPro) return upgrade('一鍵自動剪輯是專業版功能，剪輯、字幕、花字、配樂和音效一次完成。');
+    const base = useEditor.getState().data;
+    if (!base.clips.length) return toast('主軌上還沒有影片', 'error');
+    setDone(null);
+    setCandidates(null);
+    try {
+      setStatus('分析影片內容');
+      const result = await runSmartEdit(base, 'auto', library, { regenerateCaptions: regen }, setStatus);
+      applyResult(result.template, result, base, result.matched);
+    } catch (e) {
+      toast('一鍵自動剪輯失敗：' + (e as Error).message, 'error');
+    } finally {
+      setStatus(null);
+    }
   };
 
   const run = async () => {
@@ -259,8 +277,18 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
         <h2 className="text-sm font-extrabold">智能剪輯</h2>
         {!isPro && <ProBadge />}
       </div>
-      <p className="mt-1 text-xs leading-relaxed text-ink-mute">
-        選 1 個模板直接套用，或選 2-3 個先比較結果再決定。一鍵剪掉空拍、配上字幕、花字、音樂和音效，完成後每一項都能再調整，也能一鍵復原。
+      <div className="mt-3 rounded-2xl border border-brand/25 bg-brand-soft/50 p-3">
+        <div className="text-sm font-extrabold text-brand">一鍵自動剪輯</div>
+        <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+          不用選模板：自動剪掉空拍和「嗯、啊」、講錯重講只留後面那次，辨識字幕，依內容挑模板，重點句做成花字，音樂音效一起配好。
+        </p>
+        <Button className="mt-2.5 w-full" onClick={runAuto} disabled={!!status || !hasClips}>
+          {status ? <Loader2 className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}
+          {status ?? (!hasClips ? '先把影片加到主軌' : '一鍵自動剪輯')}
+        </Button>
+      </div>
+      <p className="mt-4 text-xs leading-relaxed text-ink-mute">
+        想自己挑風格？選 1 個模板直接套用，或選 2-3 個先比較結果再決定。完成後每一項都能再調整，也能一鍵復原。
       </p>
       <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="模板（可多選比較）">
         {SMART_TEMPLATES.map((t) => {
@@ -327,7 +355,8 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
         </div>
       ) : done ? (
         <div className="mt-4 rounded-2xl bg-brand-soft/60 p-3">
-          <div className="text-sm font-extrabold text-brand">已套用「{done.tpl.name}」</div>
+          <div className="text-sm font-extrabold text-brand">{done.auto ? `一鍵自動剪輯完成，挑了「${done.tpl.name}」` : `已套用「${done.tpl.name}」`}</div>
+          {done.auto && <p className="mt-1 text-[11px] text-ink-mute">{done.auto.length ? `依內容關鍵字：${done.auto.slice(0, 4).join('、')}` : '內容沒有明顯類型，用最通用的口播風格'}；配樂也是依字幕內容與語速挑的。</p>}
           <ul className="mt-1.5 space-y-0.5 text-xs text-ink-soft">
             {lines.map((l) => (
               <li key={l}>・{l}</li>

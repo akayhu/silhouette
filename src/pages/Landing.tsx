@@ -178,6 +178,13 @@ function StyleShowcase() {
 
 const AI_TABS = [
   {
+    id: 'oneclick',
+    label: '一鍵自動剪輯',
+    title: '一個按鈕，從粗剪到配樂全部做好',
+    body: '不用先選模板：自動剪掉空拍和「嗯、啊」，講錯重講的地方只留後面那次，辨識繁體中文字幕，再依內容挑出最像的模板，把重點句做成花字，配樂和音效也依內容與語速一起配好。每一項之後都能再調整，也能一鍵復原。',
+    points: ['剪空拍、剪講錯重講', '依內容自動挑模板與花字', '配樂、音效自動配好'],
+  },
+  {
     id: 'mix',
     label: '智能混剪',
     title: '一次丟多支素材，AI 幫你接好',
@@ -229,7 +236,7 @@ const AI_TABS = [
 ] as const;
 
 export function AiTabs() {
-  const [tab, setTab] = useState<(typeof AI_TABS)[number]['id']>('auto');
+  const [tab, setTab] = useState<(typeof AI_TABS)[number]['id']>('oneclick');
   const t = AI_TABS.find((x) => x.id === tab)!;
   return (
     <section id="ai" className="scroll-mt-16 bg-site-band px-4 py-24 sm:px-8">
@@ -271,7 +278,7 @@ export function AiTabs() {
           </div>
           <div className="min-w-0">
             {tab === 'mix' && <MixMock />}
-            {tab === 'auto' && <EditDemo />}
+            {(tab === 'oneclick' || tab === 'auto') && <EditDemo />}
             {tab === 'subs' && <SubsMock />}
             {tab === 'text' && <TranscriptMock />}
             {tab === 'tpl' && <TemplatesMock />}
@@ -947,6 +954,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: 'AI 自動處理',
     items: [
+      { name: '一鍵自動剪輯', pro: true, note: '不用選模板：剪空拍、剪掉講錯重講、辨識字幕，依內容挑模板，花字、配樂、音效一次配好，可一鍵復原。' },
       { name: '智能混剪', pro: true, note: '一次選多支素材，AI 自動幫每支挑一段接起來：有講話的留講話段，沒講話的留畫面動態最多的一段。' },
       { name: '智能剪輯', qty: `${SMART_TEMPLATES.length} 個模板`, pro: true, note: '一鍵剪空拍、上字幕、花字、配樂、音效和濾鏡。' },
       { name: '上傳後自動剪輯', pro: true, note: '剪掉沒人說話的空拍、講錯重來的重複口白，自動上字幕，讓你選剪輯前或剪輯後的版本。' },

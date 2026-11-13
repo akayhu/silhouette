@@ -27,6 +27,8 @@ export interface ExportOptions extends ExportReporter {
   bitrate?: ExportBitrate;
   /** 每秒格數，預設 30 */
   fps?: ExportFps;
+  /** 為了壓進檔案大小上限額外限制的畫面位元率（見 planTargetSize） */
+  capBps?: number;
   watermark: boolean;
   test?: boolean;
 }
@@ -67,8 +69,8 @@ export interface ExportResult {
 }
 
 /** 這個專案在這個瀏覽器會用哪種方式匯出（給匯出視窗顯示說明） */
-function settingsOf(options: Pick<ExportOptions, 'quality' | 'bitrate' | 'fps'>): ExportSettings {
-  return { quality: options.quality, bitrate: options.bitrate ?? DEFAULT_SETTINGS.bitrate, fps: options.fps ?? DEFAULT_SETTINGS.fps };
+function settingsOf(options: Pick<ExportOptions, 'quality' | 'bitrate' | 'fps' | 'capBps'>): ExportSettings {
+  return { quality: options.quality, bitrate: options.bitrate ?? DEFAULT_SETTINGS.bitrate, fps: options.fps ?? DEFAULT_SETTINGS.fps, capBps: options.capBps };
 }
 
 export async function exportModeFor(data: ProjectData, settings: ExportSettings): Promise<ExportMode | null> {

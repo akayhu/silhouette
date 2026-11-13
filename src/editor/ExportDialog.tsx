@@ -7,7 +7,7 @@ import { exportModeFor, exportVideo, type ExportMode, type ExportStep } from '..
 import { supportedExportMimes } from '../lib/exportSupport';
 import { formatTime } from '../lib/format';
 import { analyzeMixLoudness, applyMixGain, type MixLoudnessResult } from '../lib/mixLoudness';
-import { DEFAULT_SETTINGS, estimateSize, needsRealtime, type ExportBitrate, type ExportFps } from '../lib/offlineExport';
+import { DEFAULT_SETTINGS, estimateSize, needsRealtime, planTargetSize, type ExportBitrate, type ExportFps } from '../lib/offlineExport';
 import { aspectSize } from '../lib/timeline';
 import type { ProjectData } from '../lib/types';
 import { Button, Modal, ProBadge, useToast, useUpgrade } from '../components/ui';
@@ -36,15 +36,24 @@ const FPS_OPTIONS: [ExportFps, string][] = [
 const SETTINGS_KEY = 'export-settings';
 
 /** 記住這台裝置上次選的畫質與格數（讀不到就用預設） */
-function loadSettings(): { bitrate: ExportBitrate; fps: ExportFps } {
+const TARGET_MB_OPTIONS: [number, string][] = [
+  [0, '不限制'],
+  [10, '10 MB'],
+  [25, '25 MB'],
+  [50, '50 MB'],
+  [100, '100 MB'],
+];
+
+function loadSettings(): { bitrate: ExportBitrate; fps: ExportFps; targetMb: number } {
   try {
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null') as { bitrate?: unknown; fps?: unknown } | null;
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null') as { bitrate?: unknown; fps?: unknown; targetMb?: unknown } | null;
     return {
+      targetMb: TARGET_MB_OPTIONS.some(([id]) => id === saved?.targetMb) ? (saved!.targetMb as number) : 0,
       bitrate: BITRATES.some(([id]) => id === saved?.bitrate) ? (saved!.bitrate as ExportBitrate) : DEFAULT_SETTINGS.bitrate,
       fps: FPS_OPTIONS.some(([id]) => id === saved?.fps) ? (saved!.fps as ExportFps) : DEFAULT_SETTINGS.fps,
     };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, targetMb: 0 };
   }
 }
 
@@ -88,10 +97,12 @@ function formatWhen(at: number | string) {
   return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 }
 
-function fileName(project: string, at: number | string, ext: string) {
+/** 檔名標明畫質（和不是 30 格時的格數），多次匯出放在一起也分得出差別 */
+function fileName(project: string, at: number | string, info: Pick<ExportInfo, 'quality' | 'fps' | 'ext'>) {
   const d = new Date(at);
   const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
-  return `${project || '片刻剪趣作品'}-${stamp}.${ext}`;
+  const spec = `${info.quality}p${info.fps === 30 ? '' : `-${info.fps}fps`}`;
+  return `${project || '片刻剪趣作品'}-${spec}-${stamp}.${info.ext}`;
 }
 
 const iconButton = 'grid size-9 shrink-0 place-items-center rounded-xl text-ink-soft transition hover:bg-sunken hover:text-ink disabled:opacity-40';
@@ -195,8 +206,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const duration = useEditor((s) => s.data.duration);
   const aspect = useEditor((s) => s.data.aspect);
   const [quality, setQuality] = useState<Quality>(isPro ? 1080 : 720);
-  const [{ bitrate, fps }, setSettings] = useState(loadSettings);
-  const updateSettings = (next: Partial<{ bitrate: ExportBitrate; fps: ExportFps }>) =>
+  const [{ bitrate, fps, targetMb }, setSettings] = useState(loadSettings);
+  const updateSettings = (next: Partial<{ bitrate: ExportBitrate; fps: ExportFps; targetMb: number }>) =>
     setSettings((prev) => {
       const merged = { ...prev, ...next };
       try {
@@ -244,6 +255,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   };
   // undefined＝還在檢查；null＝這個瀏覽器兩種方式都不支援
   const [mode, setMode] = useState<ExportMode | null | undefined>(undefined);
+  // 檔案大小上限：換算成畫面位元率上限；壓不進去就明講，不偷偷降畫質
+  const targetPlan = useMemo(() => (targetMb > 0 && duration > 0 ? planTargetSize({ quality, bitrate, fps }, duration, targetMb * 1024 * 1024) : null), [targetMb, duration, quality, bitrate, fps]);
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -328,7 +341,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       canvas.className = 'h-full w-full object-contain';
       previewRef.current?.replaceChildren(canvas);
       const output = await exportVideo(canvas, snapshot, {
-        signal: controller.signal, quality, bitrate, fps, watermark: !isPro, test,
+        signal: controller.signal, quality, bitrate, fps, capBps: targetPlan?.capBps, watermark: !isPro, test,
         onStage: setStage, onProgress: setProgress, onStep: (next) => {
           setStep(next);
           if (next === 'record') setRecording(true);
@@ -337,6 +350,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           setFrames((prev) => (prev && prev.total === total && done >= prev.done ? { ...prev, done } : { done, total, since: performance.now(), from: done })),
       });
       if (controller.signal.aborted) return;
+      if (!test && targetMb > 0 && output.blob.size > targetMb * 1024 * 1024) {
+        toast(`實際大小 ${formatSize(output.blob.size)}，略超過 ${targetMb} MB（畫面變化多時編碼器會超出一點），可以把畫質調成「省空間」或把上限再調低。`, 'info');
+      }
       if (resultRef.current) URL.revokeObjectURL(resultRef.current);
       const url = URL.createObjectURL(output.blob);
       resultRef.current = url;
@@ -381,7 +397,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 {local && localUrl && !saved.some((x) => x.id === local.savedId) && (
                   <ExportRow
                     info={local.info} size={local.blob.size} at={local.createdAt} where="local"
-                    href={localUrl} download={fileName(name, local.createdAt, local.info.ext)}
+                    href={localUrl} download={fileName(name, local.createdAt, local.info)}
                     onSave={() => void saveToAccount(local.blob, local.info, local)} saving={saving}
                     onDelete={() => void deleteLocal()}
                   />
@@ -389,7 +405,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 {saved.map((ex) => (
                   <ExportRow
                     key={ex.id} info={ex} size={ex.size} at={ex.createdAt} where="account"
-                    href={ex.url} download={fileName(name, ex.createdAt, ex.ext)}
+                    href={ex.url} download={fileName(name, ex.createdAt, ex)}
                     onDelete={() => void deleteSaved(ex)}
                   />
                 ))}
@@ -417,7 +433,17 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           </div>
           <Segmented label="畫質" value={bitrate} options={BITRATES} onChange={(v) => updateSettings({ bitrate: v })} />
           <Segmented label="每秒格數" value={fps} options={FPS_OPTIONS.map(([id, hint]) => [id, `${id} 格`, hint])} onChange={(v) => updateSettings({ fps: v })} />
-          <p className="mt-2 text-xs text-ink-mute tabular-nums">檔案最大約 {formatSize(estimateSize({ quality, bitrate, fps }, duration))}，畫面變化少的影片會小很多。</p>
+          <Segmented label="檔案大小上限" value={targetMb} options={TARGET_MB_OPTIONS.map(([id, label]) => [id, label])} onChange={(v) => updateSettings({ targetMb: v })} />
+          {targetPlan && !targetPlan.feasible ? (
+            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 tabular-nums">
+              這支影片壓不到 {targetMb} MB：{Math.round(duration)} 秒再壓下去畫面會糊到看不清楚，最小約 {formatSize(targetPlan.minBytes)}。請把上限調高，或縮短影片。
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-ink-mute tabular-nums">
+              檔案最大約 {formatSize(targetPlan ? targetPlan.estimate : estimateSize({ quality, bitrate, fps }, duration))}
+              {targetPlan?.capBps ? `（已為了壓進 ${targetMb} MB 調低畫質）` : ''}，畫面變化少的影片會小很多。
+            </p>
+          )}
           {!isPro && (
             <p className="mt-3 rounded-xl bg-sunken px-3 py-2 text-xs text-ink-soft">
               免費版匯出的影片右下角會有「片刻剪趣」浮水印。
@@ -495,7 +521,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             {describe(result.info, result.size)} ・ {result.info.mode === 'offline' ? '逐格匯出' : '即時錄製'}
           </div>
           <video src={result.url} controls className="mx-auto mt-4 max-h-64 rounded-2xl bg-sunken" />
-          <a href={result.url} download={result.test ? `${name || '片刻剪趣作品'}-測試.${result.info.ext}` : fileName(name, result.at, result.info.ext)} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-white hover:bg-brand-hover">
+          <a href={result.url} download={result.test ? `${name || '片刻剪趣作品'}-測試.${result.info.ext}` : fileName(name, result.at, result.info)} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-white hover:bg-brand-hover">
             <Download className="size-4" /> 下載影片
           </a>
           {!result.test && (() => {

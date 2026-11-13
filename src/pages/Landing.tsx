@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, ArrowRight, Check, Crop, FolderOpen, HardDrive, Images, Laptop, Mic, Music2, Pause, Play, Plus, RotateCcw, Scale, Scissors, WandSparkles } from 'lucide-react';
+import { Activity, ArrowRight, Check, Crop, Download, FolderOpen, HardDrive, Images, Laptop, Mic, Music2, Pause, Play, Plus, RotateCcw, Scale, Scissors, ShieldCheck, WandSparkles } from 'lucide-react';
 import { MarketingLayout } from '../components/Layout';
 import { PlanCards } from '../components/Plans';
 import { mkButton, SectionTitle } from '../components/marketing';
@@ -24,6 +24,7 @@ export default function Landing() {
       <Hero />
       <StyleShowcase />
       <AiTabs />
+      <BeforeAfter />
       <Numbers />
       <LocalFirst />
       <Steps />
@@ -286,6 +287,63 @@ export function AiTabs() {
             {tab === 'suggest' && <SuggestMock />}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/** 剪前剪後對照：拖曳滑桿，空拍和「嗯、啊」逐漸被剪掉、字幕浮現（示範數字，用的是下面時間軸示意的同一份資料） */
+function BeforeAfter() {
+  const [p, setP] = useState(0);
+  const widths = SEGMENTS.map((s) => (s.cut ? s.len * (1 - p) : s.len));
+  const seconds = widths.reduce((n, w) => n + w, 0);
+  const done = p >= 0.995;
+  return (
+    <section className="px-4 py-24 sm:px-8">
+      <SectionTitle title="剪前、剪後，拖一下就看懂" sub="同一支 42 秒的口播：拖曳滑桿，看空拍和「嗯、啊」怎麼被剪掉、字幕怎麼浮現。以下是示範數字，實際依你的影片而定。" />
+      <div className="mx-auto max-w-[900px] rounded-[28px] border border-site-line bg-white p-6 sm:p-10">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[15px] font-bold text-site-soft">{done ? '剪輯後' : p <= 0.005 ? '剪輯前' : '剪輯中'}</span>
+          <span className="num text-[clamp(32px,5vw,52px)] leading-none font-extrabold text-site-red">
+            {seconds.toFixed(1)}
+            <span className="ml-1 text-[18px] font-bold text-site-ink">秒</span>
+          </span>
+        </div>
+        <div className="mt-6 flex h-16 gap-0.5 overflow-hidden rounded-xl bg-site-band p-1" aria-hidden>
+          {SEGMENTS.map((s, i) => (
+            <div
+              key={i}
+              className={`min-w-0 rounded-md ${s.cut === 'silence' ? 'border border-dashed border-site-red bg-site-red-soft' : s.cut === 'filler' ? 'bg-amber-200' : 'bg-site-ink'}`}
+              style={{ flexGrow: widths[i], flexBasis: 0, opacity: s.cut ? 1 - p * 0.6 : 1 }}
+            />
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2" style={{ opacity: p, minHeight: 32 }} aria-hidden={p < 0.3}>
+          {CLIPS.map((c) => (
+            <span key={c.caption} className="rounded-full bg-site-ink px-3 py-1 text-[13px] font-bold text-[#ffe14a]">
+              {c.caption}
+            </span>
+          ))}
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(p * 100)}
+          onChange={(e) => setP(Number(e.target.value) / 100)}
+          aria-label="剪輯前到剪輯後"
+          aria-valuetext={`${seconds.toFixed(1)} 秒`}
+          className="mt-6 w-full accent-[#d42c22]"
+        />
+        <div className="mt-1 flex justify-between text-[13px] font-bold text-site-soft">
+          <span>剪前 42.0 秒</span>
+          <span>剪後 29.0 秒</span>
+        </div>
+        <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-1.5 text-[13px] text-site-soft">
+          <li className="flex items-center gap-1.5"><span className="size-3 rounded-sm border border-dashed border-site-red bg-site-red-soft" />空拍 4 段，共 11.6 秒</li>
+          <li className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-amber-200" />「嗯、啊」2 處，共 1.4 秒</li>
+          <li className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-site-ink" />保留的說話內容</li>
+        </ul>
       </div>
     </section>
   );
@@ -680,6 +738,8 @@ export function LocalFirst() {
             { icon: <Laptop className="size-5" />, t: '素材存在這台電腦', d: '影片、圖片、音樂存在瀏覽器裡，不會傳到伺服器。' },
             { icon: <FolderOpen className="size-5" />, t: '專案存在帳戶', d: '剪輯內容、字幕、設定會同步，換電腦登入結構都還在。' },
             { icon: <HardDrive className="size-5" />, t: '換裝置時重新提供素材', d: '選回原本的影片檔，自動配對就能接著剪。' },
+            { icon: <ShieldCheck className="size-5" />, t: '原始影片不會被改動', d: '剪輯只是記錄哪一段、怎麼處理，匯出才產生新檔案；每一步都能復原。' },
+            { icon: <Download className="size-5" />, t: '資料可以帶走', d: '在帳戶頁可以下載自己的所有資料，匯出的成品也能存在自己的電腦。' },
           ].map((x) => (
             <li key={x.t} className="flex gap-4 rounded-2xl bg-white p-5">
               <span className="grid size-11 shrink-0 place-items-center rounded-full bg-site-red-soft text-site-red">{x.icon}</span>
@@ -969,6 +1029,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: '匯出與帳戶',
     items: [
       { name: '匯出影片，畫面和預覽一致' },
+      { name: '指定檔案大小上限', note: '選 10／25／50／100 MB，自動調整畫質壓進去；壓不進去會直接告訴你，不偷偷降到很糊。' },
       { name: '免費版畫質（含浮水印）', qty: '720p' },
       { name: '高畫質、無浮水印', qty: '1080p', pro: true },
       { name: '本機剪輯：原始影片留在你的電腦，不必上傳', note: '剪輯、算圖、匯出都在你的瀏覽器裡完成，影片不會傳到伺服器。' },

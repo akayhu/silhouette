@@ -3,6 +3,7 @@ import { COVER_IN_VIDEO_SECONDS } from './cover';
 import { createDenoiseChain } from './denoise';
 import type { Engine } from './engine';
 import { decodeAudio } from './media';
+import { AUDIO_BITRATE, videoBitrate, type ExportSettings } from './exportBitrate';
 import { audioCategoryOf, clipLength, duckGainAt, layoutMain, voiceActivityRanges } from './timeline';
 import type { ProjectData } from './types';
 
@@ -11,34 +12,8 @@ import type { ProjectData } from './types';
  * 最後封裝成 MP4。不需要即時播放，所以不怕掉格、分頁可以在背景，通常也比影片本身還快。
  */
 
-export type ExportBitrate = 'high' | 'standard' | 'small';
-export type ExportFps = 24 | 30 | 60;
-
-/** 匯出設定：解析度（短邊）、畫質（位元率等級）、每秒格數 */
-export interface ExportSettings {
-  quality: 720 | 1080;
-  bitrate: ExportBitrate;
-  fps: ExportFps;
-}
-
-export const DEFAULT_SETTINGS: Omit<ExportSettings, 'quality'> = { bitrate: 'standard', fps: 30 };
-export const AUDIO_BITRATE = 160_000;
-
-/**
- * 畫面位元率：標準是 1080p 8 Mbps／720p 4 Mbps（30 格），
- * 高畫質多 60%、省空間減半；60 格約多 50%，24 格略少。
- */
-export function videoBitrate({ quality, bitrate, fps }: ExportSettings) {
-  const base = quality === 1080 ? 8_000_000 : 4_000_000;
-  const level = { high: 1.6, standard: 1, small: 0.5 }[bitrate];
-  const rate = fps === 60 ? 1.5 : fps === 24 ? 0.85 : 1;
-  return Math.round((base * level * rate) / 100_000) * 100_000;
-}
-
-/** 檔案大小上限（位元組）：編碼器用變動位元率，畫面簡單時實際會小很多 */
-export function estimateSize(settings: ExportSettings, duration: number) {
-  return ((videoBitrate(settings) + AUDIO_BITRATE) * duration) / 8;
-}
+export { AUDIO_BITRATE, DEFAULT_SETTINGS, estimateSize, MIN_VIDEO_BPS, planTargetSize, videoBitrate } from './exportBitrate';
+export type { ExportBitrate, ExportFps, ExportSettings, TargetPlan } from './exportBitrate';
 
 /** 匯出進行到哪一步：準備素材 → 混合聲音 → 算圖編碼（或即時錄製）→ 封裝檢查 */
 export type ExportStep = 'prepare' | 'audio' | 'frames' | 'record' | 'finish';

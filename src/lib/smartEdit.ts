@@ -2,6 +2,7 @@ import { isEmphasis, planAutoEffects, type AutoEffectPlan } from './autoEffects'
 import { DEFAULT_CLIP_FILTER, FILTER_PRESETS } from './filters';
 import { uid } from './format';
 import { captionTrackKeys, isLocked, layoutMain, mainDuration, newCaption } from './timeline';
+import { planBroll } from './autoBroll';
 import { pickTemplate } from './autoPick';
 import { recommendMusic } from './musicRecommend';
 import { SMART_TEMPLATES, type SmartTemplate } from './templates';
@@ -15,7 +16,7 @@ import type { AudioClip, Caption, LibraryTrack, MediaItem, ProjectData } from '.
 
 export interface SmartEditResult {
   data: ProjectData;
-  counts: AutoEffectPlan['counts'] & { flowers: number; sfx: number; music: string | null; filter: string | null; captionStyled: number };
+  counts: AutoEffectPlan['counts'] & { flowers: number; sfx: number; music: string | null; filter: string | null; captionStyled: number; broll: number };
   /** 實際套用的模板（一鍵自動剪輯由內容挑的） */
   template: SmartTemplate;
   /** 一鍵自動剪輯挑模板時命中的內容關鍵字；沒命中或不是自動挑的就是空陣列 */
@@ -41,7 +42,7 @@ export async function runSmartEdit(
   input: ProjectData,
   tplOrAuto: SmartTemplate | 'auto',
   library: LibraryTrack[],
-  opts: { regenerateCaptions: boolean },
+  opts: { regenerateCaptions: boolean; broll?: boolean },
   onProgress?: (text: string) => void,
 ): Promise<SmartEditResult> {
   const auto = tplOrAuto === 'auto';
@@ -77,7 +78,7 @@ export async function runSmartEdit(
     onProgress,
   );
   let d = plan.data;
-  const counts: SmartEditResult['counts'] = { ...plan.counts, flowers: 0, sfx: 0, music: null, filter: null, captionStyled: 0 };
+  const counts: SmartEditResult['counts'] = { ...plan.counts, flowers: 0, sfx: 0, music: null, filter: null, captionStyled: 0, broll: 0 };
   if (pre) {
     counts.cuts = pre.cuts;
     counts.removed = pre.removed;
@@ -176,6 +177,13 @@ export async function runSmartEdit(
     const used = new Set(audio.map((x) => x.mediaId));
     media = media.filter((m) => !(m.origin === 'library' && libUrls.has(m.url) && !used.has(m.id)));
     d = { ...d, media, audio };
+  }
+
+  // 5. 自動 B-roll：有沒用到的空鏡素材時，蓋在講話的地方
+  if (opts.broll) {
+    const r = planBroll(d);
+    d = r.data;
+    counts.broll = r.placed;
   }
 
   return { data: d, counts, template: tpl, matched };

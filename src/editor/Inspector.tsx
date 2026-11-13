@@ -6,7 +6,7 @@ import { stickerDef, stickerUrl } from '../lib/stickers';
 import { uid } from '../lib/format';
 import { suggestReframeX } from '../lib/reframe';
 import { SPLIT_PRESETS, splitTransforms } from '../lib/splitLayout';
-import { aspectSize, clipLength, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, layoutMain, overlayEnd, overlayLaneCount, placeOverlayLane, removeItems, removeMainClip, transformOf } from '../lib/timeline';
+import { aspectSize, clearCaptionStyleDefault, clipLength, hasCaptionStyleDefault, saveCaptionStyleDefault, DEFAULT_OVERLAY_TRANSFORM, DEFAULT_TRANSFORM, layoutMain, overlayEnd, overlayLaneCount, placeOverlayLane, removeItems, removeMainClip, transformOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { CaptionAnimation, CaptionShadow, CaptionStyle, ClipMotion, ClipTransform, OverlayClip, ProjectData, StickerAnimation, StickerItem } from '../lib/types';
 import { Button, useToast } from '../components/ui';
@@ -106,6 +106,25 @@ export function Chips<T extends string | number>({ options, value, onChange }: {
         </button>
       ))}
     </div>
+  );
+}
+
+/** 把目前字幕樣式存成「之後新增、自動產生字幕」的預設，存在這台瀏覽器 */
+function StyleDefaultButtons({ style }: { style: CaptionStyle }) {
+  const toast = useToast();
+  const [has, setHas] = useState(hasCaptionStyleDefault);
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="secondary" size="sm" onClick={() => (saveCaptionStyleDefault(style), setHas(true), toast('已存成預設：之後新增、自動產生的字幕都用這個樣式', 'success'))}>
+          存成預設樣式
+        </Button>
+        <Button variant="secondary" size="sm" disabled={!has} onClick={() => (clearCaptionStyleDefault(), setHas(false), toast('已還原成內建預設樣式', 'success'))}>
+          還原預設
+        </Button>
+      </div>
+      <p className="text-[11px] leading-relaxed text-ink-mute">預設樣式存在這台瀏覽器，新增字幕和 AI 自動字幕都會用它。</p>
+    </>
   );
 }
 
@@ -353,6 +372,7 @@ export function Inspector() {
         <Button variant="secondary" className="w-full" onClick={() => commit((d) => ({ ...d, captions: d.captions.map((x) => ({ ...x, style: { ...s } })) }))}>
           把這個樣式套用到全部字幕
         </Button>
+        <StyleDefaultButtons style={s} />
         <Button variant="danger" className="w-full" onClick={() => (commit((d) => ({ ...d, captions: d.captions.filter((x) => x.id !== c.id) })), select(null))}>
           <Trash2 className="size-4" /> 刪除字幕
         </Button>

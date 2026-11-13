@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Captions, Clapperboard, FileText, Languages, Loader2, Scissors, Sparkles } from 'lucide-react';
+import { Captions, Clapperboard, FileText, Film, Languages, Loader2, Scissors, Sparkles } from 'lucide-react';
 import { TRANSLATE_TARGETS, translateTexts, type TranslateTarget } from '../../lib/translate';
 import { useAuth } from '../../lib/auth';
 import { ASR_MODELS, getConverter, isFiller, transcribe } from '../../lib/asr';
@@ -9,6 +9,7 @@ import { decodeAudio, detectSilence, sliceMono } from '../../lib/media';
 import { captionFromWords, layoutMain, newCaption, rippleRemove } from '../../lib/timeline';
 import type { Caption, ProjectData } from '../../lib/types';
 import { transcribeTimeline, type TimeRange } from '../../lib/subtitles';
+import { brollCandidates, planBroll } from '../../lib/autoBroll';
 import { planAutoEffects, type AutoEffectOptions, type AutoEffectPlan, type Intensity } from '../../lib/autoEffects';
 import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { Chips, Slider } from '../Inspector';
@@ -18,13 +19,14 @@ import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
 
 type Range = [number, number];
 
-type Section = 'effects' | 'captions' | 'script' | 'bilingual' | 'cut';
+type Section = 'effects' | 'captions' | 'script' | 'bilingual' | 'cut' | 'broll';
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'effects', label: '剪輯' },
   { id: 'captions', label: '字幕' },
   { id: 'script', label: '講稿' },
   { id: 'bilingual', label: '雙語' },
   { id: 'cut', label: '口播' },
+  { id: 'broll', label: '空鏡' },
 ];
 
 export function AIPanel() {
@@ -48,6 +50,7 @@ export function AIPanel() {
       {section === 'script' && <ScriptSync isPro={isPro} />}
       {section === 'bilingual' && <Bilingual isPro={isPro} />}
       {section === 'cut' && <SmartCut isPro={isPro} />}
+      {section === 'broll' && <AutoBroll isPro={isPro} />}
       </div>
     </PanelShell>
   );
@@ -577,4 +580,54 @@ function merged(ranges: Range[]) {
     else out.push([...r]);
   }
   return out;
+}
+
+function AutoBroll({ isPro }: { isPro: boolean }) {
+  const toast = useToast();
+  const upgrade = useUpgrade();
+  const media = useEditor((s) => s.data.media);
+  const clips = useEditor((s) => s.data.clips);
+  const overlays = useEditor((s) => s.data.overlays);
+  const candidates = brollCandidates({ media, clips, overlays });
+  const placedCount = overlays.filter((o) => o.role === 'broll').length;
+
+  const run = () => {
+    if (!isPro) return upgrade('自動 B-roll 是專業版功能。');
+    if (!ensureUnlocked('overlay')) return;
+    const { data, commit } = useEditor.getState();
+    const result = planBroll(data);
+    if (!result.placed) return toast('找不到適合蓋空鏡的地方：口播要夠長、而且有說話的段落', 'info');
+    commit(() => result.data);
+    toast(`已在講話的地方蓋上 ${result.placed} 段空鏡`, 'success');
+  };
+  const clear = () => {
+    useEditor.getState().commit((d) => ({ ...d, overlays: d.overlays.filter((o) => o.role !== 'broll') }));
+    toast('已移除自動加的空鏡', 'success');
+  };
+
+  return (
+    <section>
+      <div className="flex items-center gap-2">
+        <span className="grid size-8 place-items-center rounded-xl bg-brand-soft text-brand">
+          <Film className="size-4" />
+        </span>
+        <h2 className="text-sm font-extrabold">自動 B-roll</h2>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+        口播講話的時候，自動把還沒用到的空鏡（其他影片、圖片）蓋在畫面上，口白不會中斷。蓋在疊加軌，每一段都能再移動或刪除。
+      </p>
+      <p className="mt-3 rounded-xl bg-sunken p-3 text-xs text-ink-soft">
+        {candidates.length ? `可用空鏡 ${candidates.length} 個（素材庫裡還沒放上時間軸的影片與圖片）` : '素材庫裡沒有多的影片或圖片。先上傳幾段空鏡素材，不要放上時間軸。'}
+      </p>
+      <Button className="mt-4 w-full" onClick={run} disabled={!candidates.length && !placedCount}>
+        <Film className="size-4" />
+        {placedCount ? '重新安排空鏡' : '自動蓋上空鏡'}
+      </Button>
+      {placedCount > 0 && (
+        <Button variant="secondary" size="sm" className="mt-2 w-full" onClick={clear}>
+          移除自動加的 {placedCount} 段空鏡
+        </Button>
+      )}
+    </section>
+  );
 }

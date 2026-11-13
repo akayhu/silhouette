@@ -177,8 +177,40 @@ export const defaultCaptionStyle = (): CaptionStyle => ({
   animation: 'pop',
 });
 
+const USER_STYLE_KEY = 'pianke.captionStyleDefault';
+const STYLE_KEYS: (keyof CaptionStyle)[] = ['font', 'size', 'color', 'stroke', 'background', 'bold', 'y', 'x', 'animation', 'highlight', 'shadow', 'emphasisColor', 'lineHeight'];
+
+const readUserStyle = (): Partial<CaptionStyle> | null => {
+  try {
+    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(USER_STYLE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return Object.fromEntries(STYLE_KEYS.filter((k) => k in parsed).map((k) => [k, parsed[k]])) as Partial<CaptionStyle>;
+  } catch {
+    return null;
+  }
+};
+
+/** 新增字幕時用的樣式：使用者存過預設就用他的，沒有就是內建預設（存在這台瀏覽器，不用登入帳號同步） */
+export const userCaptionStyle = (): CaptionStyle => ({ ...defaultCaptionStyle(), ...readUserStyle() });
+export const hasCaptionStyleDefault = () => readUserStyle() !== null;
+export function saveCaptionStyleDefault(style: CaptionStyle) {
+  try {
+    localStorage.setItem(USER_STYLE_KEY, JSON.stringify(Object.fromEntries(STYLE_KEYS.filter((k) => style[k] !== undefined).map((k) => [k, style[k]]))));
+  } catch {
+    /* 無痕模式等情況存不了就算了 */
+  }
+}
+export function clearCaptionStyleDefault() {
+  try {
+    localStorage.removeItem(USER_STYLE_KEY);
+  } catch {
+    /* 同上 */
+  }
+}
+
 export function newCaption(start: number, end: number, text: string, style?: CaptionStyle): Caption {
-  return { id: uid(), start, end, text, style: style ? { ...style } : defaultCaptionStyle() };
+  return { id: uid(), start, end, text, style: style ? { ...style } : userCaptionStyle() };
 }
 
 /** 由語音辨識結果建立字幕：有逐字時間就一起存（時間軸秒數），文字以逐字內容為準 */

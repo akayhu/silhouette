@@ -7,6 +7,7 @@ import { formatTime } from '../../lib/format';
 import { checkOpeningHook, swapToOpening } from '../../lib/hookCheck';
 import { findHighlights, type HighlightCandidate } from '../../lib/highlightDetect';
 import { findSimilarAdjacentShots, type SimilarShotPair } from '../../lib/shotSimilarity';
+import { brollCandidates } from '../../lib/autoBroll';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
 import type { LibraryTrack, ProjectData } from '../../lib/types';
@@ -36,6 +37,7 @@ function summaryLines(c: SmartEditResult['counts']) {
     c.punch + c.shake > 0 && `重點特寫 ${c.punch + c.shake} 個`,
     c.transitions > 0 && `轉場 ${c.transitions} 個`,
     c.stickers > 0 && `貼紙 ${c.stickers} 個`,
+    c.broll > 0 && `空鏡 ${c.broll} 段`,
   ].filter(Boolean) as string[];
 }
 
@@ -51,6 +53,8 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
   const [selected, setSelected] = useState<SmartTemplate[]>([SMART_TEMPLATES[0]]);
   const [regen, setRegen] = useState(false);
+  const brollPool = useEditor((s) => brollCandidates(s.data).length);
+  const [withBroll, setWithBroll] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [done, setDone] = useState<{ tpl: SmartTemplate; counts: SmartEditResult['counts']; auto?: string[] } | null>(null);
   // 選 2-3 個模板時，先把每個模板實際跑過一次（真正的剪輯結果，不是猜的），
@@ -149,7 +153,7 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
     setCandidates(null);
     try {
       setStatus('分析影片內容');
-      const result = await runSmartEdit(base, 'auto', library, { regenerateCaptions: regen }, setStatus);
+      const result = await runSmartEdit(base, 'auto', library, { regenerateCaptions: regen, broll: withBroll && brollPool > 0 }, setStatus);
       applyResult(result.template, result, base, result.matched);
     } catch (e) {
       toast('一鍵自動剪輯失敗：' + (e as Error).message, 'error');
@@ -286,6 +290,15 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
           {status ? <Loader2 className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}
           {status ?? (!hasClips ? '先把影片加到主軌' : '一鍵自動剪輯')}
         </Button>
+        {brollPool > 0 && (
+          <label className="mt-2 flex items-start gap-2 text-xs">
+            <input type="checkbox" className="mt-0.5 accent-brand" checked={withBroll} onChange={(e) => setWithBroll(e.target.checked)} />
+            <span>
+              順便在講話的地方蓋空鏡
+              <span className="block text-[11px] text-ink-mute">用素材庫裡 {brollPool} 個還沒放上時間軸的影片與圖片</span>
+            </span>
+          </label>
+        )}
       </div>
       <p className="mt-4 text-xs leading-relaxed text-ink-mute">
         想自己挑風格？選 1 個模板直接套用，或選 2-3 個先比較結果再決定。完成後每一項都能再調整，也能一鍵復原。

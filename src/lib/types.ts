@@ -227,6 +227,8 @@ export interface OverlayClip {
   transform?: ClipTransform;
   filter?: ClipFilter;
   beauty?: ClipBeauty;
+  /** 自動 B-roll 加的空鏡（重新套用時會先移除；使用者自己疊的不動） */
+  role?: 'broll';
 }
 
 export interface StickerItem {

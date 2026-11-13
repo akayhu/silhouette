@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioLines, Plus, Search } from 'lucide-react';
-import { captionTrackKeys, defaultCaptionStyle, isLocked, newCaption } from '../../lib/timeline';
+import { captionTrackKeys, defaultCaptionStyle, isLocked, newCaption, userCaptionStyle } from '../../lib/timeline';
 import type { CaptionStyle, ProjectData } from '../../lib/types';
 import { applyCaptionRules, formatCaptionTime, importCaptionCues, matchesCaption, mergeCaptions, orderedCaptions, parseCaptionRules, parseSubtitles, replaceCaptionText, serializeSubtitles, shiftCaptions, splitCaptionText } from '../../lib/captions';
 import { FLOWER_STYLES } from '../../lib/flowerStyles';
@@ -94,7 +94,7 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
   const add = (style: Partial<CaptionStyle> = {}) => {
     if (!ensureUnlocked('caption')) return;
     const state = useEditor.getState();
-    const caption = newCaption(state.time, state.time + 2, '輸入字幕文字', { ...defaultCaptionStyle(), ...style });
+    const caption = newCaption(state.time, state.time + 2, '輸入字幕文字', { ...userCaptionStyle(), ...style });
     state.commit((d) => ({ ...d, captions: [...d.captions, caption] })); state.select({ type: 'caption', id: caption.id });
     if (find) setFind('');
   };

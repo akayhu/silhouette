@@ -361,8 +361,15 @@ export default function Dashboard() {
                 .project(deleting!.id)
                 .then((r) => r.project.data.media.filter((m) => m.local).map((m) => m.id))
                 .catch(() => [] as string[]);
+              // 複製、精彩片段轉出的專案會共用同一份本機素材：還有其他專案在用的就不能刪
+              const inUse = new Set<string>();
+              if (localIds.length) {
+                const others = await api.projects().then((r) => r.projects.filter((p) => p.id !== deleting!.id)).catch(() => []);
+                const lists = await Promise.all(others.map((p) => api.project(p.id).then((r) => r.project.data.media.filter((m) => m.local).map((m) => m.id)).catch(() => [] as string[])));
+                lists.flat().forEach((id) => inUse.add(id));
+              }
               await api.deleteProject(deleting!.id);
-              await deleteLocalFiles(localIds);
+              await deleteLocalFiles(localIds.filter((id) => !inUse.has(id)));
               setDeleting(null);
               toast('已刪除專案');
               load();

@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Activity, Film, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
-import { api } from '../../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { Activity, Download, ExternalLink, Film, FolderPlus, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
+import { api, ApiError } from '../../lib/api';
+import { sliceProject } from '../../lib/highlightClip';
+import { exportVideo } from '../../lib/exportVideo';
+import { persistableData } from '../../lib/localMedia';
+import { aspectSize } from '../../lib/timeline';
 import { useAuth } from '../../lib/auth';
 import { coverSize, defaultCover, renderCover } from '../../lib/cover';
 import { formatTime } from '../../lib/format';
@@ -67,6 +71,17 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const [similarPairs, setSimilarPairs] = useState<SimilarShotPair[]>([]);
   const [findingHighlights, setFindingHighlights] = useState(false);
   const [highlights, setHighlights] = useState<{ candidate: HighlightCandidate; thumb: string }[] | null>(null);
+  // 精彩片段：勾選要處理的幾段，轉成新專案，或各自匯出成檔案
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [hlBusy, setHlBusy] = useState<string | null>(null);
+  const [madeProjects, setMadeProjects] = useState<{ id: string; name: string }[]>([]);
+  const [madeFiles, setMadeFiles] = useState<{ name: string; url: string; size: number }[]>([]);
+  const exportAbort = useRef<AbortController | null>(null);
+  const fileUrls = useRef<string[]>([]);
+  useEffect(() => () => {
+    exportAbort.current?.abort();
+    fileUrls.current.forEach((u) => URL.revokeObjectURL(u));
+  }, []);
 
   useEffect(() => {
     api.music().then((r) => setLibrary(r.items)).catch(() => setLibrary([]));
@@ -120,8 +135,84 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
       }
       if (useEditor.getState().data !== base) return;
       setHighlights(withThumbs);
+      setPicked(new Set(withThumbs.map((_, i) => i)));
+      setMadeProjects([]);
+      clearMadeFiles();
     } finally {
       setFindingHighlights(false);
+    }
+  };
+
+  const clearMadeFiles = () => {
+    fileUrls.current.forEach((u) => URL.revokeObjectURL(u));
+    fileUrls.current = [];
+    setMadeFiles([]);
+  };
+
+  const pickedList = () => (highlights ?? []).filter((_, i) => picked.has(i)).map((h) => h.candidate);
+  const hlName = (c: HighlightCandidate, n: number) => `${useEditor.getState().name || '未命名專案'}-${c.title?.trim() || `精彩片段${n}`}`.slice(0, 100);
+
+  const makeProjects = async () => {
+    const list = pickedList();
+    if (!list.length) return toast('先勾選要處理的片段', 'info');
+    const base = useEditor.getState().data;
+    setMadeProjects([]);
+    let done = 0;
+    try {
+      for (const [i, c] of list.entries()) {
+        setHlBusy(`建立專案 ${i + 1}/${list.length}`);
+        const name = hlName(c, i + 1);
+        const sliced = sliceProject(base, c.start, c.end);
+        const { project } = await api.createProject({ name, aspect: base.aspect });
+        await api.updateProject(project.id, { data: persistableData(sliced) });
+        setMadeProjects((m) => [...m, { id: project.id, name }]);
+        done++;
+      }
+      toast(`已建立 ${done} 個新專案`, 'success');
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'UPGRADE_REQUIRED') {
+        upgrade(`免費版每月最多建立 3 個專案${done ? `，已建立 ${done} 個` : ''}。升級專業版就不限專案數。`);
+      } else {
+        toast('建立專案失敗：' + (e as Error).message, 'error');
+      }
+    } finally {
+      setHlBusy(null);
+    }
+  };
+
+  const exportFiles = async () => {
+    const list = pickedList();
+    if (!list.length) return toast('先勾選要處理的片段', 'info');
+    const base = useEditor.getState().data;
+    const quality = isPro ? 1080 : 720;
+    const { width, height } = aspectSize(base.aspect, quality);
+    const controller = new AbortController();
+    exportAbort.current = controller;
+    clearMadeFiles();
+    try {
+      for (const [i, c] of list.entries()) {
+        const label = `匯出 ${i + 1}/${list.length}`;
+        setHlBusy(label);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const out = await exportVideo(canvas, sliceProject(base, c.start, c.end), {
+          signal: controller.signal,
+          quality,
+          watermark: !isPro,
+          onStage: (s) => setHlBusy(`${label}：${s}`),
+          onProgress: (p) => setHlBusy(`${label}：${Math.round(p * 100)}%`),
+        });
+        const url = URL.createObjectURL(out.blob);
+        fileUrls.current.push(url);
+        setMadeFiles((f) => [...f, { name: `${hlName(c, i + 1)}.${out.ext}`, url, size: out.blob.size }]);
+      }
+      toast(`已匯出 ${list.length} 支短片`, 'success');
+    } catch (e) {
+      if (!controller.signal.aborted) toast('匯出失敗：' + (e as Error).message, 'error');
+    } finally {
+      exportAbort.current = null;
+      setHlBusy(null);
     }
   };
 
@@ -250,28 +341,82 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
             <Film className="mt-0.5 size-4 shrink-0 text-brand" />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-bold">精彩片段</div>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-ink-soft">依字幕密度、強調詞和畫面動態，抓出影片裡幾段比較突出的時間窗，適合剪成獨立短片。</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-ink-soft">依字幕密度、強調詞和畫面動態，抓出影片裡幾段比較突出的時間窗，可以一鍵轉成新專案，或直接匯出成短片檔案。</p>
               <Button variant="secondary" size="sm" className="mt-2" disabled={findingHighlights} onClick={findHighlightClips}>
                 {findingHighlights ? <Loader2 className="size-3.5 animate-spin" /> : <Film className="size-3.5" />}
                 {findingHighlights ? '分析畫面中…' : '找精彩片段'}
               </Button>
               {highlights && (
-                <ul className="mt-2.5 space-y-1.5">
-                  {highlights.map(({ candidate: h, thumb }, i) => (
-                    <li key={h.start} className="flex items-center gap-2.5 rounded-xl bg-sunken p-2">
-                      <img src={thumb} alt="" className="h-12 w-8 shrink-0 rounded-md object-cover" />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-bold">{h.title ?? `第 ${i + 1} 段`}</div>
-                        <div className="text-[11px] text-ink-mute">
-                          {formatTime(h.start)} - {formatTime(h.end)}
+                <>
+                  <ul className="mt-2.5 space-y-1.5">
+                    {highlights.map(({ candidate: h, thumb }, i) => (
+                      <li key={h.start} className="flex items-center gap-2.5 rounded-xl bg-sunken p-2">
+                        <input
+                          type="checkbox"
+                          className="accent-brand"
+                          aria-label={`選取第 ${i + 1} 段`}
+                          checked={picked.has(i)}
+                          disabled={!!hlBusy}
+                          onChange={(e) => setPicked((p) => { const n = new Set(p); e.target.checked ? n.add(i) : n.delete(i); return n; })}
+                        />
+                        <img src={thumb} alt="" className="h-12 w-8 shrink-0 rounded-md object-cover" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-bold">{h.title ?? `第 ${i + 1} 段`}</div>
+                          <div className="text-[11px] text-ink-mute">
+                            {formatTime(h.start)} - {formatTime(h.end)}
+                          </div>
                         </div>
-                      </div>
-                      <button className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-brand hover:bg-brand-soft" onClick={() => seek(h.start)}>
-                        跳到這段
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <button className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-brand hover:bg-brand-soft" onClick={() => seek(h.start)}>
+                          跳到這段
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[11px] leading-relaxed text-ink-mute">勾選的片段會連同字幕、貼紙、配樂一起切出來，不會動到目前的專案。</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button size="sm" disabled={!!hlBusy || !picked.size} onClick={makeProjects}>
+                      <FolderPlus className="size-3.5" /> 轉成新專案（{picked.size}）
+                    </Button>
+                    <Button variant="secondary" size="sm" disabled={!!hlBusy || !picked.size} onClick={exportFiles}>
+                      <Download className="size-3.5" /> 匯出成檔案（{picked.size}）
+                    </Button>
+                  </div>
+                  {hlBusy && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-brand-soft/60 px-3 py-2 text-xs text-ink-soft">
+                      <span className="flex items-center gap-1.5"><Loader2 className="size-3.5 animate-spin" /> {hlBusy}</span>
+                      {exportAbort.current && (
+                        <button className="font-bold text-brand" onClick={() => exportAbort.current?.abort()}>取消</button>
+                      )}
+                    </div>
+                  )}
+                  {madeProjects.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {madeProjects.map((m) => (
+                        <li key={m.id} className="flex items-center justify-between gap-2 rounded-xl border border-line px-3 py-2 text-xs">
+                          <span className="truncate font-bold">{m.name}</span>
+                          <a href={`/editor/${m.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 font-bold text-brand">
+                            開啟 <ExternalLink className="size-3" />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {madeFiles.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {madeFiles.map((f) => (
+                        <li key={f.url} className="flex items-center justify-between gap-2 rounded-xl border border-line px-3 py-2 text-xs">
+                          <span className="min-w-0">
+                            <span className="block truncate font-bold">{f.name}</span>
+                            <span className="text-ink-mute">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+                          </span>
+                          <a href={f.url} download={f.name} className="inline-flex shrink-0 items-center gap-1 font-bold text-brand">
+                            下載 <Download className="size-3" />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           </div>

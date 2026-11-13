@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { MarketingLayout } from '../components/Layout';
 import { PlanCards } from '../components/Plans';
 
@@ -25,7 +26,10 @@ export default function Pricing() {
             <h2 className="text-[18px] font-black">付款與退款</h2>
             <ul className="mt-3 space-y-2 text-[15px] leading-relaxed text-site-soft">
               <li>・按月計費，帳戶設定裡隨時可以取消，用到這期結束後不再扣款</li>
-              <li>・付款後 7 天內遇到無法正常使用、重複扣款等問題，可以申請退款</li>
+              <li>
+                ・付款後 7 天內遇到無法正常使用、重複扣款等問題，可以申請退款，聯絡方式在
+                <Link to="/about#contact" className="font-bold text-site-red underline underline-offset-4">關於我們</Link>
+              </li>
               <li>・單純不想繼續使用請直接取消訂閱，已付的當期費用不退</li>
               <li>・免費版與 7 天專業版試用都不需要信用卡</li>
             </ul>

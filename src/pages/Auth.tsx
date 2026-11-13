@@ -153,6 +153,14 @@ export default function Auth({ mode }: { mode: 'login' | 'register' }) {
             <Button type="submit" size="lg" className="w-full" disabled={busy}>
               {busy ? '處理中…' : isLogin ? '登入' : '建立帳號'}
             </Button>
+            {!isLogin && (
+              <p className="text-center text-xs leading-relaxed text-ink-mute">
+                你的影片只留在這台電腦，不會上傳。建立帳號即表示同意
+                <Link to="/terms" className="font-bold text-ink-soft hover:underline">服務條款</Link>
+                與
+                <Link to="/privacy" className="font-bold text-ink-soft hover:underline">隱私權政策</Link>。
+              </p>
+            )}
           </form>
 
           <p className="mt-6 text-center text-sm text-ink-soft">

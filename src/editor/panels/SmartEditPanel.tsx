@@ -8,6 +8,7 @@ import { checkOpeningHook, swapToOpening } from '../../lib/hookCheck';
 import { findHighlights, type HighlightCandidate } from '../../lib/highlightDetect';
 import { findSimilarAdjacentShots, type SimilarShotPair } from '../../lib/shotSimilarity';
 import { brollCandidates } from '../../lib/autoBroll';
+import { takeIntentTemplate } from '../../lib/autoPick';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
 import type { LibraryTrack, ProjectData } from '../../lib/types';
@@ -51,7 +52,9 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const captionCount = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower').length);
   const clipsKey = useEditor((s) => s.data.clips.map((c) => `${c.id}:${c.mediaId}:${c.in}:${c.out}`).join('|'));
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
-  const [selected, setSelected] = useState<SmartTemplate[]>([SMART_TEMPLATES[0]]);
+  // 首頁選過「我要剪這種影片」就預先選好對應模板（只用一次）
+  const [intent] = useState(() => takeIntentTemplate(SMART_TEMPLATES));
+  const [selected, setSelected] = useState<SmartTemplate[]>([intent ?? SMART_TEMPLATES[0]]);
   const [regen, setRegen] = useState(false);
   const brollPool = useEditor((s) => brollCandidates(s.data).length);
   const [withBroll, setWithBroll] = useState(true);
@@ -300,6 +303,7 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
           </label>
         )}
       </div>
+      {intent && <p className="mt-3 rounded-xl bg-sunken px-3 py-2 text-xs text-ink-soft">依你在首頁選的類型，已預先選好「{intent.name}」模板，可以改選別的。</p>}
       <p className="mt-4 text-xs leading-relaxed text-ink-mute">
         想自己挑風格？選 1 個模板直接套用，或選 2-3 個先比較結果再決定。完成後每一項都能再調整，也能一鍵復原。
       </p>

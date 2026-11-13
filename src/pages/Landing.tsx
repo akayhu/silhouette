@@ -6,6 +6,7 @@ import { PlanCards } from '../components/Plans';
 import { mkButton, SectionTitle } from '../components/marketing';
 import { stickerDef, stickerUrl, STICKERS } from '../lib/stickers';
 import { OG_IMAGE, PUBLIC_ROUTES, SITE_NAME, SITE_URL } from '../lib/seo';
+import { rememberIntentTemplate } from '../lib/autoPick';
 import { SMART_TEMPLATES } from '../lib/templates';
 import { FILTER_PRESETS } from '../lib/filters';
 import { TRANSITION_TYPES } from '../lib/types';
@@ -839,6 +840,13 @@ function ForWho() {
               <span className="text-[14px] font-bold">成品長度</span>
               <span className="num text-[26px] leading-none font-extrabold text-site-red">{o.total}</span>
             </div>
+            <Link
+              to="/register"
+              onClick={() => rememberIntentTemplate(o.template)}
+              className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-full border border-site-line bg-white px-4 py-2.5 text-[14px] font-bold hover:border-site-ink"
+            >
+              用這個類型開始剪 <ArrowRight className="size-4" />
+            </Link>
           </article>
         ))}
       </div>
@@ -1040,11 +1048,11 @@ const GROUPS: { title: string; items: Item[] }[] = [
   },
 ];
 
-const ORDERS: { title: string; who: string; lines: [string, string][]; total: string }[] = [
-  { title: '知識型口播', who: '對著鏡頭講解的創作者', lines: [['智能口播剪掉停頓與口誤', '12 處'], ['AI 自動字幕，大字樣式', '18 句'], ['重點句貼紙強調', '3 個']], total: '00:52' },
-  { title: '美食與旅遊 Vlog', who: '記錄生活、分享景點的人', lines: [['多段素材串接轉場', '5 個'], ['美食濾鏡統一色調', '1 套'], ['無版權配樂，淡入淡出', '1 首']], total: '00:38' },
-  { title: '小店家商品介紹', who: '經營網拍或實體店的老闆', lines: [['疊加商品特寫，子母畫面', '2 層'], ['AI 聲音朗讀介紹', '6 句'], ['價格與優惠標籤貼紙', '2 個']], total: '00:30' },
-  { title: '教學與課程片段', who: '老師、講師、職人分享', lines: [['疊加螢幕畫面與講者鏡頭', '1 層'], ['鎖定剪好的軌道', '2 條'], ['去除舊影片的 Logo', '1 處']], total: '01:20' },
+const ORDERS: { title: string; who: string; template: string; lines: [string, string][]; total: string }[] = [
+  { title: '知識型口播', who: '對著鏡頭講解的創作者', template: 'talk', lines: [['智能口播剪掉停頓與口誤', '12 處'], ['AI 自動字幕，大字樣式', '18 句'], ['重點句貼紙強調', '3 個']], total: '00:52' },
+  { title: '美食與旅遊 Vlog', who: '記錄生活、分享景點的人', template: 'food', lines: [['多段素材串接轉場', '5 個'], ['美食濾鏡統一色調', '1 套'], ['無版權配樂，淡入淡出', '1 首']], total: '00:38' },
+  { title: '小店家商品介紹', who: '經營網拍或實體店的老闆', template: 'shopeepick', lines: [['疊加商品特寫，子母畫面', '2 層'], ['AI 聲音朗讀介紹', '6 句'], ['價格與優惠標籤貼紙', '2 個']], total: '00:30' },
+  { title: '教學與課程片段', who: '老師、講師、職人分享', template: 'minimal', lines: [['疊加螢幕畫面與講者鏡頭', '1 層'], ['鎖定剪好的軌道', '2 條'], ['去除舊影片的 Logo', '1 處']], total: '01:20' },
 ];
 
 /** 結構化資料：只描述頁面上看得到的內容（方案價格、常見問題） */

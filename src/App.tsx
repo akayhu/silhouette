@@ -10,6 +10,9 @@ import Faq from './pages/Faq';
 import Ai from './pages/Ai';
 import Local from './pages/Local';
 import Features from './pages/Features';
+import About from './pages/About';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 import NotFound from './pages/NotFound';
 import { applySeo } from './lib/seo';
 import { RequireAdmin } from './pages/admin/AdminLayout';
@@ -52,6 +55,9 @@ function AppContent() {
                 <Route path="/ai" element={<Ai />} />
                 <Route path="/local" element={<Local />} />
                 <Route path="/features" element={<Features />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="/login" element={<Auth mode="login" />} />
                 <Route path="/register" element={<Auth mode="register" />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />

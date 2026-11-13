@@ -60,3 +60,29 @@ export function pickTemplate(captions: Pick<Caption, 'text' | 'role'>[], templat
 }
 
 export const AUTO_PICK_TEMPLATE_IDS = Object.keys(TEMPLATE_KEYWORDS);
+
+const INTENT_KEY = 'pianke.intentTemplate';
+const INTENT_TTL = 7 * 24 * 3600_000;
+
+/** 首頁選了「我要剪這種影片」：記下對應模板，進編輯器開智能剪輯時預先選好（存在這台瀏覽器，7 天內有效） */
+export function rememberIntentTemplate(id: string) {
+  try {
+    localStorage.setItem(INTENT_KEY, JSON.stringify({ id, at: Date.now() }));
+  } catch {
+    /* 無痕模式等存不了就算了 */
+  }
+}
+
+/** 取出並清掉記下的模板；過期、壞掉或模板已不存在就回傳 null */
+export function takeIntentTemplate(templates: SmartTemplate[]): SmartTemplate | null {
+  try {
+    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(INTENT_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(INTENT_KEY);
+    const saved = JSON.parse(raw) as { id?: unknown; at?: unknown };
+    if (typeof saved.id !== 'string' || typeof saved.at !== 'number' || Date.now() - saved.at > INTENT_TTL) return null;
+    return templates.find((t) => t.id === saved.id) ?? null;
+  } catch {
+    return null;
+  }
+}

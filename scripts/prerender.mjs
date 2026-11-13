@@ -28,7 +28,7 @@ const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g
 const setTag = (html, re, tag) => (re.test(html) ? html.replace(re, tag) : html.replace('</head>', `    ${tag}\n  </head>`));
 
 const entry = fs.readdirSync(SSR).find((f) => /^entry-server\.(m?js)$/.test(f));
-const { render, PUBLIC_ROUTES, PRERENDER_ROUTES, SITE_NAME, faqs } = await import(pathToFileURL(path.join(SSR, entry)).href);
+const { render, PUBLIC_ROUTES, PRERENDER_ROUTES, SITE_NAME, faqs, siteInfoMissing } = await import(pathToFileURL(path.join(SSR, entry)).href);
 const template = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
 
 // 外殼：沒有預先產生的內容，前端載入後自己決定標題和 noindex
@@ -54,6 +54,8 @@ for (const route of PRERENDER_ROUTES) {
   fs.writeFileSync(out, html);
   console.log(`預先產生 ${route} → ${path.relative(ROOT, out)}`);
 }
+
+if (siteInfoMissing().length) console.warn(`⚠ src/lib/siteInfo.ts 還有沒填的營運資訊（${siteInfoMissing().join('、')}）：關於我們、隱私權政策、服務條款會顯示「待補」，正式上線前請填寫。`);
 
 const robots = ['User-agent: *', 'Allow: /', 'Disallow: /api/'];
 if (SITE_URL) {

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { stripTypeScriptTypes } from 'node:module';
 const compile = async (file) => stripTypeScriptTypes(await readFile(new URL('../src/lib/' + file, import.meta.url), 'utf8'));
 const url = (code) => 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
-const { pickTemplate, AUTO_PICK_TEMPLATE_IDS } = await import(url(await compile('autoPick.ts')));
+const { pickTemplate, AUTO_PICK_TEMPLATE_IDS, rememberIntentTemplate, takeIntentTemplate } = await import(url(await compile('autoPick.ts')));
 
 const templatesSrc = await readFile(new URL('../src/lib/templates.ts', import.meta.url), 'utf8');
 const templateIds = [...templatesSrc.matchAll(/^ {4}id: '([^']+)'/gm)].map((m) => m[1]);
@@ -40,4 +40,31 @@ test('花字不列入判斷依據', () => {
 test('模板清單沒有該類型時略過，不會回傳 undefined', () => {
   const r = pickTemplate([cap('好吃的餐廳')], [{ id: 'talk', name: 'talk' }]);
   assert.equal(r.template.id, 'talk');
+});
+
+const store = new Map();
+globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+
+test('首頁選的類型：記下後取出一次就清掉，不會每次都預選', () => {
+  store.clear();
+  rememberIntentTemplate('food');
+  assert.equal(takeIntentTemplate(templates)?.id, 'food');
+  assert.equal(takeIntentTemplate(templates), null);
+});
+
+test('記下的模板過期、壞掉或已不存在時不預選', () => {
+  store.clear();
+  store.set('pianke.intentTemplate', JSON.stringify({ id: 'food', at: Date.now() - 8 * 24 * 3600_000 }));
+  assert.equal(takeIntentTemplate(templates), null);
+  store.set('pianke.intentTemplate', '{壞掉');
+  assert.equal(takeIntentTemplate(templates), null);
+  store.set('pianke.intentTemplate', JSON.stringify({ id: 'gone', at: Date.now() }));
+  assert.equal(takeIntentTemplate(templates), null);
+});
+
+test('首頁各類型對應的模板都存在', async () => {
+  const landing = await readFile(new URL('../src/pages/Landing.tsx', import.meta.url), 'utf8');
+  const ids = [...landing.matchAll(/template: '([^']+)'/g)].map((m) => m[1]);
+  assert.ok(ids.length >= 4);
+  for (const id of ids) assert.ok(templateIds.includes(id), `找不到模板 ${id}`);
 });

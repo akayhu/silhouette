@@ -71,7 +71,7 @@ export function SiteHeader() {
 const FOOTER_COLS = [
   { title: '產品', items: [['AI 功能', '/ai'], ['全部功能', '/features'], ['價格方案', '/pricing'], ['開始剪輯', '/register']] },
   { title: '支援', items: [['常見問題', '/faq'], ['帳戶設定', '/account']] },
-  { title: '公司', items: [['關於我們', '/'], ['服務條款', '/'], ['隱私權政策', '/']] },
+  { title: '公司', items: [['關於我們', '/about'], ['服務條款', '/terms'], ['隱私權政策', '/privacy']] },
 ];
 
 export function SiteFooter() {

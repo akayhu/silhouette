@@ -7,6 +7,7 @@ import { exportModeFor, exportVideo, type ExportMode, type ExportStep } from '..
 import { supportedExportMimes } from '../lib/exportSupport';
 import { formatTime } from '../lib/format';
 import { analyzeMixLoudness, applyMixGain, type MixLoudnessResult } from '../lib/mixLoudness';
+import { checkExportOutput, type ExportCheck } from '../lib/exportCheck';
 import { DEFAULT_SETTINGS, estimateSize, needsRealtime, planTargetSize, type ExportBitrate, type ExportFps } from '../lib/offlineExport';
 import { aspectSize } from '../lib/timeline';
 import type { ProjectData } from '../lib/types';
@@ -218,6 +219,10 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       return merged;
     });
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  // 匯出完成後在背景檢查成品（null＝還沒開始或不需要；'running'＝檢查中）
+  const [check, setCheck] = useState<ExportCheck | 'running' | null>(null);
+  const checkAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => checkAbort.current?.abort(), []);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ url: string; blob: Blob; size: number; test: boolean; info: ExportInfo; at: number; record: LocalExport | null; savedId?: string } | null>(null);
   /** 這台裝置上這個專案最近一次的匯出，以及存到帳戶的匯出 */
@@ -325,6 +330,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     if (runRef.current) return;
     const controller = new AbortController();
     runRef.current = controller;
+    checkAbort.current?.abort();
+    setCheck(null);
     setState('running');
     setProgress(0);
     setError('');
@@ -359,6 +366,13 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       const info: ExportInfo = { ext: output.ext, width, height, quality, fps, bitrate, duration: output.duration, mode: output.mode };
       setResult({ url, blob: output.blob, size: output.blob.size, test, info, at: Date.now(), record: null });
       setState('done');
+      checkAbort.current?.abort();
+      const checker = new AbortController();
+      checkAbort.current = checker;
+      setCheck('running');
+      void checkExportOutput(output.blob, snapshot, output.duration, checker.signal).then((r) => {
+        if (!checker.signal.aborted) setCheck(r);
+      });
       // 完整匯出自動留在這台裝置，關掉視窗或重新整理都還能下載
       if (!test && user && projectId) {
         const record = await localExports.put(user.id, projectId, info, output.blob);
@@ -521,6 +535,28 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             {describe(result.info, result.size)} ・ {result.info.mode === 'offline' ? '逐格匯出' : '即時錄製'}
           </div>
           <video src={result.url} controls className="mx-auto mt-4 max-h-64 rounded-2xl bg-sunken" />
+          {check === 'running' && (
+            <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-ink-mute">
+              <Loader2 className="size-3.5 animate-spin" /> 正在檢查成品（畫面、聲音）…
+            </p>
+          )}
+          {check && check !== 'running' && (
+            check.issues.length ? (
+              <ul role="status" className="mt-3 space-y-1.5 text-left" aria-label="成品檢查結果">
+                {check.issues.map((it) => (
+                  <li key={it.text} className={`rounded-xl px-3 py-2 text-xs leading-relaxed ${it.level === 'error' ? 'bg-red-50 font-semibold text-red-700' : 'bg-amber-50 text-amber-800'}`}>
+                    {it.text}
+                  </li>
+                ))}
+              </ul>
+            ) : check.checked.length && !check.incomplete ? (
+              <p role="status" className="mt-3 flex items-center justify-center gap-1.5 text-xs text-ink-soft">
+                <Check className="size-3.5 text-mint" /> 成品檢查通過：{check.checked.join('、')}
+              </p>
+            ) : (
+              <p role="status" className="mt-3 text-xs text-ink-mute">成品檢查沒有完成（{check.incomplete}），不影響下載，建議自己播一下確認。</p>
+            )
+          )}
           <a href={result.url} download={result.test ? `${name || '片刻剪趣作品'}-測試.${result.info.ext}` : fileName(name, result.at, result.info)} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-white hover:bg-brand-hover">
             <Download className="size-4" /> 下載影片
           </a>

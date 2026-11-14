@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ProjectData, TrackKey } from '../lib/types';
-import { totalDuration, trackOf } from '../lib/timeline';
+import { mainDuration, totalDuration, trackOf } from '../lib/timeline';
 
 export type SelItem = { type: 'clip' | 'audio' | 'caption' | 'sticker' | 'overlay' | 'marker'; id: string };
 export type Selection = SelItem | null;
@@ -15,6 +15,8 @@ interface EditorState {
   /** 所有選取中的項目（框選／Shift 加選） */
   selected: SelItem[];
   time: number;
+  /** 打開專案時主軌的長度：文字剪輯面板用它算「這次編輯剪掉了多少」 */
+  baseDuration: number;
   playing: boolean;
   zoom: number;
   past: ProjectData[];
@@ -59,6 +61,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   selection: null,
   selected: [],
   time: 0,
+  baseDuration: 0,
   playing: false,
   zoom: 60,
   past: [],
@@ -78,6 +81,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       selection: null,
       selected: [],
       time: 0,
+      baseDuration: mainDuration(data.clips),
       playing: false,
       eraseEdit: null,
       junction: null,

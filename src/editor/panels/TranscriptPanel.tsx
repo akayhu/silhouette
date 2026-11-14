@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Scissors, X } from 'lucide-react';
+import { Headphones, Scissors, X } from 'lucide-react';
 import { formatCaptionTime, orderedCaptions } from '../../lib/captions';
-import { captionWords, cutTranscript } from '../../lib/timeline';
+import { formatTime } from '../../lib/format';
+import { captionWords, cutTranscript, mainDuration } from '../../lib/timeline';
 import type { Caption } from '../../lib/types';
+import { cutSummary } from '../../lib/rangePreview';
 import { Button, useToast } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
@@ -56,10 +58,13 @@ function rangesOf(tokens: Token[], picked: Set<string>): Range[] {
   return ranges;
 }
 
-export function TranscriptPanel({ seek }: { seek: (t: number) => void }) {
+export function TranscriptPanel({ seek, playRanges }: { seek: (t: number) => void; playRanges: (ranges: Range[]) => void }) {
   const toast = useToast();
   const captions = useEditor((s) => s.data.captions);
   const time = useEditor((s) => s.time);
+  const baseDuration = useEditor((s) => s.baseDuration);
+  const currentDuration = useEditor((s) => mainDuration(s.data.clips));
+  const summary = cutSummary(baseDuration, currentDuration);
   const { lines, tokens } = useMemo(() => buildTokens(captions), [captions]);
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [anchor, setAnchor] = useState<string | null>(null);
@@ -121,6 +126,13 @@ export function TranscriptPanel({ seek }: { seek: (t: number) => void }) {
     <div className="flex min-h-full flex-col" onKeyDown={onKeyDown}>
       <div className="p-4 pb-2">
         <h2 className="text-sm font-extrabold">文字剪輯</h2>
+        {summary && (
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 rounded-xl bg-sunken px-3 py-2 text-xs tabular-nums" aria-label="這次編輯的剪輯摘要">
+            <span className="text-ink-mute">本次原長 <b className="font-bold text-ink">{formatTime(summary.base)}</b></span>
+            <span className="text-ink-mute">已剪掉 <b className="font-bold text-brand">{summary.removed.toFixed(1)} 秒</b></span>
+            <span className="text-ink-mute">目前長度 <b className="font-bold text-ink">{formatTime(summary.current)}</b></span>
+          </div>
+        )}
         <p className="mt-1 text-xs leading-relaxed text-ink-mute">
           像改稿一樣剪片：點選要刪的字（按住 Shift 可以連選），按「剪掉」或 Delete，那段畫面和聲音就會從影片刪除，後面的內容自動往前補。
         </p>
@@ -192,6 +204,9 @@ export function TranscriptPanel({ seek }: { seek: (t: number) => void }) {
           <button className="grid size-9 place-items-center rounded-xl text-ink-soft hover:bg-sunken" onClick={() => setPicked(new Set())} aria-label="取消選取" title="取消選取（Esc）">
             <X className="size-4" />
           </button>
+          <Button variant="secondary" size="sm" onClick={() => playRanges(ranges)} title="先聽聽看選取的這幾段，確認要剪再按「剪掉」">
+            <Headphones className="size-4" /> 試聽
+          </Button>
           <Button size="sm" onClick={cut}>
             <Scissors className="size-4" /> 剪掉
           </Button>

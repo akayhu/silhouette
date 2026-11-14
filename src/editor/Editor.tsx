@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { Engine } from '../lib/engine';
 import { aspectSize, isLocked, trimAt, type TrimSide, splitAudioAt, splitCaptionAt, splitMainAt, splitOverlayAt, splitStickerAt, removeItems, trackOf } from '../lib/timeline';
 import { ensureUnlocked } from './locks';
+import { previewStep } from '../lib/rangePreview';
 import { uid } from '../lib/format';
 import type { Aspect } from '../lib/types';
 import { Button, Logo, notify } from '../components/ui';
@@ -141,6 +142,38 @@ export default function Editor() {
 
   const seek = useCallback((t: number) => engineRef.current?.seek(t), []);
 
+  // 試聽選取：依序播放幾段時間，播完停下；使用者自己暫停或拖到別處就不再接手
+  const previewStop = useRef<(() => void) | null>(null);
+  const playRanges = useCallback((ranges: [number, number][]) => {
+    previewStop.current?.();
+    const engine = engineRef.current;
+    if (!engine || !ranges.length) return;
+    let index = 0;
+    const stop = (pause: boolean) => {
+      unsubscribe();
+      previewStop.current = null;
+      if (pause && engine.playing) {
+        engine.pause();
+        useEditor.getState().setPlaying(false);
+      }
+    };
+    engine.seek(ranges[0][0]);
+    if (!engine.playing) {
+      engine.play();
+      useEditor.getState().setPlaying(true);
+    }
+    const unsubscribe = useEditor.subscribe((s) => {
+      const step = previewStep(ranges, index, s.time, s.playing);
+      if (step.kind === 'next') {
+        index = step.index;
+        engine.seek(ranges[index][0]);
+      } else if (step.kind === 'done') stop(true);
+      else if (step.kind === 'cancel') stop(false);
+    });
+    previewStop.current = () => stop(false);
+  }, []);
+  useEffect(() => () => previewStop.current?.(), []);
+
   const split = useCallback(() => {
     const { selection, time, commit, data } = useEditor.getState();
     if (!ensureUnlocked(selection ? trackOf(selection, data) : 'main')) return;
@@ -276,7 +309,7 @@ export default function Editor() {
       {tab === 'mix' && <MixPanel />}
       {tab === 'music' && <MusicPanel />}
       {tab === 'text' && <TextPanel seek={seek} onOpenVoice={() => changeTab('voice')} />}
-      {tab === 'transcript' && <TranscriptPanel seek={seek} />}
+      {tab === 'transcript' && <TranscriptPanel seek={seek} playRanges={playRanges} />}
       {tab === 'voice' && <VoicePanel />}
       {tab === 'sticker' && <StickerPanel />}
       {tab === 'filter' && <FilterPanel />}

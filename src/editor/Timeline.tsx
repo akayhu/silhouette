@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { AudioLines, Film, Flag, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, Volume2, VolumeX, X, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
 import type { TrimSide } from '../lib/timeline';
+import { AudioWave } from './AudioWave';
 import { audioCategoryOf, captionLanes, captionTrackKey, clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, trackLabel, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { AudioClip, Caption, Marker, TrackKey } from '../lib/types';
@@ -787,8 +788,8 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
                         className="border-track-audio-edge bg-track-audio"
                         onDown={(e, mode) => startAudio(e, a.id, mode)}
                       >
-                        <Wave />
-                        <span className="relative truncate text-[10px] font-bold text-[#0d6b52]">{m?.origin === 'tts' ? '🗣 ' : '♪ '}{m?.name}</span>
+                        <AudioWave media={m} clip={a} width={clipLength(a) * zoom} />
+                        <span className="relative truncate rounded bg-track-audio/85 px-1 text-[10px] font-bold text-[#0d6b52]">{m?.origin === 'tts' ? '🗣 ' : '♪ '}{m?.name}</span>
                       </Block>
                     );
                   })}
@@ -921,13 +922,6 @@ function Block({
   );
 }
 
-function Wave() {
-  return (
-    <svg className="absolute inset-0 h-full w-full opacity-40" preserveAspectRatio="none" viewBox="0 0 100 20" aria-hidden>
-      <path d="M0 10 Q2 2 4 10 T8 10 T12 10 T16 10 T20 10 T24 10 T28 10 T32 10 T36 10 T40 10 T44 10 T48 10 T52 10 T56 10 T60 10 T64 10 T68 10 T72 10 T76 10 T80 10 T84 10 T88 10 T92 10 T96 10 T100 10" stroke="#19b38a" fill="none" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
 
 function Ruler({
   width,

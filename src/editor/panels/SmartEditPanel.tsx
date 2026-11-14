@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Download, ExternalLink, Film, FolderPlus, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { sliceProject } from '../../lib/highlightClip';
@@ -21,13 +21,16 @@ import { Button, ProBadge, useToast, useUpgrade } from '../../components/ui';
 import { useEditor } from '../store';
 import { ensureUnlocked } from '../locks';
 import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
+import { Slider } from '../Inspector';
+import { photoFlashPhotos, planPhotoFlash } from '../../lib/photoFlash';
 
 const MAX_COMPARE = 3;
 
-type Section = 'apply' | 'suggest';
+type Section = 'apply' | 'suggest' | 'photo';
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'apply', label: '套用模板' },
   { id: 'suggest', label: '智慧建議' },
+  { id: 'photo', label: '照片' },
 ];
 
 function summaryLines(c: SmartEditResult['counts']) {
@@ -62,6 +65,16 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const [regen, setRegen] = useState(false);
   const brollPool = useEditor((s) => brollCandidates(s.data).length);
   const [withBroll, setWithBroll] = useState(true);
+  // 照片快閃：用照片做的短影音
+  const dMedia = useEditor((s) => s.data.media);
+  const dClips = useEditor((s) => s.data.clips);
+  const dOverlays = useEditor((s) => s.data.overlays);
+  const photoSource = useMemo(() => photoFlashPhotos({ media: dMedia, clips: dClips, overlays: dOverlays }), [dMedia, dClips, dOverlays]);
+  const hasCaptionsOrStickers = useEditor((s) => s.data.captions.length + s.data.stickers.length > 0);
+  const [flashSec, setFlashSec] = useState(1);
+  const [flashSoft, setFlashSoft] = useState(true);
+  const [flashMusic, setFlashMusic] = useState(true);
+  const [flashDone, setFlashDone] = useState<{ photos: number; duration: number; music: string | null } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [done, setDone] = useState<{ tpl: SmartTemplate; counts: SmartEditResult['counts']; auto?: string[] } | null>(null);
   // 選 2-3 個模板時，先把每個模板實際跑過一次（真正的剪輯結果，不是猜的），
@@ -287,6 +300,16 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
     }
   };
 
+  const runPhotoFlash = () => {
+    if (!isPro) return upgrade('照片快閃是專業版功能，照片一鍵排成快閃影片、配上音樂。');
+    const base = useEditor.getState().data;
+    const result = planPhotoFlash(base, library, { secondsPerPhoto: flashSec, softFilter: flashSoft, music: flashMusic });
+    if (!result.ok) return toast(result.reason, 'info');
+    useEditor.getState().commit(() => result.data);
+    setFlashDone({ photos: result.photos, duration: result.duration, music: result.music });
+    toast(`已排成照片快閃：${result.photos} 張，共 ${result.duration.toFixed(1)} 秒`, 'success');
+  };
+
   const undo = () => {
     useEditor.getState().undo();
     setDone(null);
@@ -422,6 +445,66 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
           </div>
         </div>
       )}
+      </>}
+
+      {section === 'photo' && <>
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-extrabold">照片快閃</h2>
+        {!isPro && <ProBadge />}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+        <strong className="font-bold text-ink-soft">用照片做的短影音</strong>（回憶、旅遊、商品照）：每張照片只停一下、慢慢放大，換張時閃一下白光，再配上節奏明快的音樂。
+      </p>
+      {photoSource === 'has-video' ? (
+        <p className="mt-3 rounded-xl bg-sunken p-3 text-xs leading-relaxed text-ink-soft">主軌上有影片。照片快閃只用在全部都是照片的專案，才不會打亂口白和字幕的時間；有影片的話請用「套用模板」。</p>
+      ) : photoSource.length === 0 ? (
+        <p className="mt-3 rounded-xl bg-sunken p-3 text-xs leading-relaxed text-ink-soft">先到「素材」上傳幾張照片（照片不用先放上時間軸），再回來按下面的按鈕。</p>
+      ) : (
+        <p className="mt-3 rounded-xl bg-sunken p-3 text-xs leading-relaxed text-ink-soft">
+          目前有 {photoSource.length} 張照片，會依現在的順序排列。
+          {hasCaptionsOrStickers && <span className="mt-1 block text-amber-700">專案裡已經有字幕或貼紙，照片時間改變後它們不會跟著動，套用後請自己對一下。</span>}
+        </p>
+      )}
+      <div className="mt-4 space-y-3">
+        <Slider label="每張停留" value={flashSec} min={0.5} max={2} step={0.1} format={(v) => `${v.toFixed(1)} 秒`} onChange={(v) => (setFlashSec(v), setFlashDone(null))} />
+        <label className="flex items-start gap-2 text-xs">
+          <input type="checkbox" className="mt-0.5 accent-brand" checked={flashSoft} onChange={(e) => (setFlashSoft(e.target.checked), setFlashDone(null))} />
+          <span>
+            柔和奶油色調
+            <span className="block text-[11px] text-ink-mute">每張照片套上淡淡的柔光濾鏡</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-xs">
+          <input type="checkbox" className="mt-0.5 accent-brand" checked={flashMusic} onChange={(e) => (setFlashMusic(e.target.checked), setFlashDone(null))} />
+          <span>
+            自動配樂
+            <span className="block text-[11px] text-ink-mute">挑節奏明快的無版權音樂，放到影片結束並淡出</span>
+          </span>
+        </label>
+      </div>
+      {flashDone ? (
+        <div className="mt-4 rounded-2xl bg-brand-soft/60 p-3">
+          <div className="text-sm font-extrabold text-brand">已排成照片快閃</div>
+          <ul className="mt-1.5 space-y-0.5 text-xs text-ink-soft">
+            <li>・{flashDone.photos} 張照片，共 {flashDone.duration.toFixed(1)} 秒</li>
+            <li>・慢慢放大，換張閃白</li>
+            {flashDone.music && <li>・配樂「{flashDone.music}」</li>}
+          </ul>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Button variant="secondary" size="sm" onClick={() => (useEditor.getState().undo(), setFlashDone(null))}>
+              <RotateCcw className="size-3.5" /> 復原
+            </Button>
+            <Button size="sm" onClick={() => setFlashDone(null)}>
+              調整重排
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button className="mt-4 w-full" onClick={runPhotoFlash} disabled={photoSource === 'has-video' || photoSource.length === 0}>
+          <WandSparkles className="size-4" /> 排成照片快閃
+        </Button>
+      )}
+      <p className="mt-3 text-[11px] leading-relaxed text-ink-mute">再按一次會依新的設定重排，並換掉上一次配的音樂；你自己加的音訊不會被動到。</p>
       </>}
 
       {section === 'apply' && <>

@@ -705,7 +705,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
                       style={m?.thumb ? { backgroundImage: `url(${m.thumb})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' } : undefined}
                       onDown={(e, mode) => startOverlay(e, o.id, mode)}
                     >
-                      <span className="truncate rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-ink">
+                      <span className="truncate rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-[#16171b]">
                         {o.speed !== 1 && `${o.speed}x · `}
                         {formatTime(clipLength(o))} {m?.name}
                       </span>
@@ -732,7 +732,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
                       onDown={(e, mode) => startMain(e, c.id, mode)}
                     >
                       {m?.kind === 'video' && <VideoWave media={m} clip={c} width={(c.end - c.start) * zoom} />}
-                      <span className="relative truncate rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-ink">
+                      <span className="relative truncate rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-[#16171b]">
                         {c.speed !== 1 && `${c.speed}x · `}
                         {formatTime(c.end - c.start)} {m?.name}
                       </span>

@@ -325,7 +325,7 @@ export function MusicPanel() {
                       </>
                     )}
                     <div className={`absolute inset-0 grid place-items-center bg-black/35 opacity-0 transition group-hover:opacity-100 ${active ? '!opacity-100' : ''}`}>
-                      <span className="grid size-10 place-items-center rounded-full bg-white/95 text-ink shadow-card">
+                      <span className="grid size-10 place-items-center rounded-full bg-white/95 text-[#16171b] shadow-card">
                         {active ? <Pause className="size-5" fill="currentColor" /> : <Play className="ml-0.5 size-5" fill="currentColor" />}
                       </span>
                     </div>

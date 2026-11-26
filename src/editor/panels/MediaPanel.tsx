@@ -304,7 +304,7 @@ export function MediaPanel() {
           <div key={m.id} className="group flex items-center gap-3 rounded-xl border border-line bg-surface p-1.5 transition hover:border-brand/40 hover:shadow-card">
             <div className="relative grid h-12 w-16 shrink-0 place-items-center overflow-hidden rounded-lg bg-sunken">
               {m.thumb ? <img src={m.thumb} alt="" className="h-full w-full object-cover" /> : m.kind === 'audio' ? <Music className="size-5 text-mint" /> : <Film className="size-5 text-ink-mute" />}
-              <span className="absolute right-0.5 bottom-0.5 rounded bg-white/90 px-1 text-[9px] font-bold text-ink">{formatTime(m.duration)}</span>
+              <span className="absolute right-0.5 bottom-0.5 rounded bg-white/90 px-1 text-[9px] font-bold text-[#16171b]">{formatTime(m.duration)}</span>
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-bold">{m.name}</div>

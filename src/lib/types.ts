@@ -209,7 +209,7 @@ export interface Caption {
   /** 智能剪輯加上的花字（重新套用模板時會先移除） */
   role?: 'flower' | 'card';
   /** 圖卡種類（role 是 card 時） */
-  cardKind?: 'banner' | 'section' | 'lower' | 'end';
+  cardKind?: 'banner' | 'section' | 'lower' | 'end' | 'handle';
 }
 
 export type StickerAnimation = 'none' | 'pop' | 'bounce' | 'wobble' | 'pulse' | 'spin' | 'float';
@@ -273,7 +273,16 @@ export interface VideoCover {
   thumb?: string;
 }
 
+/** 畫面背景（影片沒佔滿畫布時露出的部分） */
+export interface Backdrop {
+  style: 'solid' | 'gradient' | 'dots';
+  color: string;
+  color2?: string;
+}
+
 export interface ProjectData {
+  /** 沒有設定 = 同一畫面模糊放大 */
+  backdrop?: Backdrop;
   /** 影片封面 */
   cover?: VideoCover;
   /** 專案內的人名、品牌與常見辨識錯字校正表 */

@@ -1,3 +1,4 @@
+import { drawBackdrop } from './backdrop';
 import type { Caption, ClipMotion, ClipTransform, MediaItem, OverlayClip, ProjectData, StickerItem, TransitionType } from './types';
 import { stickerImage, prepareStickers } from './stickers';
 import { waitForReady } from './exportSupport';
@@ -363,8 +364,11 @@ export class Engine {
     if (sources.some((s) => !s) || overlaySources.some((s) => !s)) return false;
 
     ctx.save();
-    ctx.fillStyle = '#ece9e2';
-    ctx.fillRect(0, 0, W, H);
+    if (this.data.backdrop) drawBackdrop(ctx, this.data.backdrop, W, H);
+    else {
+      ctx.fillStyle = '#ece9e2';
+      ctx.fillRect(0, 0, W, H);
+    }
 
     if (active.length === 1) {
       this.drawClip(ctx, active[0], sources[0]!, W, H);
@@ -463,12 +467,15 @@ export class Engine {
     // 濾鏡：CSS 濾鏡處理亮度／對比／飽和等，其餘用疊加層
     const fp = resolveFilter(clip.filter);
     const css = filterCss(fp);
-    // 背景：同一畫面放大模糊，避免黑邊
-    const cover = Math.max(W / sw, H / sh);
     ctx.save();
     applyClipRegion(ctx, tf.clipRegion, W, H);
-    ctx.filter = `blur(${Math.round(W / 24)}px) brightness(0.9) ${css}`;
-    ctx.drawImage(el, (W - sw * cover) / 2 - 20, (H - sh * cover) / 2 - 20, sw * cover + 40, sh * cover + 40);
+    // 背景：使用者選了純色／漸層／圓點就畫它；沒選就把同一畫面放大模糊，避免黑邊
+    if (this.data?.backdrop) drawBackdrop(ctx, this.data.backdrop, W, H);
+    else {
+      const cover = Math.max(W / sw, H / sh);
+      ctx.filter = `blur(${Math.round(W / 24)}px) brightness(0.9) ${css}`;
+      ctx.drawImage(el, (W - sw * cover) / 2 - 20, (H - sh * cover) / 2 - 20, sw * cover + 40, sh * cover + 40);
+    }
     ctx.filter = css || 'none';
     const mo = motionAt(clip.motion, this.time - clip.start, clip.end - clip.start);
     ctx.translate(cx + mo.dx * W, cy + mo.dy * H);

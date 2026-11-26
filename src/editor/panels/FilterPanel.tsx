@@ -8,11 +8,13 @@ import { Slider } from '../Inspector';
 import { useEditor } from '../store';
 import { LockedBanner } from '../locks';
 import { PanelNav, panelContentClass, PanelShell } from '../PanelNav';
+import { BackdropSection } from './BackdropSection';
 
-type Section = 'preset' | 'adjust';
+type Section = 'preset' | 'adjust' | 'backdrop';
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'preset', label: '濾鏡' },
   { id: 'adjust', label: '調整' },
+  { id: 'backdrop', label: '背景' },
 ];
 
 const ADJUSTMENTS: { key: keyof ClipFilter; label: string; min: number; max: number; format?: (v: number) => string }[] = [
@@ -56,6 +58,18 @@ export function FilterPanel() {
     };
     img.src = media.thumb;
   }, [media?.id, media?.thumb]);
+
+  // 背景是整個專案的設定，不用先選片段
+  if (section === 'backdrop') {
+    return (
+      <PanelShell>
+        <PanelNav sections={SECTIONS} value={section} onChange={setSection} />
+        <div className={panelContentClass}>
+          <BackdropSection />
+        </div>
+      </PanelShell>
+    );
+  }
 
   if (!clip || !media || media.kind === 'audio') {
     return (

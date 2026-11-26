@@ -16,7 +16,7 @@ const base = (extra = {}) => ({
 });
 const card = (r) => r.data.captions.find((c) => c.id === r.id);
 
-test('四種圖卡都加得上，標成 card，原本的字幕不動', () => {
+test('每種圖卡都加得上，標成 card，原本的字幕不動', () => {
   for (const p of CARD_PRESETS) {
     const r = addCard(base(), p.kind, 5);
     const c = card(r);
@@ -52,4 +52,12 @@ test('橫幅與結尾卡只放一張：再按一次換掉舊的並保留打過�
   assert.equal(twice.data.captions.filter((c) => c.cardKind === 'section').length, 2);
   const end2 = addCard(addCard(base(), 'end', 0).data, 'end', 0);
   assert.equal(card(end2).end, 20);
+});
+
+test('帳號浮水印蓋整支影片、只放一張、位置在下方', () => {
+  const r = addCard(addCard(base(), 'handle', 9).data, 'handle', 3);
+  const list = r.data.captions.filter((c) => c.cardKind === 'handle');
+  assert.equal(list.length, 1);
+  assert.deepEqual([list[0].start, list[0].end], [0, 20]);
+  assert.ok(list[0].style.y > 0.88);
 });

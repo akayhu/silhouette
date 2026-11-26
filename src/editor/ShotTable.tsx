@@ -13,7 +13,7 @@ export function ShotTable({ onClose, seek }: { onClose: () => void; seek: (t: nu
   const data = useEditor((s) => s.data);
   const placed = layoutMain(data.clips);
   const mediaById = new Map(data.media.map((m) => [m.id, m]));
-  const hasCaption = (start: number, end: number) => data.captions.some((c) => c.role !== 'flower' && c.start < end && c.end > start);
+  const hasCaption = (start: number, end: number) => data.captions.some((c) => !c.role && c.start < end && c.end > start);
 
   const goto = (t: number) => {
     seek(t);

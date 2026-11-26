@@ -37,7 +37,7 @@ export function CaptionCheck({ seek }: { seek: (t: number) => void }) {
     return [...byId].map(([id, list]) => ({ caption: captions.find((c) => c.id === id)!, list })).filter((r) => r.caption);
   }, [issues, captions]);
 
-  if (!captions.some((c) => c.role !== 'flower')) return null;
+  if (!captions.some((c) => !c.role)) return null;
   if (!issues.length) {
     return (
       <p className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-mute">

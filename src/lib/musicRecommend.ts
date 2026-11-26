@@ -32,7 +32,7 @@ function scoreMoods(text: string): Map<string, number> {
 
 /** 從字幕的語速猜合適的配樂節奏：講得快、句子密 → 配快一點的 bpm；講得慢、留白多 → 配慢一點的 bpm */
 function preferredBpmRange(captions: Caption[], totalDuration: number): [number, number] {
-  const lines = captions.filter((c) => c.role !== 'flower' && c.text.trim());
+  const lines = captions.filter((c) => !c.role && c.text.trim());
   if (!lines.length || !totalDuration) return [80, 120]; // 沒有字幕可以參考時，給一個最通用的範圍
   const totalChars = lines.reduce((n, c) => n + [...c.text].length, 0);
   const speechSpan = lines.reduce((s, c) => s + (c.end - c.start), 0);
@@ -51,7 +51,7 @@ export interface MusicRecommendation {
 export function recommendMusic(data: Pick<ProjectData, 'captions' | 'clips'>, library: LibraryTrack[], count = 3): MusicRecommendation[] {
   const tracks = library.filter((t) => t.category === 'music');
   if (!tracks.length) return [];
-  const text = data.captions.filter((c) => c.role !== 'flower').map((c) => c.text).join('');
+  const text = data.captions.filter((c) => !c.role).map((c) => c.text).join('');
   const moodScores = scoreMoods(text);
   const [bpmMin, bpmMax] = preferredBpmRange(data.captions, mainDuration(data.clips));
   const bpmMid = (bpmMin + bpmMax) / 2;

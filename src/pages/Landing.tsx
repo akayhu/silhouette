@@ -24,6 +24,7 @@ export default function Landing() {
       <StructuredData />
       <Hero />
       <StyleShowcase />
+      <TimelineBuild />
       <AiTabs />
       <BeforeAfter />
       <Numbers />
@@ -288,6 +289,75 @@ export function AiTabs() {
             {tab === 'suggest' && <SuggestMock />}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/** 時間軸生成示意：一鍵自動剪輯做完後，各軌道依序長出來（示範排列，不是真實專案） */
+const BUILD_TRACKS: { name: string; color: string; blocks: [left: number, width: number, order: number, text?: string][] }[] = [
+  { name: '花字', color: 'bg-[#ff7a59] text-white', blocks: [[2, 16, 8, '必吃！'], [54, 18, 9, '超便宜']] },
+  { name: '字幕', color: 'bg-[#ffe14a] text-site-ink', blocks: [[0, 22, 4, '今天吃這攤'], [23, 25, 5, '老闆在備料'], [49, 27, 6, '香腸滋滋響'], [77, 23, 7, '快來試試']] },
+  { name: '空鏡', color: 'bg-[#7aa8ff] text-white', blocks: [[28, 14, 10], [66, 13, 11]] },
+  { name: '主軌', color: 'bg-site-ink text-white', blocks: [[0, 22, 0, '片段 1'], [23, 25, 1, '片段 2'], [49, 27, 2, '片段 3'], [77, 23, 3, '片段 4']] },
+  { name: '配樂', color: 'bg-[#2fbf93] text-white', blocks: [[0, 100, 12, '依內容挑的配樂']] },
+  { name: '音效', color: 'bg-[#b48cff] text-white', blocks: [[22, 4, 13], [48, 4, 14], [76, 4, 15]] },
+];
+const BUILD_STEPS = ['剪掉空拍與口誤', '辨識字幕', '做花字、蓋空鏡', '配樂與音效'];
+const BUILD_LAST = 15;
+
+function TimelineBuild() {
+  const reduced = usePrefersReducedMotion();
+  const [tick, setTick] = useState(BUILD_LAST);
+  const [playing, setPlaying] = useState(true);
+  useEffect(() => {
+    if (reduced) {
+      setPlaying(false);
+      setTick(BUILD_LAST);
+    }
+  }, [reduced]);
+  useEffect(() => {
+    if (!playing || reduced) return;
+    // 全部長出來後停一下再重播
+    const t = setTimeout(() => setTick((n) => (n >= BUILD_LAST ? -1 : n + 1)), tick >= BUILD_LAST ? 2600 : 320);
+    return () => clearTimeout(t);
+  }, [tick, playing, reduced]);
+  const step = tick < 3 ? 0 : tick < 7 ? 1 : tick < 11 ? 2 : 3;
+  return (
+    <section className="px-4 pb-24 sm:px-8">
+      <SectionTitle title="按一下，時間軸自己排好" sub="專業版的一鍵自動剪輯依序處理：剪空拍、上字幕、做花字、配樂和音效，每一段之後都能再調整。以下是示意動畫。" />
+      <div className="mx-auto max-w-[1000px] rounded-[28px] bg-site-band p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-2">
+          {BUILD_STEPS.map((label, i) => (
+            <span key={label} className={`rounded-full px-3 py-1 text-[13px] font-bold ${i <= step && tick >= 0 ? 'bg-site-ink text-white' : 'bg-white text-site-mute'}`}>
+              {label}
+            </span>
+          ))}
+          {!reduced && (
+            <button type="button" onClick={() => setPlaying((p) => !p)} className="ml-auto grid size-8 place-items-center rounded-full border border-site-line bg-white" aria-label={playing ? '暫停動畫' : '播放動畫'}>
+              {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+            </button>
+          )}
+        </div>
+        <div className="mt-5 space-y-1.5" role="img" aria-label="示意：時間軸上依序出現主軌片段、字幕、花字、空鏡、配樂與音效">
+          {BUILD_TRACKS.map((t) => (
+            <div key={t.name} className="flex items-center gap-2">
+              <span className="w-9 shrink-0 text-[12px] font-bold text-site-soft">{t.name}</span>
+              <div className="relative h-7 flex-1 overflow-hidden rounded-lg bg-white">
+                {t.blocks.map(([left, width, order, text]) => (
+                  <span
+                    key={order}
+                    className={`absolute inset-y-0.5 truncate rounded-md px-1.5 text-[11px] leading-6 font-bold transition-all duration-300 motion-reduce:transition-none ${t.color} ${tick >= order ? 'scale-100 opacity-100' : 'scale-90 opacity-0'}`}
+                    style={{ left: `${left}%`, width: `calc(${width}% - 2px)` }}
+                  >
+                    {text}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-[12px] text-site-mute">空鏡需要素材庫裡有另外上傳、還沒用到的影片或照片。</p>
       </div>
     </section>
   );

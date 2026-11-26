@@ -23,7 +23,7 @@ export function brollCandidates(d: Pick<ProjectData, 'media' | 'clips' | 'overla
 
 /** 連續說話的時段：依字幕合併，沒有字幕就視為整支都在說話 */
 function speechSpans(d: ProjectData, total: number): [number, number][] {
-  const lines = d.captions.filter((c) => c.role !== 'flower').sort((a, b) => a.start - b.start);
+  const lines = d.captions.filter((c) => !c.role).sort((a, b) => a.start - b.start);
   if (!lines.length) return [[0, total]];
   const spans: [number, number][] = [];
   for (const c of lines) {

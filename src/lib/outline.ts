@@ -42,7 +42,7 @@ export function inferOutline(data: Pick<ProjectData, 'clips' | 'captions'>): Out
   }
   const bounds = [0, ...boundaries, total];
 
-  const lines = data.captions.filter((c) => c.role !== 'flower' && c.text.trim());
+  const lines = data.captions.filter((c) => !c.role && c.text.trim());
 
   return labels.map((label, i) => {
     const start = bounds[i];

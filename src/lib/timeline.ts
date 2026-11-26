@@ -65,7 +65,7 @@ export const DUCK_AMOUNT = 0.35; // 閃避時配樂降到原音量的比例
 
 /** 專案裡有人聲的時間範圍（合併相鄰很近的幾段） */
 export function voiceActivityRanges(d: Pick<ProjectData, 'captions' | 'audio' | 'media'>): DuckRange[] {
-  const fromCaptions = d.captions.filter((c) => c.role !== 'flower').map((c) => ({ start: c.start, end: c.end }));
+  const fromCaptions = d.captions.filter((c) => !c.role).map((c) => ({ start: c.start, end: c.end }));
   const fromVoiceAudio = d.audio
     .filter((a) => audioCategoryOf(d.media.find((m) => m.id === a.mediaId)) === 'voice')
     .map((a) => ({ start: a.start, end: a.start + clipLength(a) }));

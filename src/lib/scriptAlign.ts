@@ -27,7 +27,7 @@ interface Timed {
 /** 辨識結果（字幕）攤成一個一個字，每個字有時間；沒有逐字時間的句子依字數平均分配 */
 function recognizedChars(captions: Caption[]): Timed[] {
   const out: Timed[] = [];
-  for (const c of orderedCaptions(captions.filter((x) => x.role !== 'flower'))) {
+  for (const c of orderedCaptions(captions.filter((x) => !x.role))) {
     const words: CaptionWord[] = captionWords(c) ?? [{ text: c.text, start: c.start, end: c.end }];
     for (const w of words) {
       const chars = [...w.text].filter((ch) => !IGNORED.test(ch));

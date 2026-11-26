@@ -28,7 +28,7 @@ export function CaptionRow({ caption: c, number, checked, active, locked, inputR
   return <li className={`rounded-xl border p-2 ${active || checked ? 'border-brand bg-brand-soft/30' : 'border-line'}`}>
     <div className="mb-1.5 flex items-center gap-2 text-[11px] text-ink-soft">
       <input type="checkbox" checked={checked} disabled={locked} onChange={toggle} aria-label={`勾選第 ${number} 句`} className="accent-brand" />
-      <button className="font-bold text-brand" onClick={focus}>第 {number} 句{c.role === 'flower' ? '・花字' : ''}</button>
+      <button className="font-bold text-brand" onClick={focus}>第 {number} 句{c.role === 'flower' ? '・花字' : c.role === 'card' ? '・圖卡' : ''}</button>
       <button disabled={locked} className="ml-auto rounded px-2 py-1 font-bold hover:bg-sunken disabled:opacity-40" onMouseDown={(e) => e.preventDefault()} onClick={split}>依游標拆句</button>
     </div>
     <textarea ref={inputRef} aria-label={`第 ${number} 句字幕文字`} value={c.text} rows={2} disabled={locked}

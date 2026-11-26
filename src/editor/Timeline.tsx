@@ -500,6 +500,10 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
         <IconBtn label={playing ? '暫停（空白鍵）' : '播放（空白鍵）'} onClick={togglePlay}>
           {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
         </IconBtn>
+        <div className="mr-1 flex shrink-0 items-baseline gap-1 font-mono tabular-nums" aria-label="目前時間／總長度" data-testid="timeline-clock">
+          <span className="text-[17px] leading-none font-extrabold text-brand">{formatTime(time, true)}</span>
+          <span className="text-xs text-ink-mute">/ {formatTime(data.duration, true)}</span>
+        </div>
         <span className="mx-1 h-5 w-px bg-line" />
         <IconBtn label="復原上一步（⌘Z）" onClick={undo} disabled={!canUndo}>
           <Undo2 className="size-4" />
@@ -532,7 +536,7 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
             </button>
           </span>
         ) : (
-          <span className="ml-3 text-xs text-ink-mute">在空白處拖曳可框選多個項目，按住 Shift 點選可加選</span>
+          <span className="ml-3 hidden truncate text-xs text-ink-mute 2xl:inline">在空白處拖曳可框選多個項目，按住 Shift 點選可加選</span>
         )}
         <div className="ml-auto flex items-center gap-2">
           <IconBtn label="縮小" onClick={() => setZoom(zoom / 1.4)}>

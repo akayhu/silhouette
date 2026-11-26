@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Download, ExternalLink, Film, FolderPlus, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
+import { Activity, Check, Download, ExternalLink, Film, FolderPlus, Images, Loader2, Music2, RotateCcw, WandSparkles } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { sliceProject } from '../../lib/highlightClip';
 import { exportVideo } from '../../lib/exportVideo';
@@ -13,6 +13,7 @@ import { findHighlights, type HighlightCandidate } from '../../lib/highlightDete
 import { findSimilarAdjacentShots, type SimilarShotPair } from '../../lib/shotSimilarity';
 import { brollCandidates } from '../../lib/autoBroll';
 import { takeIntentTemplate } from '../../lib/autoPick';
+import { AUTO_STEPS, nextAutoProgress, type AutoProgress } from '../../lib/autoProgress';
 import { runSmartEdit, type SmartEditResult } from '../../lib/smartEdit';
 import { SMART_TEMPLATES, type SmartTemplate } from '../../lib/templates';
 import type { LibraryTrack, ProjectData } from '../../lib/types';
@@ -56,7 +57,7 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const upgrade = useUpgrade();
   const toast = useToast();
   const hasClips = useEditor((s) => s.data.clips.length > 0);
-  const captionCount = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower').length);
+  const captionCount = useEditor((s) => s.data.captions.filter((c) => !c.role).length);
   const clipsKey = useEditor((s) => s.data.clips.map((c) => `${c.id}:${c.mediaId}:${c.in}:${c.out}`).join('|'));
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
   // 首頁選過「我要剪這種影片」就預先選好對應模板（只用一次）
@@ -76,6 +77,7 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
   const [flashMusic, setFlashMusic] = useState(true);
   const [flashDone, setFlashDone] = useState<{ photos: number; duration: number; music: string | null } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [autoProgress, setAutoProgress] = useState<AutoProgress | null>(null);
   const [done, setDone] = useState<{ tpl: SmartTemplate; counts: SmartEditResult['counts']; auto?: string[] } | null>(null);
   // 選 2-3 個模板時，先把每個模板實際跑過一次（真正的剪輯結果，不是猜的），
   // 列出來比較之後再選一個套用；只選 1 個就跟以前一樣直接套用，不用多一次確認
@@ -260,12 +262,17 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
     setCandidates(null);
     try {
       setStatus('分析影片內容');
-      const result = await runSmartEdit(base, 'auto', library, { regenerateCaptions: regen, broll: withBroll && brollPool > 0 }, setStatus);
+      setAutoProgress({ step: 0, detail: '分析影片內容' });
+      const result = await runSmartEdit(base, 'auto', library, { regenerateCaptions: regen, broll: withBroll && brollPool > 0 }, (message) => {
+        setStatus(message);
+        setAutoProgress((p) => nextAutoProgress(p, message));
+      });
       applyResult(result.template, result, base, result.matched);
     } catch (e) {
       toast('一鍵自動剪輯失敗：' + (e as Error).message, 'error');
     } finally {
       setStatus(null);
+      setAutoProgress(null);
     }
   };
 
@@ -519,8 +526,27 @@ export function SmartEditPanel({ seek }: { seek: (t: number) => void }) {
         </p>
         <Button className="mt-2.5 w-full" onClick={runAuto} disabled={!!status || !hasClips}>
           {status ? <Loader2 className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}
-          {status ?? (!hasClips ? '先把影片加到主軌' : '一鍵自動剪輯')}
+          {autoProgress ? '處理中…' : (status ?? (!hasClips ? '先把影片加到主軌' : '一鍵自動剪輯'))}
         </Button>
+        {autoProgress && (
+          <ol className="mt-3 space-y-1.5" aria-label="一鍵自動剪輯進度" aria-live="polite">
+            {AUTO_STEPS.map((label, i) => {
+              const done = i < autoProgress.step;
+              const active = i === autoProgress.step;
+              return (
+                <li key={label} aria-current={active ? 'step' : undefined} className={`flex items-start gap-2 text-xs ${done || active ? 'text-ink' : 'text-ink-mute'}`}>
+                  <span className={`mt-px grid size-4 shrink-0 place-items-center rounded-full ${done ? 'bg-brand text-white' : active ? 'text-brand' : 'border border-line'}`}>
+                    {done ? <Check className="size-3" strokeWidth={3.5} /> : active ? <Loader2 className="size-4 animate-spin" /> : null}
+                  </span>
+                  <span>
+                    <span className={active ? 'font-bold' : ''}>{label}</span>
+                    {active && <span className="block text-[11px] text-ink-mute">{autoProgress.detail}</span>}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
         {brollPool > 0 && (
           <label className="mt-2 flex items-start gap-2 text-xs">
             <input type="checkbox" className="mt-0.5 accent-brand" checked={withBroll} onChange={(e) => setWithBroll(e.target.checked)} />

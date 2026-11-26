@@ -207,7 +207,9 @@ export interface Caption {
   /** 雙語字幕：第二行的翻譯（顯示在原文下方、字小一點） */
   translation?: string;
   /** 智能剪輯加上的花字（重新套用模板時會先移除） */
-  role?: 'flower';
+  role?: 'flower' | 'card';
+  /** 圖卡種類（role 是 card 時） */
+  cardKind?: 'banner' | 'section' | 'lower' | 'end';
 }
 
 export type StickerAnimation = 'none' | 'pop' | 'bounce' | 'wobble' | 'pulse' | 'spin' | 'float';

@@ -425,7 +425,7 @@ function RecordCaption({ isPro, guard }: { isPro: boolean; guard: () => boolean 
           (p) => setStatus(p.phase === 'download' ? `下載語音模型 ${Math.round(p.progress ?? 0)}%（只有第一次）` : '辨識中…'),
           { words: true },
         );
-        const style = data.captions.find((c) => c.role !== 'flower')?.style;
+        const style = data.captions.find((c) => !c.role)?.style;
         captions = segs
           .filter((s) => s.text.trim())
           .map((s) =>

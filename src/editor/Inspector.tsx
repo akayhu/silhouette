@@ -369,7 +369,7 @@ export function Inspector() {
         )}
       </Section>
       <div className="space-y-2 p-4">
-        <Button variant="secondary" className="w-full" onClick={() => commit((d) => ({ ...d, captions: d.captions.map((x) => ({ ...x, style: { ...s } })) }))}>
+        <Button variant="secondary" className="w-full" onClick={() => commit((d) => ({ ...d, captions: d.captions.map((x) => (x.role === 'card' ? x : { ...x, style: { ...s } })) }))}>
           把這個樣式套用到全部字幕
         </Button>
         <StyleDefaultButtons style={s} />

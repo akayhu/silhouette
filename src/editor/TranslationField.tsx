@@ -37,7 +37,7 @@ export function TranslationField({ caption: c }: { caption: Caption }) {
     }
   };
 
-  if (c.role === 'flower') return null;
+  if (c.role) return null;
   if (c.translation === undefined) {
     return (
       <button className="mt-2 flex items-center gap-1 text-xs font-bold text-brand hover:underline" onClick={() => update('')}>

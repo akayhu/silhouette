@@ -25,7 +25,7 @@ export async function transcribeTimeline(data: ProjectData, model: string, onSta
       .filter((p) => p.to - p.from >= MIN_PIECE),
   );
   if (!pieces.length) throw new Error(ranges ? '選取的範圍裡沒有影片' : '主軌上還沒有影片');
-  const style = data.captions.find((c) => c.role !== 'flower')?.style;
+  const style = data.captions.find((c) => !c.role)?.style;
   const out: Caption[] = [];
   for (const [i, { clip, from, to }] of pieces.entries()) {
     const label = pieces.length > 1 ? `（${i + 1}/${pieces.length}）` : '';

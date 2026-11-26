@@ -310,7 +310,7 @@ function ReviewStep({
   onNext: () => void;
 }) {
   const clips = useEditor((s) => s.data.clips);
-  const captions = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower').length);
+  const captions = useEditor((s) => s.data.captions.filter((c) => !c.role).length);
   const c = applied && applied !== 'none' ? applied.counts : null;
   const lines = c
     ? [

@@ -35,10 +35,10 @@ export async function findHighlights(d: Pick<ProjectData, 'clips' | 'captions' |
 
   // 字幕密度與強調詞：純文字／時間比對，很快
   const chars = windows.map(({ start, end }) => {
-    const inWindow = d.captions.filter((c) => c.role !== 'flower' && c.start < end && c.end > start);
+    const inWindow = d.captions.filter((c) => !c.role && c.start < end && c.end > start);
     return inWindow.reduce((n, c) => n + c.text.replace(/\s/g, '').length, 0);
   });
-  const emphasis = windows.map(({ start, end }) => d.captions.filter((c) => c.role !== 'flower' && c.start < end && c.end > start && isEmphasis(c.text)).length);
+  const emphasis = windows.map(({ start, end }) => d.captions.filter((c) => !c.role && c.start < end && c.end > start && isEmphasis(c.text)).length);
 
   // 畫面動態：逐格讀影片比較花時間，只在窗口起點所在的素材上取樣
   const motion: number[] = [];

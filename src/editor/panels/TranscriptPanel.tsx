@@ -26,7 +26,7 @@ type Range = [number, number];
 const FILLER = /^[嗯啊呃哦喔噢額欸誒唉恩][\s，,。.…~～]*$/;
 
 function buildTokens(captions: Caption[]) {
-  const lines = orderedCaptions(captions.filter((c) => c.role !== 'flower')).map((caption) => {
+  const lines = orderedCaptions(captions.filter((c) => !c.role)).map((caption) => {
     const words = captionWords(caption);
     const tokens: Token[] = words
       ? words.map((w, i) => ({ key: `${caption.id}#${i}`, caption, text: w.text, start: w.start, end: w.end, first: i === 0, last: i === words.length - 1 }))

@@ -334,14 +334,14 @@ function Bilingual({ isPro }: { isPro: boolean }) {
   const [target, setTarget] = useState<TranslateTarget>('en');
   const [onlyMissing, setOnlyMissing] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
-  const lines = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower' && c.text.trim()).length);
-  const translated = useEditor((s) => s.data.captions.filter((c) => c.role !== 'flower' && c.translation?.trim()).length);
+  const lines = useEditor((s) => s.data.captions.filter((c) => !c.role && c.text.trim()).length);
+  const translated = useEditor((s) => s.data.captions.filter((c) => !c.role && c.translation?.trim()).length);
 
   const run = async () => {
     if (!isPro) return upgrade('雙語字幕是專業版功能。');
     if (!ensureUnlocked('caption')) return;
     const { data, commit } = useEditor.getState();
-    const todo = data.captions.filter((c) => c.role !== 'flower' && c.text.trim() && (!onlyMissing || !c.translation?.trim()));
+    const todo = data.captions.filter((c) => !c.role && c.text.trim() && (!onlyMissing || !c.translation?.trim()));
     if (!todo.length) return toast(lines ? '每一句都已經有翻譯了' : '還沒有字幕，先產生或輸入字幕', 'info');
     try {
       setStatus('準備翻譯');
@@ -412,7 +412,7 @@ function ScriptSync({ isPro }: { isPro: boolean }) {
   const [redo, setRedo] = useState(false);
   // 目前的字幕有逐字時間，就直接拿來對時，不用再辨識一次
   const timed = useEditor((s) => {
-    const lines = s.data.captions.filter((c) => c.role !== 'flower');
+    const lines = s.data.captions.filter((c) => !c.role);
     return lines.length > 0 && lines.filter((c) => captionWords(c)).length >= lines.length * 0.6;
   });
   const chars = [...script.replace(/[\s\p{P}\p{S}]/gu, '')].length;
@@ -427,11 +427,11 @@ function ScriptSync({ isPro }: { isPro: boolean }) {
       const recognized = timed && !redo ? data.captions : await transcribeTimeline(data, ASR_MODELS[0].id, setStatus);
       setStatus('對齊講稿');
       const convert = await getConverter();
-      const style = data.captions.find((c) => c.role !== 'flower')?.style;
+      const style = data.captions.find((c) => !c.role)?.style;
       const result = alignScript(script, recognized, style, convert);
       if (!result.captions.length) return toast('沒有可用的講稿文字', 'error');
       const rate = result.total ? result.matched / result.total : 0;
-      commit((d) => ({ ...d, captions: [...d.captions.filter((c) => c.role === 'flower'), ...result.captions].sort((a, b) => a.start - b.start) }));
+      commit((d) => ({ ...d, captions: [...d.captions.filter((c) => c.role), ...result.captions].sort((a, b) => a.start - b.start) }));
       if (rate < 0.5) toast(`講稿和影片說的內容差很多（只對上 ${Math.round(rate * 100)}%），時間可能不準，請確認是同一份講稿；可按 ⌘Z 復原`, 'info');
       else toast(`已依講稿產生 ${result.captions.length} 句字幕，對上 ${Math.round(rate * 100)}% 的字`, 'success');
     } catch (e) {

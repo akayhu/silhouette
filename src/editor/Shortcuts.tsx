@@ -59,7 +59,7 @@ export const SHORTCUTS: { group: string; items: [string[], string][] }[] = [
 function currentCaption(edge: 'start' | 'end') {
   const { selection, data, time } = useEditor.getState();
   if (selection?.type === 'caption') return data.captions.find((c) => c.id === selection.id);
-  const plain = data.captions.filter((c) => c.role !== 'flower');
+  const plain = data.captions.filter((c) => !c.role);
   const under = plain.find((c) => time >= c.start && time < c.end);
   if (under) return under;
   return edge === 'start'

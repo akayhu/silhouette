@@ -40,7 +40,7 @@ export interface StickerRecommendation {
 /** 依字幕文字猜跟內容相關的貼紙；只在真的比對到關鍵字時推薦，不會硬湊數量 */
 export function recommendStickers(captions: Pick<Caption, 'text' | 'role'>[], count = 6): StickerRecommendation[] {
   const text = captions
-    .filter((c) => c.role !== 'flower')
+    .filter((c) => !c.role)
     .map((c) => c.text)
     .join('');
   if (!text.trim()) return [];

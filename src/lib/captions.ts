@@ -30,7 +30,7 @@ export function captionWords(c: Caption): CaptionWord[] | null {
  */
 export function replaceCaptionsInRanges(captions: Caption[], next: Caption[], ranges?: [number, number][]) {
   const inside = (c: Caption) => {
-    if (c.role === 'flower') return false;
+    if (c.role) return false;
     if (!ranges) return true;
     const mid = (c.start + c.end) / 2;
     return ranges.some(([a, b]) => mid >= a && mid < b);
@@ -244,7 +244,7 @@ export function parseSubtitles(source: string): { cues: CaptionCue[]; warnings: 
 export function importCaptionCues(data: ProjectData, cues: CaptionCue[], mode: 'append' | 'replace', style: CaptionStyle) {
   if (data.locks?.caption) throw new Error('字幕軌已鎖定，請先解鎖。');
   const imported: Caption[] = cues.map((cue) => ({ ...cue, id: uid(), style: structuredClone(style) }));
-  return { ...data, captions: [...(mode === 'append' ? data.captions : data.captions.filter((c) => c.role === 'flower')), ...imported] };
+  return { ...data, captions: [...(mode === 'append' ? data.captions : data.captions.filter((c) => c.role)), ...imported] };
 }
 export function serializeSubtitles(captions: Caption[], format: 'srt' | 'vtt') {
   if (!captions.length) throw new Error('目前範圍沒有可匯出的字幕。');

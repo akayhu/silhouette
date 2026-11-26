@@ -46,7 +46,7 @@ export async function runSmartEdit(
   onProgress?: (text: string) => void,
 ): Promise<SmartEditResult> {
   const auto = tplOrAuto === 'auto';
-  const needSubs = opts.regenerateCaptions || input.captions.filter((c) => c.role !== 'flower').length === 0;
+  const needSubs = opts.regenerateCaptions || input.captions.filter((c) => !c.role).length === 0;
   let working = input;
   let tpl: SmartTemplate;
   let matched: string[] = [];
@@ -92,7 +92,7 @@ export async function runSmartEdit(
 
   // 2. 字幕樣式（保留 AI 依內容挑的進場動畫）＋花字
   if (captionOpen) {
-    const lines = d.captions.filter((c) => c.role !== 'flower');
+    const lines = d.captions.filter((c) => !c.role);
     const styled = lines.map((c) => ({ ...c, style: { ...tpl.caption, animation: c.style.animation } }));
     counts.captionStyled = styled.length;
     const flowers: Caption[] = [];
@@ -123,7 +123,7 @@ export async function runSmartEdit(
       : d.stickers.map((st) =>
       flowers.some((f) => st.start < f.end && f.start < st.end) && Math.abs(st.y - tpl.flower.y) < 0.12 ? { ...st, y: below } : st,
     );
-    d = { ...d, captions: [...styled, ...flowers].sort((a, b) => a.start - b.start), stickers };
+    d = { ...d, captions: [...styled, ...flowers, ...d.captions.filter((c) => c.role === 'card')].sort((a, b) => a.start - b.start), stickers };
   }
 
   // 3. 濾鏡（模板沒有指定就保留原本的）

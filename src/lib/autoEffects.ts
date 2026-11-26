@@ -128,7 +128,8 @@ async function cutAndCaption(d: ProjectData, opts: AutoEffectOptions, counts: Au
       const words = l.words?.map((w) => ({ ...w, start: remap(w.start, cuts), end: remap(w.end, cuts) }));
       return end - start >= 0.2 ? [captionFromWords(start, end, l.text, style, words)] : [];
     });
-    out = { ...out, captions };
+    // 重新辨識字幕只換字幕，使用者加的圖卡留著
+    out = { ...out, captions: [...captions, ...out.captions.filter((c) => c.role === 'card')].sort((a, b) => a.start - b.start) };
     counts.subtitles = captions.length;
   }
   return out;
@@ -170,7 +171,7 @@ export async function planAutoEffects(input: ProjectData, opts: AutoEffectOption
   }
   // 字幕裡的驚嘆、關鍵字也算重點
   for (const cap of d.captions) {
-    if (!EXCLAIM.test(cap.text)) continue;
+    if (cap.role === 'card' || !EXCLAIM.test(cap.text)) continue;
     const c = placed.find((p) => cap.start >= p.start && cap.start < p.end);
     if (c && moments.every((m) => Math.abs(m.t - cap.start) >= level.spacing)) moments.push({ t: cap.start, score: 2, clipIndex: c.index });
   }
@@ -285,6 +286,7 @@ export async function planAutoEffects(input: ProjectData, opts: AutoEffectOption
   // ---------- 4. 字幕動畫：驚嘆彈出、問句上滑、其他淡入 ----------
   if (opts.captions && !anyCaptionLocked(d)) {
     captions = captions.map((c) => {
+      if (c.role === 'card') return c;
       const animation = EXCLAIM.test(c.text) ? 'pop' : QUESTION.test(c.text) ? 'slide' : 'fade';
       if (c.style.animation === animation) return c;
       counts.captions++;
@@ -297,6 +299,7 @@ export async function planAutoEffects(input: ProjectData, opts: AutoEffectOption
     const added: StickerItem[] = [];
     for (const c of captions) {
       if (added.length >= level.maxStickers) break;
+      if (c.role === 'card') continue;
       const rule = STICKER_RULES.find(([re]) => re.test(c.text));
       if (!rule) continue;
       const busy = [...stickers, ...added].some((s) => c.start < s.end + level.stickerGap && s.start < c.start + level.stickerGap);

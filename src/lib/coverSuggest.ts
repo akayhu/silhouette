@@ -14,7 +14,7 @@ const MAX_COVER_TITLE = 20;
 
 /** 用封面時間點所在（或最接近）的那句字幕當標題建議；沒有字幕就不建議 */
 export function suggestCoverTitle(captions: Caption[], atTime: number): string | null {
-  const plain = captions.filter((c) => c.role !== 'flower' && c.text.trim());
+  const plain = captions.filter((c) => !c.role && c.text.trim());
   if (!plain.length) return null;
   const hit = plain.find((c) => atTime >= c.start && atTime < c.end);
   const nearest = hit ?? plain.reduce((best, c) => (Math.abs(c.start - atTime) < Math.abs(best.start - atTime) ? c : best));

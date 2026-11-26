@@ -47,7 +47,7 @@ export interface PickedTemplate {
 
 /** 依字幕內容挑最像的模板；同分時取關鍵字清單排在前面的（越常見的類型越前面） */
 export function pickTemplate(captions: Pick<Caption, 'text' | 'role'>[], templates: SmartTemplate[]): PickedTemplate {
-  const text = captions.filter((c) => c.role !== 'flower').map((c) => c.text).join('');
+  const text = captions.filter((c) => !c.role).map((c) => c.text).join('');
   let best: { id: string; matched: string[] } | null = null;
   for (const [id, words] of Object.entries(TEMPLATE_KEYWORDS)) {
     if (!templates.some((t) => t.id === id)) continue;

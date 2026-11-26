@@ -40,7 +40,7 @@ export const readableChars = (text: string) => [...text.replace(/[\s\p{P}\p{S}]/
 const lineLength = (text: string) => Math.max(0, ...text.split('\n').map((l) => [...l].length));
 
 function plainCaptions(captions: Caption[]) {
-  return orderedCaptions(captions.filter((c) => c.role !== 'flower'));
+  return orderedCaptions(captions.filter((c) => !c.role));
 }
 
 export function checkCaptions(captions: Caption[], aspect: Aspect = '9:16'): CaptionIssue[] {
@@ -110,7 +110,7 @@ export function fixCaptions(captions: Caption[], only?: Set<string>): { captions
   const target = (id: string) => !only || only.has(id);
   let fixed = 0;
   let list = captions.filter((c) => {
-    const drop = c.role !== 'flower' && !c.text.trim() && target(c.id);
+    const drop = !c.role && !c.text.trim() && target(c.id);
     if (drop) fixed++;
     return !drop;
   });
@@ -119,7 +119,7 @@ export function fixCaptions(captions: Caption[], only?: Set<string>): { captions
   for (let round = 0; round < 4; round++) {
     let changed = false;
     list = list.flatMap((c) => {
-      if (c.role === 'flower' || !target(c.id) || lineLength(c.text) <= MAX_LINE || c.text.includes('\n')) return [c];
+      if (c.role || !target(c.id) || lineLength(c.text) <= MAX_LINE || c.text.includes('\n')) return [c];
       try {
         const pieces = splitCaptionText(c, splitPoint(c.text));
         changed = true;

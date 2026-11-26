@@ -30,7 +30,7 @@ export async function checkOpeningHook(d: Pick<ProjectData, 'clips' | 'captions'
   const firstMedia = mediaById.get(first.mediaId);
   if (!firstMedia || firstMedia.kind !== 'video') return { weak: false, betterClipId: null };
 
-  const hasEarlyCaption = d.captions.some((c) => c.role !== 'flower' && c.start < EARLY_CAPTION_SEC);
+  const hasEarlyCaption = d.captions.some((c) => !c.role && c.start < EARLY_CAPTION_SEC);
   const openingScore = await motionScoreAt(firstMedia, first.in, Math.min(HOOK_WINDOW, first.out - first.in));
 
   let bestScore = openingScore;

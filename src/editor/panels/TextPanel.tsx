@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioLines, Plus, Search } from 'lucide-react';
+import { addCard, CARD_PRESETS, type CardKind } from '../../lib/cards';
 import { captionTrackKeys, defaultCaptionStyle, isLocked, newCaption, userCaptionStyle } from '../../lib/timeline';
 import type { CaptionStyle, ProjectData } from '../../lib/types';
 import { applyCaptionRules, formatCaptionTime, importCaptionCues, matchesCaption, mergeCaptions, orderedCaptions, parseCaptionRules, parseSubtitles, replaceCaptionText, serializeSubtitles, shiftCaptions, splitCaptionText } from '../../lib/captions';
@@ -28,12 +29,13 @@ type Scope = 'visible' | 'selected' | 'all';
 const PAGE = 25;
 const field = 'min-w-0 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand disabled:opacity-50';
 
-type Section = 'list' | 'dict' | 'style' | 'flower';
+type Section = 'list' | 'dict' | 'style' | 'flower' | 'card';
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'list', label: '字幕清單' },
   { id: 'dict', label: '校正字典' },
   { id: 'style', label: '套用樣式' },
   { id: 'flower', label: '花字' },
+  { id: 'card', label: '圖卡' },
 ];
 
 export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; onOpenVoice: () => void }) {
@@ -67,7 +69,7 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
   const readToken = useRef(0);
   useEffect(() => () => { readToken.current++; }, []);
   useEffect(() => setRulesText((dictionary ?? []).map((r) => `${r.from} => ${r.to}`).join('\n')), [dictionary]);
-  const eligible = useMemo(() => orderedCaptions(captions.filter((c) => includeFlowers || c.role !== 'flower')), [captions, includeFlowers]);
+  const eligible = useMemo(() => orderedCaptions(captions.filter((c) => includeFlowers || !c.role)), [captions, includeFlowers]);
   const flowerResults = useMemo(() => {
     const q = flowerSearch.trim();
     return q ? FLOWER_STYLES.filter((f) => f.name.includes(q)) : FLOWER_STYLES;
@@ -97,6 +99,14 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
     const caption = newCaption(state.time, state.time + 2, '輸入字幕文字', { ...userCaptionStyle(), ...style });
     state.commit((d) => ({ ...d, captions: [...d.captions, caption] })); state.select({ type: 'caption', id: caption.id });
     if (find) setFind('');
+  };
+  // 現成圖卡：加上後選取它，右邊屬性面板可以直接改字
+  const insertCard = (kind: CardKind) => {
+    if (!ensureUnlocked('caption')) return;
+    const state = useEditor.getState();
+    const { data, id } = addCard(state.data, kind, state.time);
+    state.commit(() => data);
+    state.select({ type: 'caption', id });
   };
   // 花字庫點一下：軌道上已經選了一句字幕就直接套用樣式（保留原本文字），沒有選取才新增一句
   const applyFlower = (style: CaptionStyle) => {
@@ -259,6 +269,23 @@ export function TextPanel({ seek, onOpenVoice }: { seek: (t: number) => void; on
         <p className="mt-2 text-[11px] text-ink-soft">點一款直接新增一句使用該樣式的字幕。</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {presets.map((p) => <button key={p.name} disabled={locked} onClick={() => add(p.style)} className="grid h-16 place-items-center rounded-xl bg-[linear-gradient(140deg,#c9d4ff,#ffd9cb)] disabled:opacity-40"><span className="text-sm font-black" style={p.preview}>{p.name}</span></button>)}
+        </div>
+      </>}
+      {section === 'card' && <>
+        <h2 className="text-sm font-extrabold">圖卡</h2>
+        <p className="mt-1 text-xs leading-relaxed text-ink-mute">點一下加到影片上，再到右邊屬性面板改成你的文字、調整位置和顏色。圖卡不會出現在字幕檔裡。</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {CARD_PRESETS.map((p) => (
+            <button key={p.kind} onClick={() => insertCard(p.kind)} className="overflow-hidden rounded-2xl border-2 border-line text-left transition hover:border-brand">
+              <div className="grid h-16 place-items-center bg-[#2b2d33] px-1">
+                <StylePreview style={p.style} text={p.text} size={13} />
+              </div>
+              <div className="p-2">
+                <div className="text-[13px] font-extrabold">{p.name}</div>
+                <div className="text-[11px] leading-snug text-ink-mute">{p.desc}</div>
+              </div>
+            </button>
+          ))}
         </div>
       </>}
       {section === 'flower' && <>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { AudioLines, Film, Flag, ImageIcon, Layers, Lock, LockOpen, Redo2, Smile, SquareSplitHorizontal, Trash2, Type, Undo2, Volume2, VolumeX, X, ZoomIn, ZoomOut, Pause, Play } from 'lucide-react';
 import type { TrimSide } from '../lib/timeline';
-import { AudioWave } from './AudioWave';
+import { AudioWave, VideoWave } from './AudioWave';
 import { audioCategoryOf, captionLanes, captionTrackKey, clipLength, compactLanes, layoutMain, MIN_CLIP, moveMainClip, overlayEnd, overlayLaneCount, placeOverlayLane, trackLabel, trackOf } from '../lib/timeline';
 import { formatTime } from '../lib/format';
 import type { AudioClip, Caption, Marker, TrackKey } from '../lib/types';
@@ -731,7 +731,8 @@ export function Timeline({ height, seek, split, trim, remove, togglePlay, onCove
                       style={m?.thumb ? { backgroundImage: `url(${m.thumb})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' } : undefined}
                       onDown={(e, mode) => startMain(e, c.id, mode)}
                     >
-                      <span className="truncate rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-ink">
+                      {m?.kind === 'video' && <VideoWave media={m} clip={c} width={(c.end - c.start) * zoom} />}
+                      <span className="relative truncate rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-ink">
                         {c.speed !== 1 && `${c.speed}x · `}
                         {formatTime(c.end - c.start)} {m?.name}
                       </span>
